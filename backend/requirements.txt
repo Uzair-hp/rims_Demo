@@ -1,0 +1,6 @@
+# Ruchita Interiors — backend dependencies (foundation only).
+# Versions are intentionally unpinned/high-level; lock them in the implementation phase.
+Flask
+Flask-SQLAlchemy
+Flask-CORS
+python-dotenv

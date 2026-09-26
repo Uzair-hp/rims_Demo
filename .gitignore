@@ -1,0 +1,44 @@
+# ---------- Frontend ----------
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ---------- Backend ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# ---------- Environment ----------
+# Never commit real environment files; keep the .example templates.
+.env
+.env.*
+!.env.example
+
+# ---------- Database (local SQLite) ----------
+*.sqlite
+*.sqlite3
+instance/*.db
+*.db
+
+# ---------- Uploads ----------
+# Keep the directory (via .gitkeep) but not uploaded files.
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- IDE / Editors ----------
+.vscode/
+.idea/
+*.swp
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
