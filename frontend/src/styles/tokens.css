@@ -49,6 +49,18 @@
   --color-gold-ink: #6e5620;
   --color-on-gold: #1d1b16;
 
+  /* --- Login page specific tokens (Phase 6 redesign) --- */
+  --charcoal: #1a1814;
+  --gold: #c9a24b;
+  --gold-hover: #b48e3c;
+  --gold-soft: #e9d9a8;
+  --ivory: #faf7f2;
+  --card: #ffffff;
+  --text: #1f1b16;
+  --text-muted: #6b6459;
+  --border: #e4ddd0;
+  --error: #b3261e;
+
   /* --- Semantic status: reserved, never decorative (§18.5) --- */
   --color-success: #177245;
   --color-success-soft: #e4f3ea;
@@ -70,10 +82,11 @@
   --chart-3: #79736a;
   --chart-grid: #e4e0d5;
 
-  /* --- Typography (§18.9): Inter for UI, Playfair for display --- */
-  --font-sans: 'Inter Variable', system-ui, 'Segoe UI', roboto, helvetica, arial, sans-serif;
+  /* --- Typography (§18.9): DM Sans for UI, Cormorant Garamond for headings, Cinzel for wordmark --- */
+  --font-sans: 'DM Sans', system-ui, 'Segoe UI', roboto, helvetica, arial, sans-serif;
   --font-body: var(--font-sans);
-  --font-display: 'Playfair Display Variable', 'Playfair Display', georgia, 'Times New Roman', serif;
+  --font-heading: 'Cormorant Garamond', Georgia, serif;
+  --font-wordmark: 'Cinzel', Georgia, serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', menlo, consolas, monospace;
 
   --font-size-xs: 0.75rem;
@@ -213,6 +226,18 @@
   --color-gold-soft: #3a311a;
   --color-gold-ink: #e4c36a;
   --color-on-gold: #1d1b16;
+
+  /* --- Login page specific tokens (Phase 6 redesign) --- */
+  --charcoal: #1a1814;
+  --gold: #d9b45c;
+  --gold-hover: #e4c36a;
+  --gold-soft: #3a311a;
+  --ivory: #1c1915;
+  --card: #1c1915;
+  --text: #f0eee8;
+  --text-muted: #b5afa2;
+  --border: #353026;
+  --error: #f26d6d;
 
   --color-success: #4cc38a;
   --color-success-soft: #1a2a21;

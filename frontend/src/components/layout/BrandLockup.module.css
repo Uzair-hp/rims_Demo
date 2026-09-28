@@ -38,3 +38,35 @@
   background: var(--color-gold);
   border-radius: var(--radius-pill);
 }
+
+/* Login variant: logo + wordmark + gold line */
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.loginLogo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.loginWordmark {
+  font-family: var(--font-wordmark);
+  font-size: clamp(0.875rem, 1.2vw, 1rem);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.loginRule {
+  inline-size: 40px;
+  block-size: 1px;
+  background: var(--gold);
+  border-radius: var(--radius-pill);
+}

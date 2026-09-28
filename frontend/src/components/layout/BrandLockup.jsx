@@ -18,7 +18,10 @@ import styles from './BrandLockup.module.css'
  * source trace by `scripts/optimize_logo.mjs`; the PNG siblings under
  * `public/icons` exist only for surfaces that cannot take a vector.
  *
- * @param {{ variant?: 'plate' | 'text', height?: number, logoSrc?: string | null, className?: string }} props
+ * Phase 6: `variant="login"` renders the logo + wordmark + gold line for the
+ * login page (both desktop charcoal panel and mobile header band).
+ *
+ * @param {{ variant?: 'plate' | 'text' | 'login', height?: number, logoSrc?: string | null, className?: string }} props
  */
 export default function BrandLockup({ variant = 'plate', height = 32, logoSrc = null, className = '' }) {
   const [uploadedFailed, setUploadedFailed] = useState(false)
@@ -30,6 +33,35 @@ export default function BrandLockup({ variant = 'plate', height = 32, logoSrc = 
         <span className={styles.textName}>Ruchita Interiors</span>
         <span className={styles.textRule} aria-hidden="true" />
       </span>
+    )
+  }
+
+  if (variant === 'login') {
+    return (
+      <div className={`${styles.login} ${className}`.trim()}>
+        <div className={styles.loginLogo}>
+          {showUploaded ? (
+            <img
+              src={logoSrc}
+              alt="Ruchita Interiors"
+              height={height}
+              className={styles.image}
+              style={{ maxBlockSize: `${height}px` }}
+              onError={() => setUploadedFailed(true)}
+            />
+          ) : (
+            <img
+              src="/brand/logo.svg"
+              alt="Ruchita Interiors"
+              height={height}
+              width={Math.round((height * 1424) / 772)}
+              className={styles.image}
+            />
+          )}
+        </div>
+        <span className={styles.loginWordmark}>RUCHITA INTERIORS</span>
+        <span className={styles.loginRule} aria-hidden="true" />
+      </div>
     )
   }
 

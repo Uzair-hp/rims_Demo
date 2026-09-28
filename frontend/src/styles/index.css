@@ -6,6 +6,7 @@
  * inside @media print.
  */
 
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Cinzel:wght@500&family=DM+Sans:wght@400;500;600&display=swap');
 @import './tokens.css';
 @import './base.css';
 @import './print.css';

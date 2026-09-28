@@ -1,0 +1,356 @@
+/*
+ * Login — redesigned Phase 6.
+ *
+ * Mobile-first single column; from lg (1024px) a two-equal-panel split.
+ * Tokens only — no raw colour, size or shadow.
+ *
+ * Colour discipline: charcoal left panel, ivory right panel, gold accents only.
+ */
+
+.page {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-block-size: 100dvh;
+  background: var(--ivory);
+}
+
+/* ------------------------------------------------------------ brand panel (desktop) */
+
+.brandPanel {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .brandPanel {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: var(--space-16) var(--space-16) var(--space-16) calc(var(--space-16) * 2);
+    background: var(--charcoal);
+    color: var(--ivory);
+  }
+
+  .page {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.panelTop {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+
+.panelHeadline {
+  font-family: var(--font-heading);
+  font-size: clamp(2rem, 3.5vw, 2.5rem);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+  color: var(--ivory);
+  max-inline-size: 22ch;
+}
+
+.panelPoints {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.panelPoints li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--gold-soft);
+}
+
+.panelPoints li > svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--gold);
+}
+
+.panelFoot {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- form pane */
+
+.formPane {
+  display: grid;
+  place-items: center;
+  padding: var(--space-6) var(--space-4) calc(var(--space-10) + env(safe-area-inset-bottom));
+  background: radial-gradient(circle at 50% -10%, var(--gold-soft), transparent 55%), var(--ivory);
+}
+
+@media (min-width: 1024px) {
+  .formPane {
+    padding: var(--space-10) var(--space-8);
+    background: var(--ivory);
+  }
+}
+
+.formCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  inline-size: 100%;
+  max-inline-size: 26rem;
+}
+
+/* Mobile header band */
+.mobileBrand {
+  display: flex;
+  justify-content: center;
+}
+
+@media (min-width: 1024px) {
+  .mobileBrand {
+    display: none;
+  }
+}
+
+.mobileHeader {
+  width: 100%;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  background: var(--charcoal);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+.mobileHeader .login {
+  gap: var(--space-3);
+}
+
+.mobileHeader .loginWordmark {
+  font-size: 0.875rem;
+}
+
+.mobileHeader .loginRule {
+  inline-size: 40px;
+  block-size: 1px;
+}
+
+/* --------------------------------------------------------------- headings */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-3xl);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+  color: var(--text);
+}
+
+.titleRule {
+  inline-size: 40px;
+  block-size: 3px;
+  background: var(--gold);
+  border-radius: var(--radius-pill);
+}
+
+.subtitle {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--text-muted);
+  max-inline-size: 36ch;
+}
+
+/* ------------------------------------------------------------------- form */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon {
+  position: absolute;
+  inset-inline-start: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.input {
+  inline-size: 100%;
+  min-block-size: var(--touch-target-comfortable);
+  padding-inline: calc(var(--space-3) + 24px) var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  color: var(--text);
+  background: var(--card);
+  border: var(--border-width) solid var(--border);
+  border-radius: 10px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.input:focus {
+  border-color: var(--gold);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.25);
+}
+
+.input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.25);
+}
+
+.input:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+  background: var(--color-surface-alt);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Browser autofill */
+.input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--card) inset;
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+}
+
+.inputInvalid,
+.inputInvalid:hover:not(:disabled) {
+  border-color: var(--error);
+  background: var(--color-danger-soft);
+}
+
+.inputInvalid:focus,
+.inputInvalid:focus-visible {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.25);
+}
+
+/* Password plus a reveal toggle, sharing one 48px row. */
+.passwordWrap {
+  position: relative;
+  display: flex;
+}
+
+.passwordInput {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  padding-inline-end: var(--touch-target-comfortable);
+}
+
+.reveal {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: var(--touch-target-comfortable);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  background: transparent;
+  border-end-end-radius: 10px;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.reveal:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.reveal:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+/* A failed sign-in is announced as a single alert above the form. */
+.formError {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--error);
+  background: var(--color-danger-soft);
+  border: var(--border-width) solid var(--error);
+  border-radius: var(--radius-md);
+}
+
+.formErrorIcon {
+  display: inline-flex;
+  flex: none;
+  color: var(--error);
+}
+
+/* ------------------------------------------------------------------ notes */
+
+.note {
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--border);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Fade-in animation for card */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.formCol {
+  animation: fadeInUp var(--duration-slow) var(--ease-out);
+}
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Ensure inputs don't get double outline */
+.input:focus-visible,
+.reveal:focus-visible,
+:global(.btn-primary):focus-visible {
+  outline: none;
+}
