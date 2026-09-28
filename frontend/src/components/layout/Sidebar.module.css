@@ -1,0 +1,171 @@
+.sidebar {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: var(--z-sidebar);
+  display: none;
+  inline-size: var(--size-sidebar);
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-3) var(--space-4);
+  background: var(--color-ink);
+  color: var(--color-ink-inverse);
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--space-1);
+}
+
+.nav {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target-min);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-ink-muted-inverse);
+  font-size: var(--font-size-base);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.link:hover {
+  background: var(--color-surface-translucent);
+  color: var(--color-ink-inverse);
+}
+
+.active,
+.active:hover {
+  background: var(--color-gold);
+  color: var(--color-on-gold);
+  font-weight: var(--weight-semibold);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width) solid var(--color-surface-translucent);
+}
+
+.footerButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target-min);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink-muted-inverse);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.footerButton:hover {
+  background: var(--color-surface-translucent);
+  color: var(--color-ink-inverse);
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-avatar);
+  block-size: var(--size-avatar);
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-translucent);
+  color: var(--color-ink-inverse);
+}
+
+.accountText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.accountName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink-inverse);
+}
+
+.accountMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-muted-inverse);
+  /* The address is one long token; truncating keeps the row from forcing the
+     sidebar wider than its fixed track. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Sign out sits in the same row as the identity. On narrow desktops the label
+   drops to the icon alone, which is why the button keeps an aria-label. */
+.signOut {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+  min-block-size: var(--touch-target-comfortable);
+  padding-inline: var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted-inverse);
+  background: none;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+/* The sidebar is always the ink plate, in both themes, so these use the inverse
+   ink pair directly instead of a themed token that would be wrong on light. */
+.signOut:hover {
+  color: var(--color-ink-inverse);
+  border-color: var(--color-ink-muted-inverse);
+}
+
+.signOut:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink-inverse);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (min-width: 1024px) {
+  .sidebar {
+    display: flex;
+  }
+}

@@ -2,6 +2,12 @@
 node_modules/
 dist/
 dist-ssr/
+# Service-worker output written by vite-plugin-pwa during `npm run dev`.
+dev-dist/
+
+# ---------- Dev server state ----------
+# PID files, generated .cmd launchers and server logs from scripts/dev.ps1.
+.dev/
 *.local
 
 # ---------- Backend ----------
@@ -24,6 +30,11 @@ env/
 *.sqlite3
 instance/*.db
 *.db
+# WAL sidecar files. They appear beside the database in WAL mode (§8.5) and match
+# no extension rule above, so they need naming explicitly.
+*.db-shm
+*.db-wal
+*.db-journal
 
 # ---------- Uploads ----------
 # Keep the directory (via .gitkeep) but not uploaded files.

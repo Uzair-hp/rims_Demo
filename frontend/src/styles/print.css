@@ -1,0 +1,43 @@
+/*
+ * Ruchita Interiors — print layer.
+ *
+ * Kept deliberately separate from the application UI styles (§14, Appendix B3):
+ * the A4 document layout is built in Phase 6 on top of this foundation, and the
+ * print routes (/print/quotation/:id, /print/invoice/:id) stay chrome-less.
+ *
+ * Phase 1 scope: the page box, the A4 sheet, and hiding application chrome.
+ * The DocumentPaper item table / totals / terms layout is added with the
+ * quotation document in Phase 6, per §14.3.
+ */
+
+@page {
+  size: A4;
+  margin: 14mm 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background: var(--color-surface);
+    /* Never let a token-font or colour choice push a row out of the page box. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body {
+    font-size: 10pt;
+  }
+
+  /* Application chrome never prints: sidebars, bottom nav, sheets, toasts. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Content that is interactive in the app collapses to static flow. */
+  .print-full-bleed {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+}

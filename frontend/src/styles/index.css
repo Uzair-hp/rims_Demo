@@ -1,0 +1,11 @@
+/*
+ * Ruchita Interiors — stylesheet entry point.
+ *
+ * Import order matters: tokens define the variables every other layer consumes,
+ * base layers element defaults on top of them, print is last so its rules win
+ * inside @media print.
+ */
+
+@import './tokens.css';
+@import './base.css';
+@import './print.css';

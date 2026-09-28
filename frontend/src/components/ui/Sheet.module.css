@@ -1,0 +1,124 @@
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--color-scrim);
+  animation: fade var(--duration-normal) var(--ease-out);
+}
+
+.panel {
+  position: relative;
+  inline-size: 100%;
+  max-block-size: min(85dvh, 40rem);
+  display: flex;
+  flex-direction: column;
+  padding-block-end: max(var(--space-4), env(safe-area-inset-bottom));
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-block-end: 0;
+  border-start-start-radius: var(--radius-xl);
+  border-start-end-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  animation: rise var(--duration-normal) var(--ease-out);
+}
+
+.grabber {
+  inline-size: var(--space-9);
+  block-size: var(--space-1);
+  margin: var(--space-3) auto var(--space-1);
+  background: var(--color-border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5) var(--space-4);
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-ink);
+}
+
+.description {
+  margin-block-start: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  inline-size: var(--touch-target-min);
+  block-size: var(--touch-target-min);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-ink);
+}
+
+.body {
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-3) var(--space-4);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (min-width: 1024px) {
+  .root {
+    align-items: center;
+    padding: var(--space-5);
+  }
+
+  .panel {
+    inline-size: min(30rem, 100%);
+    max-block-size: 80dvh;
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-xl);
+    animation-name: scale-in;
+  }
+
+  .grabber {
+    display: none;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+}

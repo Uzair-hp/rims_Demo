@@ -2,9 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#111111" />
-    <title>Ruchita Interiors</title>
+    <!-- viewport-fit=cover so safe-area insets work on notched phones (§17) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Ruchita Interiors — Quotation, Invoice &amp; Payments</title>
+    <meta
+      name="description"
+      content="Internal quotation, invoice and payment management for Ruchita Interiors."
+    />
+
+    <!-- Theme colours: light is the default, dark follows the OS (§18.7) -->
+    <meta name="theme-color" content="#16130F" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAF8F3" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#14120E" />
+
+    <!-- PWA install metadata (§17) -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ruchita Interiors" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" href="/icons/favicon.ico" sizes="16x16 32x32 48x48" />
+
+    <!--
+      Apply the stored theme before first paint: a dark-theme user must never see
+      a white flash on reload. Kept inline and tiny on purpose.
+    -->
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('ri.theme')
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+          document.documentElement.setAttribute('data-theme', theme)
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'light')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

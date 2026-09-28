@@ -1,0 +1,61 @@
+.topbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-topbar);
+  display: grid;
+  grid-template-columns: var(--size-touch) 1fr var(--size-touch);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-topbar);
+  padding-inline: var(--space-3);
+  padding-block-start: env(safe-area-inset-top);
+  background: var(--color-surface);
+  border-block-end: var(--border-width) solid transparent;
+  transition: border-color var(--duration-normal) var(--ease-out);
+}
+
+.scrolled {
+  border-block-end-color: var(--color-border);
+}
+
+.side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder {
+  inline-size: var(--size-touch);
+  block-size: var(--size-touch);
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-touch);
+  block-size: var(--size-touch);
+  color: var(--color-ink);
+  border-radius: var(--radius-pill);
+}
+
+.iconButton:hover {
+  background: var(--color-surface-alt);
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--font-size-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 1024px) {
+  .topbar {
+    display: none;
+  }
+}

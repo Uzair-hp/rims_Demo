@@ -1,0 +1,128 @@
+.shell {
+  min-block-size: 100dvh;
+  background: var(--color-background);
+}
+
+/* Visible on focus only, so keyboard users can jump the navigation (§18.2). */
+.skipLink {
+  position: fixed;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-2);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-ink);
+  color: var(--color-ink-inverse);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-4)));
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100dvh;
+}
+
+.main {
+  flex: 1;
+  inline-size: 100%;
+  max-inline-size: var(--size-content-max);
+  margin-inline: auto;
+  padding: var(--space-4) var(--space-4)
+    calc(var(--size-bottom-nav) + var(--space-8) + env(safe-area-inset-bottom));
+}
+
+.main:focus {
+  outline: none;
+}
+
+.desktopNew {
+  display: none;
+}
+
+.fab {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-fab);
+  block-size: var(--size-fab);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-gold);
+  color: var(--color-on-gold);
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.fab:hover {
+  background: var(--color-gold-strong);
+}
+
+.sheetFooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+  padding: var(--space-3);
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+.sheetBrand {
+  padding-inline: var(--space-1);
+}
+
+.sheetAction {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target-comfortable);
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--font-size-base);
+  cursor: pointer;
+}
+
+.sheetAction:hover {
+  background: var(--color-surface-alt);
+}
+
+.sheetMeta {
+  padding-inline: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+}
+
+@media (min-width: 768px) {
+  .main {
+    padding-inline: var(--space-6);
+  }
+}
+
+@media (min-width: 1024px) {
+  .content {
+    margin-inline-start: var(--size-sidebar);
+  }
+
+  .main {
+    padding-block: var(--space-6);
+    padding-block-end: var(--space-10);
+  }
+
+  .desktopNew {
+    position: fixed;
+    inset-block-end: var(--space-6);
+    inset-inline-end: var(--space-6);
+    z-index: var(--z-fab);
+    display: block;
+  }
+}
