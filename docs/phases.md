@@ -19,7 +19,7 @@ tests, production build) is the gate for every phase.
 | 5     | Quotation engine (core)             | **Done**    |
 | 6     | Quotation document / PDF            | **Done**    |
 | 7     | Invoice system                      | **Done**    |
-| 8     | Payments & financial tracking       | Not started |
+| 8     | Payments & financial tracking       | **Done**    |
 | 9     | Dashboard & analytics               | Not started |
 | 10    | PWA / mobile optimization           | Not started |
 | 11    | Security, validation & edge cases   | Not started |
@@ -383,7 +383,8 @@ Delivered:
 - `api/invoices.py` (new) — list (search by number or client, payment-status
   filter, date range, sort, pagination), detail, draft update, issue, cancel.
   There is deliberately no `POST /invoices`: an invoice only exists by converting
-  an approved quotation (FR-I1), and no `/payments` routes, which are Phase 8.
+  an approved quotation (FR-I1), and — at this phase — no `/payments` routes
+  (delivered in Phase 8).
 - Frontend: `api/endpoints/invoices.js`, `features/invoices/` (`useInvoices`,
   `InvoicesPage` with the payment-status filter, `InvoiceDetailPage` with an
   Amount Paid / Outstanding strip, draft-field editing and payment history, and
@@ -446,12 +447,12 @@ Exit criteria met:
   edits; payment-status filtering for all three states, plus an agreement test
   between the SQL predicate and the computed field.
 
-Still Phase 8, deliberately absent: payment recording, editing and deletion, the
-payment sheet, and the collection workflow. The invoice surfaces read the
-`payments` table so the status and outstanding figures are real, but nothing
-creates a payment yet.
+Deferred to Phase 8 (now delivered): payment recording, editing and deletion, the
+payment sheet, and the collection workflow. Throughout Phase 7 the invoice
+surfaces read the `payments` table so the status and outstanding figures were
+already real, but nothing could create a payment yet.
 
-## Phase 8 - Payments & financial tracking
+## Phase 8 - Payments & financial tracking (done)
 
 Payment recording, allocation and financial reporting.
 
@@ -508,8 +509,8 @@ so there is no second copy to fall out of date.
 
 Exit criteria met:
 
-- `npm run lint`, `npm run format:check` and `npm run build` clean, 188 frontend
-  tests and 249 backend tests passing.
+- `npm run verify` green (lint, format, frontend tests, backend tests, production
+  build): 188 frontend tests, 249 backend tests.
 - `GET /api/v1/health` reports `phase: 8`.
 - Advance / multiple partials / exact full / overpayment 422 / delete-recalculates,
   plus draft and cancelled rejection, zero amount, invalid method, all six

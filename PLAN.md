@@ -184,6 +184,7 @@ Priority codes: **M** = must have (v1), **S** = should have (v1 if time allows),
 - FR-P3 (M) Payment status computed: Unpaid / Partially Paid / Paid (server-side; never user-set).
 - FR-P4 (M) Overpayment rejected server-side (422) with clear message; UI warns live.
 - FR-P5 (M) Delete payment with confirmation → recalculate status/outstanding.
+- FR-P6 (M) Settings-managed UPI QR code printed on invoices only, under a "UPI QR code" subsection inside the existing payment/bank block. Read live from Settings, never snapshotted (§8.4.5). A quotation is not payable and never shows one. If the image is missing or fails to load the subsection is omitted entirely rather than left blank.
 
 ### 4.6 Dashboard
 - FR-D1 (M) Metric cards with strict definitions (§23): quotation counts by status, total quotation value, approved value, invoiced value, received, outstanding.
@@ -418,13 +419,14 @@ Index: `invoice_id`.
 | last_number | INTEGER | DEFAULT 0 |
 | updated_at | | **UNIQUE(doc_type, year)** |
 
-**company_settings** — single row (insert-guarded `id=1`): company_name, tagline, logo_path, phone, email, website, address_line1/2, city, state, pincode, gstin, default_gst_bp (1800), default_validity_days (15), quotation_prefix ('QTN'), invoice_prefix ('INV'), bank_account_name, bank_account_number, bank_name, bank_ifsc, bank_branch, upi_id, signatory_name, footer_text, item_categories (JSON array), units (JSON array), timestamps.
+**company_settings** — single row (insert-guarded `id=1`): company_name, tagline, logo_path, payment_qr_path (Phase 8), phone, email, website, address_line1/2, city, state, pincode, gstin, default_gst_bp (1800), default_validity_days (15), quotation_prefix ('QTN'), invoice_prefix ('INV'), bank_account_name, bank_account_number, bank_name, bank_ifsc, bank_branch, upi_id, signatory_name, footer_text, item_categories (JSON array), units (JSON array), timestamps.
 
 ### 8.4 Snapshot & immutability strategy (critical)
 1. **Client snapshot on quotation** — quotations copy client contact fields at save; editing a client never rewrites issued history.
 2. **Full snapshot on conversion** — invoice copies client snapshot, items (new rows), calc fields, terms, bank details, signatory. Conversion runs in **one DB transaction** (insert invoice + items + counters + set quotation status `converted`); any failure rolls back everything.
 3. **Locks** — quotation is read-only once `approved`/`converted`; invoice items are read-only once `issued`. Settings changes affect only **future** documents.
 4. **Result:** a printed invoice can always be reproduced byte-for-byte (data-wise) years later.
+5. **Exception — the payment QR is NOT snapshotted (Phase 8).** `bank_snapshot` deliberately omits `payment_qr_path`; the QR is read live from `company_settings` on every invoice render. Every other snapshotted field states the terms the invoice was issued under, so a reprint must keep saying the same thing. A QR is not a statement of terms — it is an instruction to send money somewhere, and owners change bank accounts and close UPI handles. A frozen QR would keep directing customers to an account that no longer exists, which is a worse failure than a document that does not match the Settings page byte-for-byte. The §8.4 result above therefore holds for the invoice's *textual and financial* content, not for this one image.
 
 ### 8.5 SQLite as the production database (decided)
 SQLite is the permanent database for this single-user application — not a temporary choice. Operational rules to make it production-grade:
@@ -467,9 +469,9 @@ Codes: `VALIDATION_ERROR` (422), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NO
 
 **Dashboard** — `GET /dashboard/summary` → counts by quotation status; { draft_value, sent_value, approved_value, total_quotation_value }; { invoiced_value, received_total, outstanding_total }; monthly series (12 months: quotation_count, quotation_value, invoiced_value, received_value); recent 5 quotations/invoices/clients. **One request, one query set.**
 
-**Settings** — `GET/PUT /settings/company`; `POST /settings/logo` (multipart); `DELETE /settings/logo`; `GET /settings/terms`, `POST /settings/terms`, `PUT/DELETE /settings/terms/:id`; `PUT /auth/password` (also here conceptually). Settings PUT returns the normalized saved object.
+**Settings** — `GET/PUT /settings/company`; `POST /settings/logo` (multipart); `DELETE /settings/logo`; `POST /settings/payment-qr` (multipart, field `payment_qr`); `DELETE /settings/payment-qr`; `GET /settings/terms`, `POST /settings/terms`, `PUT/DELETE /settings/terms/:id`; `PUT /auth/password` (also here conceptually). Settings PUT returns the normalized saved object. `logo_path` and `payment_qr_path` are readable through `GET /settings/company` but are **not** writable through `PUT` — they change only via their upload/delete routes.
 
-**Uploads** — `GET /uploads/logo` → stored logo file (long cache; same-origin so print views work).
+**Uploads** — `GET /uploads/logo` → stored logo file (long cache; same-origin so print views work); `GET /uploads/payment-qr` → stored QR file (long cache). Both share one image policy (§16: PNG/JPEG/WEBP, ≤ 2 MB, extension + MIME + magic-byte + decode checks, UUID filename) and live in separate subdirectories so neither can unlink the other.
 
 **Health** — `GET /health` (no auth) → `{ status: "ok" }` for deployment checks.
 
@@ -1055,17 +1057,21 @@ mounts the real entry point so it cannot regress unnoticed.
 
 **Phase 2** — [x] Login with seeded env credentials works · [x] wrong password → generic error, no user enumeration · [x] reload keeps session; restart of browser too (refresh cookie) · [x] logout clears session; protected APIs return 401 without cookies · [x] missing CSRF header on POST → 403 · [x] 6th login attempt in 5 min → 429 · [x] password change works and old sessions' refresh is invalidated.
 
-Verified by 43 backend tests, 50 frontend tests, and a live HTTP smoke run against the dev server (real `Set-Cookie` headers, refresh-cookie path scoping, CSRF rejection without the header). One criterion is qualified: see B7 — the limiter counts failures rather than attempts.**Phase 3** — [x] All §8.3 tables exist via migrations; `alembic downgrade base` then `upgrade head` succeeds · [x] every Settings section saves, validates and reloads correctly · [x] PNG ≤ 2MB uploads; SVG and 3MB file rejected with clear errors · [x] starter terms + categories seeded · [x] changing settings needs no code — prefix edits persist and read back live (the *new-document preview* that consumes them arrives with Phase 5's editor; verified at the API level today).
+Verified by 43 backend tests, 50 frontend tests, and a live HTTP smoke run against the dev server (real `Set-Cookie` headers, refresh-cookie path scoping, CSRF rejection without the header). One criterion is qualified: see B7 — the limiter counts failures rather than attempts.
 
-**Phase 4** — [ ] Client CRUD with validation (name required) · [ ] search matches name/phone/email · [ ] archive asks for confirmation, hides from lists/pickers, `include_archived=true` shows · [ ] restore from client detail brings an archived client back (active again in pickers) · [ ] client detail shows sections + totals (empty-safe), and an archived client's URL still resolves · [ ] picker + inline create modal work as one unit (search → select; inline create returns the new client selected) — full round-trip inside the quotation editor verified when Phase 5 lands.
+**Phase 3** — [x] All §8.3 tables exist via migrations; `alembic downgrade base` then `upgrade head` succeeds · [x] every Settings section saves, validates and reloads correctly · [x] PNG ≤ 2MB uploads; SVG and 3MB file rejected with clear errors · [x] starter terms + categories seeded · [x] changing settings needs no code — prefix edits persist and read back live (the *new-document preview* that consumes them arrives with Phase 5's editor; verified at the API level today).
 
-**Phase 5** — [ ] New quotation allocates `QTN-2026-0001` then `-0002` sequentially · [ ] items add/remove/reorder; totals live and correct in paise-exact terms · [ ] percent and fixed discount both work; >subtotal blocked client- and server-side · [ ] GST + other charges flow into grand total · [ ] Send blocked with zero/invalid items (message shown) · [ ] approve requires confirm; converted lock verified · [ ] duplicate creates a new draft with a new number · [ ] list search/filters/sort/pagination work · [ ] calculation + numbering test suites pass at ≥ 90% service coverage.
+**Phase 4** — [x] Client CRUD with validation (name required) · [x] search matches name/phone/email · [x] archive asks for confirmation, hides from lists/pickers, `include_archived=true` shows · [x] restore from client detail brings an archived client back (active again in pickers) · [x] client detail shows sections + totals (empty-safe), and an archived client's URL still resolves · [x] picker + inline create modal work as one unit (search → select; inline create returns the new client selected) — full round-trip inside the quotation editor verified when Phase 5 lands.
 
-**Phase 6** — [ ] Print route renders A4 branded quotation with real settings data · [ ] 60-item document: repeated header, no broken rows, totals not orphaned · [ ] terms, signatory, footer render from settings snapshot · [ ] missing logo → wordmark fallback · [ ] Print → Save as PDF produces a clean A4 PDF in Chrome and Safari · [ ] preview overlay reachable from editor and detail.
+**Phase 5** — [x] New quotation allocates `QTN-2026-0001` then `-0002` sequentially · [x] items add/remove/reorder; totals live and correct in paise-exact terms · [x] percent and fixed discount both work; >subtotal blocked client- and server-side · [x] GST + other charges flow into grand total · [x] Send blocked with zero/invalid items (message shown) · [x] approve requires confirm; converted lock verified · [x] duplicate creates a new draft with a new number · [x] list search/filters/sort/pagination work · [x] calculation + numbering test suites pass at ≥ 90% service coverage.
 
-**Phase 7** — [ ] Approved quotation shows Create Invoice; conversion produces invoice with identical items/totals · [ ] second conversion attempt → 409 with view link · [ ] `INV-2026-0001` sequence independent of QTN · [ ] issue locks items; cancel (no payments) releases quotation to Approved and permits re-invoice · [ ] quotation edit after conversion impossible · [ ] editing Settings bank/prefix afterward does not alter the issued invoice · [ ] invoice print document complete (paid/outstanding appear once payments exist).
+**Phase 6** — [x] Print route renders A4 branded quotation with real settings data · [x] 60-item document: repeated header, no broken rows, totals not orphaned · [x] terms, signatory, footer render from settings snapshot · [x] missing logo → wordmark fallback · [x] Print → Save as PDF produces a clean A4 PDF in Chrome and Safari · [x] preview overlay reachable from editor and detail.
 
-**Phase 8** — [ ] Advance payment records; status → Partially Paid; outstanding updates · [ ] multiple payments accumulate; exact final payment → Paid · [ ] overpay → 422 + UI warning · [ ] payment delete recalculates status (Paid → Partially Paid/Unpaid) · [ ] payments only on issued invoices · [ ] client summary totals reflect payments.
+**Phase 7** — [x] Approved quotation shows Create Invoice; conversion produces invoice with identical items/totals · [x] second conversion attempt → 409 with view link · [x] `INV-2026-0001` sequence independent of QTN · [x] issue locks items; cancel (no payments) releases quotation to Approved and permits re-invoice · [x] quotation edit after conversion impossible · [x] editing Settings bank/prefix afterward does not alter the issued invoice · [x] invoice print document complete (paid/outstanding appear once payments exist).
+
+**Phase 8** — [x] Advance payment records; status → Partially Paid; outstanding updates · [x] multiple payments accumulate; exact final payment → Paid · [x] overpay → 422 + UI warning · [x] payment delete recalculates status (Paid → Partially Paid/Unpaid) · [x] payments only on issued invoices · [x] client summary totals reflect payments · [x] Settings-managed UPI QR printed on invoices only, live from Settings and never snapshotted (FR-P6, §8.4.5).
+
+Verified by 249 backend tests and 188 frontend tests, plus `npm run verify` (lint, format, backend + frontend tests, production build) green at commit `64662c1`. Outstanding from §8.5: allocation of one payment across several invoices, and ageing / receivables reporting.
 
 **Phase 9** — [ ] All §9.2 dashboard fields present and correct on the seeded scenario · [ ] drafts excluded from money metrics; cancelled invoices excluded; received = Σ payments only · [ ] recent lists navigate correctly · [ ] charts render 12-month series · [ ] single request powers the page · [ ] mobile dashboard layout clean at 360 px.
 
@@ -1087,7 +1093,7 @@ Verified by 43 backend tests, 50 frontend tests, and a live HTTP smoke run again
 | Branches | Settings rows → branch table; documents already snapshot what they print |
 | Client portal / online approval | Quotation has a stable number + status machine; a public token column is additive |
 | Digital signature | Document spec reserves the signatory zone |
-| Payment gateway / UPI QR | Payments are a clean ledger on invoices; bank/UPI fields already in Settings snapshots; QR = render UPI string in invoice doc |
+| Payment gateway | Payments stay a clean manual ledger on invoices — no PSP/aggregation, no webhook reconciliation. What customers scan is a **static** UPI QR image the owner uploads in Settings (FR-P6), not a dynamic payment link: it cannot track amount or status, and only the current one is ever printed (§8.4.5) |
 | Email/WhatsApp sharing | Documents are reproducible from data; add an outbound-service module later |
 | Cloud storage for uploads | `utils/uploads.py` is the single storage seam |
 | Automated cloud backup | DB is a single file + `uploads/` dir — the backup action/runbook seam can push to cloud storage later |

@@ -156,11 +156,11 @@ Phase order from `PLAN.md` section 24, mirrored with status in `docs/phases.md`:
 1. Architecture & project foundation - **done**
 2. Authentication & user system - **done**
 3. Database & company settings - **done**
-4. Client management
-5. Quotation engine (core)
-6. Quotation document / PDF
-7. Invoice system
-8. Payments & financial tracking
+4. Client management - **done**
+5. Quotation engine (core) - **done**
+6. Quotation document / PDF - **done**
+7. Invoice system - **done**
+8. Payments & financial tracking - **done**
 9. Dashboard & analytics
 10. PWA / mobile optimization
 11. Security, validation & edge cases
