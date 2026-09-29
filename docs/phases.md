@@ -18,7 +18,7 @@ tests, production build) is the gate for every phase.
 | 4     | Client management                   | **Done**    |
 | 5     | Quotation engine (core)             | **Done**    |
 | 6     | Quotation document / PDF            | **Done**    |
-| 7     | Invoice system                      | Not started |
+| 7     | Invoice system                      | **Done**    |
 | 8     | Payments & financial tracking       | Not started |
 | 9     | Dashboard & analytics               | Not started |
 | 10    | PWA / mobile optimization           | Not started |
@@ -355,9 +355,101 @@ Not covered by automated tests, and honestly so: the rendered appearance of the
 PDF in each browser, and the choice of gold. Both are the manual Phase 6/11 items
 they are documented as being.
 
-## Phase 7 - Invoice system
+## Phase 7 - Invoice system (done)
 
 Quotation-to-invoice conversion and invoice management.
+
+Delivered:
+
+- Backend: `PHASE=7` bumped in `settings.py`; `GET /api/v1/health` reports
+  `phase: 7`. **No migration** — Phase 3 already created `invoices`,
+  `invoice_items` and `payments` with the partial unique index, and Phase 5 wrote
+  the conversion endpoint and the invoice state machine.
+- `services/invoices.py` (new) — the invoice business rules, with the conversion
+  moved out of the quotations blueprint into it so the API layer stays thin (§23):
+  - `payment_status()` and `paid_paise_for()` are the **single definition** of
+    paid/outstanding (§11). `clients.py` now imports them instead of keeping its
+    own copy, so a client summary and an invoice page cannot disagree.
+  - `payment_status_predicate()` expresses the same three-way comparison as a
+    correlated SQL subquery, so `GET /invoices?payment_status=…` filters in the
+    database rather than loading every invoice and filtering in Python (§5's
+    pagination and latency budget).
+  - `serialize_invoice()` populates the four computed fields the schema declares
+    but nothing produced (`paid_paise`, `outstanding_paise`, `payment_status`,
+    `allowed_actions`).
+  - `update_invoice_draft()`, `issue_invoice()`, `cancel_invoice()`.
+  - `convert_quotation()` — the snapshot, the numbering, and the §11 safety
+    assert.
+- `api/invoices.py` (new) — list (search by number or client, payment-status
+  filter, date range, sort, pagination), detail, draft update, issue, cancel.
+  There is deliberately no `POST /invoices`: an invoice only exists by converting
+  an approved quotation (FR-I1), and no `/payments` routes, which are Phase 8.
+- Frontend: `api/endpoints/invoices.js`, `features/invoices/` (`useInvoices`,
+  `InvoicesPage` with the payment-status filter, `InvoiceDetailPage` with an
+  Amount Paid / Outstanding strip, draft-field editing and payment history, and
+  `status.js`).
+- `DocumentPaper` gained a `docKind` prop. `quotation` is the Phase 6 path,
+  unchanged; `invoice` adds issue/due dates in place of date/validity, **Amount
+  Paid** and **Balance Due** below the grand total, and a bank/UPI block built
+  from `bank_snapshot`. The signatory now comes from `doc.signatory_name` when the
+  document has a snapshot, falling back to live Settings for a quotation — so an
+  invoice prints what it snapshotted and a quotation still reads Settings (§8.4).
+- `InvoicePreview` overlay and `/print/invoice/:id`, sharing the `PrintQuotation`
+  shell with `/print/quotation/:id`; `useAutoPrint` and the toolbar are shared.
+- Two dead invoice-creation links fixed, because they became actively misleading
+  once invoices existed: the client detail page pointed at `/invoices/new`
+  (a route that never existed) and the mobile "New" sheet offered "New invoice".
+  Both now reflect FR-I1 — invoices originate from approved quotations.
+
+Decisions taken, and why:
+
+- **The duplicate-conversion check runs before the status check.** After a
+  conversion the quotation is `converted`, so checking status first answered every
+  second attempt with a bare 422 and made the 409-with-invoice-id unreachable —
+  the one response that lets the UI offer "View invoice" (§9.2, §25).
+  `test_convert_twice_conflicts` was changed from asserting 422 to asserting 409
+  plus the `invoice_id`/`invoice_number` in `details`; the old assertion was not
+  preserved just because it was green.
+- **Conversion independently recomputes its totals** from the items it is copying
+  and compares them against the quotation's stored figures, per §11. A mismatch
+  raises `ConversionSafetyError` before anything is committed, so the invoice, its
+  items and the allocated number all roll back together; the API answers
+  `500 INTERNAL` with a generic message and a logged error id (§16).
+- **`due_date` stays nullable with no default.** §8.3 gives invoices a `due_date`
+  but `company_settings` no due-days column, so adding one would contradict the
+  schema. It is editable while the invoice is Draft. No migration was added.
+- **`record_payment` and `duplicate`/`delete` get no buttons.** The lifecycle
+  service advertises them for an invoice, but Phase 7 implements no endpoint for
+  any of them, so `INVOICE_ACTION_META` maps only `issue` and `cancel`. The detail
+  page skips unmapped actions, which is the same pattern the quotation detail page
+  already uses, so a button can never appear for something the API would reject.
+- **Payment history renders an explicit empty state** saying payments are not
+  recorded yet, rather than an empty list that looks like a bug.
+
+Bug found and fixed in the pre-existing scaffolding:
+
+- `validate_invoice_transition` consulted only the per-action guards, never the
+  transition table, so `ISSUE` and `CANCEL` skipped their status gate entirely:
+  issuing an already-issued invoice returned 200. Now the table is consulted first,
+  mirroring `validate_quotation_transition`, with three tests added at the service
+  level.
+
+Exit criteria met:
+
+- `npm run verify` green: lint, format, 157 frontend tests, 211 backend tests,
+  production build.
+- `GET /api/v1/health` reports `phase: 7`.
+- Full lifecycle covered by tests: approved → convert → draft → issue → locked;
+  cancel → quotation released to `approved` → re-invoiceable with a fresh number;
+  cancel refused once a payment exists; duplicate conversion → 409; conversion
+  safety assert; snapshot immutability against both quotation edits and Settings
+  edits; payment-status filtering for all three states, plus an agreement test
+  between the SQL predicate and the computed field.
+
+Still Phase 8, deliberately absent: payment recording, editing and deletion, the
+payment sheet, and the collection workflow. The invoice surfaces read the
+`payments` table so the status and outstanding figures are real, but nothing
+creates a payment yet.
 
 ## Phase 8 - Payments & financial tracking
 
