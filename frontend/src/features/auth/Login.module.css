@@ -77,6 +77,26 @@
   color: var(--text-muted);
 }
 
+/*
+ * Dark-mode fix: the brand panel stays charcoal in both themes, but --ivory,
+ * --gold-soft and --text-muted all flip to dark values under [data-theme='dark'],
+ * which made the headline, feature lines and footer near-invisible on the panel.
+ * Override just those three with fixed on-dark tokens; light mode is untouched.
+ * The feature icons use --gold (dark: #d9b45c, ~9:1 on charcoal) and stay legible,
+ * so they need no override.
+ */
+:global([data-theme='dark']) .panelHeadline {
+  color: var(--text-on-dark);
+}
+
+:global([data-theme='dark']) .panelPoints li {
+  color: var(--text-on-dark-muted);
+}
+
+:global([data-theme='dark']) .panelFoot {
+  color: var(--text-on-dark-muted);
+}
+
 /* -------------------------------------------------------------- form pane */
 
 .formPane {
@@ -224,12 +244,12 @@
 .input:focus {
   border-color: var(--gold);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.25);
+  box-shadow: var(--ring-gold-soft);
 }
 
 .input:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.25);
+  box-shadow: var(--ring-gold-soft);
 }
 
 .input:disabled {
@@ -342,15 +362,6 @@
   animation: fadeInUp var(--duration-slow) var(--ease-out);
 }
 
-/* Focus visible for keyboard navigation */
-*:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-}
-
-/* Ensure inputs don't get double outline */
-.input:focus-visible,
-.reveal:focus-visible,
-:global(.btn-primary):focus-visible {
-  outline: none;
-}
+/* Inputs and the reveal toggle carry their own gold ring above; the shared
+   focus ring in base.css covers everything else, so no page-level override is
+   needed here (a universal selector in a CSS module would leak globally). */

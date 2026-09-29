@@ -33,12 +33,12 @@
   background: var(--color-gold);
   color: var(--color-on-gold);
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px rgba(201, 162, 75, 0.3);
+  box-shadow: var(--shadow-gold);
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--gold-hover);
-  box-shadow: 0 4px 16px rgba(201, 162, 75, 0.4);
+  background: var(--color-gold-strong);
+  box-shadow: var(--shadow-gold-strong);
 }
 
 .primary:active:not(:disabled) {
@@ -47,7 +47,7 @@
 
 .primary:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(201, 162, 75, 0.4);
+  box-shadow: var(--ring-gold);
 }
 
 .secondary {

@@ -9,8 +9,13 @@
 
 .image {
   display: block;
+  /* Height comes from the `height` attribute set by the component (the `height`
+     prop); width follows the aspect ratio. We must NOT set `block-size: auto`
+     here — it overrides that height attribute, so the SVG falls back to its
+     772.5px intrinsic height and balloons inside wide containers like the login
+     brand panel. `max-inline-size` keeps it inside narrow rails. */
   inline-size: auto;
-  block-size: auto;
+  max-inline-size: 100%;
 }
 
 .text {

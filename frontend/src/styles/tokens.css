@@ -61,6 +61,13 @@
   --border: #e4ddd0;
   --error: #b3261e;
 
+  /* Text on surfaces that stay charcoal in BOTH themes (e.g. the login brand
+     panel). Fixed warm-light values, so dark mode does not fold them into the
+     background. Applied only via dark-mode overrides so light mode is unchanged
+     (§18.7). AA on #1a1814: ~16:1 headline, ~10:1 muted. */
+  --text-on-dark: #f5f1e8;
+  --text-on-dark-muted: #c9c2b0;
+
   /* --- Semantic status: reserved, never decorative (§18.5) --- */
   --color-success: #177245;
   --color-success-soft: #e4f3ea;
@@ -149,6 +156,13 @@
   --shadow-md: 0 4px 12px rgb(29 27 22 / 0.08);
   --shadow-lg: 0 8px 24px rgb(29 27 22 / 0.12);
   --shadow-none: none;
+
+  /* Gold accent shadows and focus ring, so the primary button and gold inputs
+     theme correctly instead of carrying a hard-coded rgb (§18.4, §18.7). */
+  --shadow-gold: 0 2px 8px rgb(201 162 75 / 0.3);
+  --shadow-gold-strong: 0 4px 16px rgb(201 162 75 / 0.4);
+  --ring-gold: 0 0 0 3px rgb(201 162 75 / 0.4);
+  --ring-gold-soft: 0 0 0 3px rgb(201 162 75 / 0.25);
 
   /* --- Motion: opacity and transform only, 120–200ms (§18.10) --- */
   --duration-fast: 120ms;
@@ -266,6 +280,13 @@
   --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 8px 24px rgb(0 0 0 / 0.55);
+
+  /* Dark-theme gold is lighter (#d9b45c → rgb(217 180 92)); the accent shadow
+     and ring track it so gold controls read correctly on the dark surfaces. */
+  --shadow-gold: 0 2px 8px rgb(217 180 92 / 0.28);
+  --shadow-gold-strong: 0 4px 16px rgb(217 180 92 / 0.4);
+  --ring-gold: 0 0 0 3px rgb(217 180 92 / 0.45);
+  --ring-gold-soft: 0 0 0 3px rgb(217 180 92 / 0.3);
 
   --state-hover-tint: rgb(240 238 232 / 0.05);
   --state-active-tint: rgb(240 238 232 / 0.09);

@@ -54,7 +54,7 @@ export default function BrandLockup({ variant = 'plate', height = 32, logoSrc = 
               src="/brand/logo.svg"
               alt="Ruchita Interiors"
               height={height}
-              width={Math.round((height * 1424) / 772)}
+              width={Math.round((height * 1424) / 772.5)}
               className={styles.image}
             />
           )}
@@ -88,7 +88,7 @@ export default function BrandLockup({ variant = 'plate', height = 32, logoSrc = 
         src="/brand/logo.svg"
         alt="Ruchita Interiors"
         height={height}
-        width={Math.round((height * 1424) / 772)}
+        width={Math.round((height * 1424) / 772.5)}
         className={styles.image}
       />
     </span>

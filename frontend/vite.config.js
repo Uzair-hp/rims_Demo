@@ -24,7 +24,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'ri-api',
-              networkTimeoutSeconds: 5,
+              networkTimeoutSeconds: 3,
               expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 },
             },
           },
