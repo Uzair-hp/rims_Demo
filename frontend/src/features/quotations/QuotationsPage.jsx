@@ -16,12 +16,18 @@ import Pagination from '../../components/ui/Pagination.jsx'
 import Skeleton from '../../components/ui/Skeleton.jsx'
 import StatusBadge from '../../components/ui/StatusBadge.jsx'
 import TextField from '../../components/ui/TextField.jsx'
-import { formatPaise } from '../../lib/money.js'
+import { formatPaise, rupeesToPaise } from '../../lib/money.js'
 import { useQuotations } from './useQuotations.js'
 import { STATUS_OPTIONS, statusLabel } from './status.js'
 import styles from './QuotationsPage.module.css'
 
 const DEBOUNCE_MS = 250
+
+const SORT_OPTIONS = [
+  { value: 'created_at', label: 'Date created' },
+  { value: 'quotation_date', label: 'Quotation date' },
+  { value: 'grand_total_paise', label: 'Amount' },
+]
 
 const formatDate = (iso) => {
   if (!iso) return '—'
@@ -31,9 +37,31 @@ const formatDate = (iso) => {
 }
 
 export default function QuotationsPage() {
-  const { items, total, page, pageSize, status, loadState, setQ, setStatus, setPage } = useQuotations()
+  const {
+    items,
+    total,
+    page,
+    pageSize,
+    status,
+    dateFrom,
+    dateTo,
+    sort,
+    order,
+    loadState,
+    setQ,
+    setStatus,
+    setDateFrom,
+    setDateTo,
+    setMinAmount,
+    setMaxAmount,
+    setSort,
+    setOrder,
+    setPage,
+  } = useQuotations()
 
   const [searchTerm, setSearchTerm] = useState('')
+  const [minInput, setMinInput] = useState('')
+  const [maxInput, setMaxInput] = useState('')
 
   // Debounced search: 250 ms of idle typing before the list refetches.
   useEffect(() => {
@@ -41,8 +69,27 @@ export default function QuotationsPage() {
     return () => clearTimeout(handle)
   }, [searchTerm, setQ])
 
+  // Amounts are typed in rupees but filtered in paise (§8.1). Debounce the parse
+  // so the list doesn't refetch on every keystroke, and reset to page 1.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setMinAmount(minInput.trim() === '' ? '' : rupeesToPaise(minInput))
+      setPage(1)
+    }, DEBOUNCE_MS)
+    return () => clearTimeout(handle)
+  }, [minInput, setMinAmount, setPage])
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setMaxAmount(maxInput.trim() === '' ? '' : rupeesToPaise(maxInput))
+      setPage(1)
+    }, DEBOUNCE_MS)
+    return () => clearTimeout(handle)
+  }, [maxInput, setMaxAmount, setPage])
+
   const loading = loadState === 'loading'
   const isError = loadState === 'error'
+  const hasFilters = Boolean(searchTerm || status || dateFrom || dateTo || minInput || maxInput)
 
   return (
     <div className={styles.page}>
@@ -80,6 +127,70 @@ export default function QuotationsPage() {
             </option>
           ))}
         </TextField>
+
+        <div className={styles.filters}>
+          <TextField
+            label="From date"
+            type="date"
+            value={dateFrom}
+            onChange={(v) => {
+              setDateFrom(v)
+              setPage(1)
+            }}
+          />
+          <TextField
+            label="To date"
+            type="date"
+            value={dateTo}
+            onChange={(v) => {
+              setDateTo(v)
+              setPage(1)
+            }}
+          />
+          <TextField
+            label="Min amount (₹)"
+            type="number"
+            inputMode="decimal"
+            placeholder="0"
+            value={minInput}
+            onChange={setMinInput}
+          />
+          <TextField
+            label="Max amount (₹)"
+            type="number"
+            inputMode="decimal"
+            placeholder="Any"
+            value={maxInput}
+            onChange={setMaxInput}
+          />
+          <TextField
+            as="select"
+            label="Sort by"
+            value={sort}
+            onChange={(v) => {
+              setSort(v)
+              setPage(1)
+            }}
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </TextField>
+          <TextField
+            as="select"
+            label="Order"
+            value={order}
+            onChange={(v) => {
+              setOrder(v)
+              setPage(1)
+            }}
+          >
+            <option value="desc">Newest first</option>
+            <option value="asc">Oldest first</option>
+          </TextField>
+        </div>
       </div>
 
       {isError ? (
@@ -99,7 +210,7 @@ export default function QuotationsPage() {
           icon="fileText"
           title="No quotations yet"
           message={
-            searchTerm || status
+            hasFilters
               ? 'No quotations match your filters.'
               : 'Create your first quotation to send a priced estimate to a client.'
           }

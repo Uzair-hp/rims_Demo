@@ -102,12 +102,14 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: var(--space-1);
 }
 
 .right {
   text-align: right;
 }
 
+.iconBtn,
 .remove {
   display: inline-flex;
   align-items: center;
@@ -120,11 +122,17 @@
   cursor: pointer;
 }
 
+.iconBtn:hover:not(:disabled) {
+  color: var(--color-gold);
+  background: var(--color-surface-alt, var(--color-danger-soft));
+}
+
 .remove:hover:not(:disabled) {
   color: var(--color-danger);
   background: var(--color-danger-soft);
 }
 
+.iconBtn:disabled,
 .remove:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -151,6 +159,11 @@
 
   .cellName {
     grid-column: auto;
+  }
+
+  .cellRemove {
+    flex-direction: column;
+    gap: var(--space-1);
   }
 
   .totalLabel {

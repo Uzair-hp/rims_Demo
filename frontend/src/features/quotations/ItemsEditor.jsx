@@ -36,16 +36,35 @@ export function newItem(overrides = {}) {
  *   onChange: (items: Array<object>) => void,
  *   errors?: Array<Record<string, string>>,
  *   units?: string[],
+ *   categories?: string[],
  *   disabled?: boolean,
  * }} props
  */
-export default function ItemsEditor({ items, onChange, errors = [], units = [], disabled = false }) {
+export default function ItemsEditor({
+  items,
+  onChange,
+  errors = [],
+  units = [],
+  categories = [],
+  disabled = false,
+}) {
   const update = (index, patch) => {
     onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)))
   }
 
   const remove = (index) => {
     onChange(items.filter((_, i) => i !== index))
+  }
+
+  // Reorder by swapping with the neighbour (§ FR-Q2). The whole item object —
+  // key and all fields — moves intact, so every value is preserved and `position`
+  // is re-derived from the array index at save time.
+  const move = (index, dir) => {
+    const target = index + dir
+    if (target < 0 || target >= items.length) return
+    const next = items.slice()
+    ;[next[index], next[target]] = [next[target], next[index]]
+    onChange(next)
   }
 
   const add = () => onChange([...items, newItem()])
@@ -83,6 +102,15 @@ export default function ItemsEditor({ items, onChange, errors = [], units = [], 
                   value={item.description || ''}
                   disabled={disabled}
                   onChange={(e) => update(index, { description: e.target.value })}
+                />
+                <input
+                  className={styles.inputSubtle}
+                  placeholder="Category (optional)"
+                  aria-label={`Item ${index + 1} category`}
+                  list="ri-categories"
+                  value={item.category || ''}
+                  disabled={disabled}
+                  onChange={(e) => update(index, { category: e.target.value })}
                 />
                 {rowErrors.name ? (
                   <p className={styles.error} role="alert">
@@ -139,6 +167,24 @@ export default function ItemsEditor({ items, onChange, errors = [], units = [], 
               <div className={styles.cellRemove}>
                 <button
                   type="button"
+                  className={styles.iconBtn}
+                  aria-label={`Move item ${index + 1} up`}
+                  disabled={disabled || index === 0}
+                  onClick={() => move(index, -1)}
+                >
+                  <Icon name="chevronUp" size={18} />
+                </button>
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label={`Move item ${index + 1} down`}
+                  disabled={disabled || index === items.length - 1}
+                  onClick={() => move(index, 1)}
+                >
+                  <Icon name="chevronDown" size={18} />
+                </button>
+                <button
+                  type="button"
                   className={styles.remove}
                   aria-label={`Remove item ${index + 1}`}
                   disabled={disabled || items.length === 1}
@@ -156,6 +202,14 @@ export default function ItemsEditor({ items, onChange, errors = [], units = [], 
         <datalist id="ri-units">
           {units.map((u) => (
             <option key={u} value={u} />
+          ))}
+        </datalist>
+      ) : null}
+
+      {categories.length ? (
+        <datalist id="ri-categories">
+          {categories.map((c) => (
+            <option key={c} value={c} />
           ))}
         </datalist>
       ) : null}

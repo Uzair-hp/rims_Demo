@@ -142,7 +142,7 @@ description of the pipeline, flags and dependencies.
 - React 19 with Vite, JavaScript only (no TypeScript)
 - React Router 7
 - Plain CSS with custom properties, CSS Modules for components
-- Self-hosted Inter Variable and Playfair Display Variable
+- Self-hosted fonts via @fontsource (DM Sans, Cormorant Garamond, Cinzel) — no CDN
 - Vitest, Testing Library, jsdom
 - ESLint, Prettier
 - vite-plugin-pwa

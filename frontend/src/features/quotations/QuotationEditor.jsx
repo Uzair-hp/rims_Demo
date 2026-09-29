@@ -139,6 +139,7 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
   const navigate = useNavigate()
   const { settings } = useSettings()
   const units = settings?.units || []
+  const categories = settings?.item_categories || []
 
   const isEdit = mode === 'edit'
   const [form, setForm] = useState(() => emptyForm())
@@ -174,7 +175,6 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
   }, [isEdit, quotationId])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // __BODY__
   const totals = useMemo(
     () =>
       calcTotals({
@@ -358,7 +358,13 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
 
           <Card className={styles.section}>
             <h2 className={styles.sectionTitle}>Items</h2>
-            <ItemsEditor items={form.items} onChange={setItems} errors={errors.items} units={units} />
+            <ItemsEditor
+              items={form.items}
+              onChange={setItems}
+              errors={errors.items}
+              units={units}
+              categories={categories}
+            />
           </Card>
 
           <Card className={styles.section}>

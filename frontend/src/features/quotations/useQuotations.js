@@ -17,6 +17,12 @@ export function useQuotations() {
   const [page, setPage] = useState(1)
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [minAmount, setMinAmount] = useState('')
+  const [maxAmount, setMaxAmount] = useState('')
+  const [sort, setSort] = useState('created_at')
+  const [order, setOrder] = useState('desc')
   const [loadState, setLoadState] = useState('loading')
   const [error, setError] = useState(null)
   const [reload, setReload] = useState(0)
@@ -26,7 +32,18 @@ export function useQuotations() {
     let cancelled = false
     setLoadState('loading')
     setError(null)
-    fetchQuotations({ q, status, page, pageSize: PAGE_SIZE })
+    fetchQuotations({
+      q,
+      status,
+      dateFrom,
+      dateTo,
+      minAmount,
+      maxAmount,
+      sort,
+      order,
+      page,
+      pageSize: PAGE_SIZE,
+    })
       .then((data) => {
         if (cancelled) return
         setItems(data.items || [])
@@ -41,7 +58,7 @@ export function useQuotations() {
     return () => {
       cancelled = true
     }
-  }, [q, status, page, reload])
+  }, [q, status, dateFrom, dateTo, minAmount, maxAmount, sort, order, page, reload])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const refetch = useCallback(() => setReload((n) => n + 1), [])
@@ -53,10 +70,22 @@ export function useQuotations() {
     pageSize: PAGE_SIZE,
     q,
     status,
+    dateFrom,
+    dateTo,
+    minAmount,
+    maxAmount,
+    sort,
+    order,
     loadState,
     error,
     setQ,
     setStatus,
+    setDateFrom,
+    setDateTo,
+    setMinAmount,
+    setMaxAmount,
+    setSort,
+    setOrder,
     setPage,
     refetch,
   }

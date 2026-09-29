@@ -52,6 +52,7 @@ export const ICON_PATHS = {
   chevronLeft: { paths: ['m14.4 6.2-5.8 5.8 5.8 5.8'] },
   chevronRight: { paths: ['m9.6 6.2 5.8 5.8-5.8 5.8'] },
   chevronDown: { paths: ['m6.2 9.6 5.8 5.8 5.8-5.8'] },
+  chevronUp: { paths: ['m6.2 14.4 5.8-5.8 5.8 5.8'] },
   sun: {
     paths: [
       circle(12, 12, 4),

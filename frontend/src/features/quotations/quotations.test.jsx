@@ -7,6 +7,9 @@
  */
 
 import { describe, it, expect } from 'vitest'
+import { useState } from 'react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import {
   calcDiscount,
   calcGst,
@@ -19,6 +22,8 @@ import { isValidLine, validateItem, validateQuotation } from '../../lib/validati
 import { paiseToInput, rupeesToPaise } from '../../lib/money.js'
 import { statusLabel, STATUS_OPTIONS, ACTION_META } from './status.js'
 import { PAGE_SIZE } from './useQuotations.js'
+import { buildQuotationListQuery } from '../../api/endpoints/quotations.js'
+import ItemsEditor, { newItem } from './ItemsEditor.jsx'
 
 describe('calcLineTotal', () => {
   it('computes qty × rate / 1000 with half-up rounding', () => {
@@ -183,5 +188,104 @@ describe('status helpers', () => {
 describe('useQuotations', () => {
   it('exports the shared page size', () => {
     expect(PAGE_SIZE).toBe(25)
+  })
+})
+
+describe('buildQuotationListQuery', () => {
+  it('emits only the params that are set, mapping to snake_case', () => {
+    const query = buildQuotationListQuery({
+      q: 'sofa',
+      status: 'sent',
+      clientId: 7,
+      dateFrom: '2026-01-01',
+      dateTo: '2026-02-01',
+      minAmount: 10000,
+      maxAmount: 500000,
+      sort: 'grand_total_paise',
+      order: 'asc',
+      page: 2,
+      pageSize: 25,
+    })
+    const p = new URLSearchParams(query)
+    expect(p.get('q')).toBe('sofa')
+    expect(p.get('status')).toBe('sent')
+    expect(p.get('client_id')).toBe('7')
+    expect(p.get('date_from')).toBe('2026-01-01')
+    expect(p.get('date_to')).toBe('2026-02-01')
+    expect(p.get('min_amount')).toBe('10000')
+    expect(p.get('max_amount')).toBe('500000')
+    expect(p.get('sort')).toBe('grand_total_paise')
+    expect(p.get('order')).toBe('asc')
+    expect(p.get('page')).toBe('2')
+    expect(p.get('page_size')).toBe('25')
+  })
+
+  it('omits empty, null and undefined params', () => {
+    const query = buildQuotationListQuery({ q: '', status: undefined, minAmount: '', maxAmount: null })
+    expect(query).toBe('')
+  })
+
+  it('keeps a zero minimum amount (valid paise) but drops an empty one', () => {
+    expect(new URLSearchParams(buildQuotationListQuery({ minAmount: 0 })).get('min_amount')).toBe('0')
+    expect(new URLSearchParams(buildQuotationListQuery({ minAmount: '' })).has('min_amount')).toBe(false)
+  })
+})
+
+function ItemsHarness({ initial }) {
+  const [items, setItems] = useState(initial)
+  return <ItemsEditor items={items} onChange={setItems} categories={['Living Room', 'Kitchen']} />
+}
+
+describe('ItemsEditor — reorder (FR-Q2)', () => {
+  it('moves a line down, preserving its data and array order', async () => {
+    const user = userEvent.setup()
+    const initial = [
+      newItem({ name: 'Sofa', qty_milli: 1000, rate_paise: 100000 }),
+      newItem({ name: 'Table', qty_milli: 2000, rate_paise: 50000 }),
+    ]
+    render(<ItemsHarness initial={initial} />)
+
+    const nameInputs = () => screen.getAllByLabelText(/name$/i).map((el) => el.value)
+    expect(nameInputs()).toEqual(['Sofa', 'Table'])
+
+    await user.click(screen.getByLabelText('Move item 1 down'))
+    expect(nameInputs()).toEqual(['Table', 'Sofa'])
+  })
+
+  it('disables move-up on the first row and move-down on the last', () => {
+    render(
+      <ItemsHarness initial={[newItem({ name: 'A' }), newItem({ name: 'B' }), newItem({ name: 'C' })]} />,
+    )
+    expect(screen.getByLabelText('Move item 1 up')).toBeDisabled()
+    expect(screen.getByLabelText('Move item 1 down')).not.toBeDisabled()
+    expect(screen.getByLabelText('Move item 3 down')).toBeDisabled()
+    expect(screen.getByLabelText('Move item 3 up')).not.toBeDisabled()
+  })
+})
+
+describe('ItemsEditor — per-item category (FR-Q2/Q3)', () => {
+  it('edits the category and reports it back on the item', async () => {
+    const user = userEvent.setup()
+    render(<ItemsHarness initial={[newItem({ name: 'Sofa' })]} />)
+
+    const category = screen.getByLabelText('Item 1 category')
+    expect(category.value).toBe('')
+    await user.type(category, 'Living Room')
+    expect(category.value).toBe('Living Room')
+  })
+
+  it('exposes the settings categories as datalist suggestions', () => {
+    render(<ItemsHarness initial={[newItem({ name: 'Sofa' })]} />)
+    const list = document.getElementById('ri-categories')
+    expect(list).toBeTruthy()
+    const values = within(list)
+      .getAllByRole('option', { hidden: true })
+      .map((o) => o.value)
+    expect(values).toEqual(['Living Room', 'Kitchen'])
+  })
+
+  it('preserves an existing category when the item loads', () => {
+    render(<ItemsHarness initial={[newItem({ name: 'Sofa', category: 'Kitchen' })]} />)
+    expect(screen.getByLabelText('Item 1 category').value).toBe('Kitchen')
   })
 })

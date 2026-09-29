@@ -10,6 +10,12 @@
   gap: var(--space-3);
 }
 
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
 .search {
   min-width: 0;
 }
@@ -82,6 +88,12 @@
 @media (min-width: 640px) {
   .toolbar {
     grid-template-columns: 1fr 12rem;
+    align-items: end;
+  }
+
+  .filters {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(6, 1fr);
     align-items: end;
   }
 }
