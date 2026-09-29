@@ -58,13 +58,13 @@ function jsonResponse(body, { status = 200, ok = true } = {}) {
   }
 }
 
-const failure = (message = 'Nope.') =>
-  jsonResponse({ error: { code: 'VALIDATION_ERROR', message, details: [] } }, { ok: false, status: 422 })
+const failure = (message = 'Nope.', { status = 422 } = {}) =>
+  jsonResponse({ error: { code: 'VALIDATION_ERROR', message, details: [] } }, { ok: false, status })
 
 /**
- * @param {{ settings?: object | null, terms?: object[], settingsError?: boolean }} [responses]
+ * @param {{ settings?: object | null, terms?: object[], settingsError?: boolean, settingsErrorStatus?: number }} [responses]
  */
-function mockApi({ settings = SETTINGS, terms = [], settingsError = false } = {}) {
+function mockApi({ settings = SETTINGS, terms = [], settingsError = false, settingsErrorStatus = 422 } = {}) {
   const calls = []
   vi.stubGlobal(
     'fetch',
@@ -74,7 +74,7 @@ function mockApi({ settings = SETTINGS, terms = [], settingsError = false } = {}
       calls.push({ path, method, init })
 
       if (path === '/settings/company' && method === 'GET') {
-        if (settingsError) return failure('Could not reach settings.')
+        if (settingsError) return failure('Could not reach settings.', { status: settingsErrorStatus })
         return jsonResponse({ data: { settings } })
       }
       if (path === '/settings/company' && method === 'PUT') {
@@ -408,5 +408,47 @@ describe('settings page', () => {
     expect(await screen.findByText('Settings could not be loaded')).toBeInTheDocument()
     // The page heading still exists — one h1, even on the error path (§18.2).
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument()
+  })
+
+  /**
+   * Regression guard: a 5xx must not be reported as "the server did not answer".
+   *
+   * This actually shipped broken. A pending Alembic migration made every
+   * settings request 500 while the page insisted the API was not running, which
+   * sent the investigation to connectivity instead of to `db upgrade`.
+   */
+  describe('a failed settings load says which kind of failure it was', () => {
+    it('blames connectivity only for a genuine transport failure', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new TypeError('Failed to fetch')
+        }),
+      )
+      renderPage()
+
+      expect(await screen.findByText(/did not answer/i)).toBeInTheDocument()
+      expect(screen.getByText(/check that the api is running/i)).toBeInTheDocument()
+    })
+
+    it('does NOT blame connectivity when the server returned 500', async () => {
+      mockApi({ settingsError: true, settingsErrorStatus: 500 })
+      renderPage()
+
+      await screen.findByText('Settings could not be loaded')
+      expect(screen.queryByText(/did not answer/i)).not.toBeInTheDocument()
+      expect(screen.getByText(/the server returned an error/i)).toBeInTheDocument()
+      // It is running; the request is what failed.
+      expect(screen.getByText(/it is running/i)).toBeInTheDocument()
+    })
+
+    it('tells the user to sign in again on 401', async () => {
+      mockApi({ settingsError: true, settingsErrorStatus: 401 })
+      renderPage()
+
+      await screen.findByText('Settings could not be loaded')
+      expect(screen.queryByText(/did not answer/i)).not.toBeInTheDocument()
+      expect(screen.getByText(/sign in again/i)).toBeInTheDocument()
+    })
   })
 })

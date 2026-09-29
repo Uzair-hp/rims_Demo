@@ -22,6 +22,11 @@ const INITIAL_STATUS = 'loading'
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(null)
   const [status, setStatus] = useState(INITIAL_STATUS)
+  // Kept so consumers can tell a transport failure from a server error. They are
+  // very different problems with very different fixes: "the API is not running"
+  // versus "the API answered 500", and collapsing both into one message sends
+  // the reader to the wrong place.
+  const [error, setError] = useState(null)
 
   /**
    * Re-read the row. `silent` keeps the current status on screen — after a save
@@ -32,13 +37,15 @@ export function SettingsProvider({ children }) {
     try {
       const data = await fetchCompanySettings()
       setSettings(data?.settings ?? null)
+      setError(null)
       setStatus('ready')
       return data?.settings ?? null
-    } catch {
+    } catch (caught) {
       // §20: the error is surfaced by consumers that care (the Settings page),
       // while the shell keeps working with the bundled logo.
       if (!silent) {
         setSettings(null)
+        setError(caught)
         setStatus('error')
       }
       return null
@@ -55,10 +62,12 @@ export function SettingsProvider({ children }) {
         const data = await fetchCompanySettings()
         if (cancelled) return
         setSettings(data?.settings ?? null)
+        setError(null)
         setStatus('ready')
-      } catch {
+      } catch (caught) {
         if (cancelled) return
         setSettings(null)
+        setError(caught)
         setStatus('error')
       }
     })()
@@ -73,6 +82,8 @@ export function SettingsProvider({ children }) {
       status,
       isLoading: status === INITIAL_STATUS,
       isError: status === 'error',
+      /** The last load failure, so consumers can describe it accurately. */
+      error,
       logoSrc: logoImageUrl(settings),
       /**
        * Live payment QR (§8.5). Derived from the same settings row, so uploading
@@ -87,7 +98,7 @@ export function SettingsProvider({ children }) {
         if (row) setSettings(row)
       },
     }),
-    [settings, status, load],
+    [settings, status, error, load],
   )
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>

@@ -21,6 +21,38 @@ import styles from './settings.module.css'
 const TOAST_MS = 3500
 
 /**
+ * Describe a failed settings load accurately.
+ *
+ * Three outcomes need three different messages, because they send the reader to
+ * three different places:
+ *
+ * - **Transport failure** (`offline`, set only when `fetch` itself throws) — the
+ *   API is not running or unreachable. Restarting the server is the fix.
+ * - **Server error** (any 5xx) — the API *is* running and answered. Restarting
+ *   it fixes nothing; the cause is server-side. Reporting this as "the server did
+ *   not answer" is actively misleading, and it cost real debugging time once
+ *   already: a pending migration made every request 500 while the message
+ *   insisted the API was down.
+ * - **No error, no row** — a 2xx that carried nothing usable.
+ *
+ * The server's own message is deliberately not surfaced: §16 returns a generic
+ * string plus an `error_id` to avoid leaking internals, and it would not tell
+ * the owner what to do anyway.
+ */
+function loadErrorMessage(error) {
+  if (error?.offline) {
+    return 'The server did not answer. Check that the API is running, then try again.'
+  }
+  if (error && Number(error.status) >= 500) {
+    return 'The server returned an error while loading settings. It is running, but the request failed — try again, and check the API logs if it keeps happening.'
+  }
+  if (error?.status === 401 || error?.status === 403) {
+    return 'Your session is no longer valid. Sign in again to load settings.'
+  }
+  return 'Settings could not be loaded.'
+}
+
+/**
  * Settings page — every §15 section on one scroll (§19: one column on mobile,
  * the same stack at a wider measure on desktop; no tab strip to misfire on a
  * phone).
@@ -31,7 +63,7 @@ const TOAST_MS = 3500
  * independent — saving one never touches another's fields.
  */
 export default function SettingsPage() {
-  const { settings, status, isError, refresh } = useSettings()
+  const { settings, status, isError, error, refresh } = useSettings()
   const { signOut } = useAuth()
   const [toast, setToast] = useState(null)
 
@@ -76,11 +108,7 @@ export default function SettingsPage() {
           <EmptyState
             icon="alert"
             title="Settings could not be loaded"
-            message={
-              status === 'error'
-                ? 'The server did not answer. Check that the API is running, then try again.'
-                : 'No settings were returned by the server.'
-            }
+            message={error ? loadErrorMessage(error) : 'No settings were returned by the server.'}
             actionLabel="Try again"
             onAction={() => refresh()}
             actionIcon="chevronRight"
