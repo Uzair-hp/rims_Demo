@@ -15,6 +15,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx'
 import PageHeader from '../../components/ui/PageHeader.jsx'
 import Skeleton from '../../components/ui/Skeleton.jsx'
 import StatusBadge from '../../components/ui/StatusBadge.jsx'
+import QuotationPreview from '../documents/QuotationPreview.jsx'
+import { useSettings } from '../settings/SettingsProvider.jsx'
 import {
   changeQuotationStatus,
   convertQuotationToInvoice,
@@ -40,12 +42,14 @@ const formatDate = (iso) => {
 export default function QuotationDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { settings, logoSrc } = useSettings()
 
   const [quotation, setQuotation] = useState(null)
   const [loadState, setLoadState] = useState('loading')
   const [busy, setBusy] = useState(null)
   const [actionError, setActionError] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -142,6 +146,14 @@ export default function QuotationDetailPage() {
                 Edit
               </Button>
             ) : null}
+            {/* Phase 6: the document actions. Preview opens the overlay in place;
+                Print hands off to the chrome-less /print route (§14.2). */}
+            <Button variant="ghost" size="sm" icon="eye" onClick={() => setPreviewOpen(true)}>
+              Preview
+            </Button>
+            <Button variant="ghost" size="sm" icon="printer" to={`/print/quotation/${q.id}`}>
+              Print
+            </Button>
             {allowed.map((action) => {
               const meta = ACTION_META[action]
               if (!meta) return null
@@ -248,6 +260,14 @@ export default function QuotationDetailPage() {
           <TotalsPanel totals={totals} gstBp={q.gst_bp} otherChargesLabel={q.other_charges_label} />
         </aside>
       </div>
+
+      <QuotationPreview
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        document={q}
+        settings={settings}
+        logoSrc={logoSrc}
+      />
 
       <ConfirmDialog
         open={confirmDelete}

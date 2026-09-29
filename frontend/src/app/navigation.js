@@ -43,6 +43,12 @@ export const PAGE_TITLES = {
 export function titleForPath(pathname) {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname]
   if (pathname.includes('/edit')) return 'Edit quotation'
+  // The print routes are named apart from the on-screen routes: a print tab
+  // should not read as if the user is looking at the editable detail page.
+  // (The document's own number is shown in the print toolbar, not here — the
+  // title is static per path and the id is not.)
+  if (/^\/print\/quotation\/[^/]+$/.test(pathname)) return 'Print quotation'
+  if (/^\/print\/invoice\/[^/]+$/.test(pathname)) return 'Print invoice'
   if (/\/quotations\/[^/]+$/.test(pathname)) return 'Quotation'
   if (/\/invoices\/[^/]+$/.test(pathname)) return 'Invoice'
   if (/\/clients\/[^/]+$/.test(pathname)) return 'Client'

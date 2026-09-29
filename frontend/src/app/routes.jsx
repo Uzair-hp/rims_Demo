@@ -16,13 +16,18 @@
  * in `RedirectIfAuthenticated`. Every other route is behind `RequireAuth` (§16):
  * the guard is a UX convenience, and the backend enforces auth independently.
  *
- * Print routes are deliberately absent: they are Phase 6.
+ * The print routes are the other chrome-less surfaces (§14.2). They are
+ * deliberately *outside* `AppShell` but still inside `RequireAuth` and
+ * `SettingsProvider` — a quotation document needs the company settings row for
+ * its header, signatory and footer, and it must not render a sidebar.
+ * `/print/invoice/:id` arrives with Phase 7 and reuses `PrintQuotation`.
  */
 import AppShell from '../components/layout/AppShell.jsx'
 import Clients, { ClientDetail } from '../pages/Clients.jsx'
 import Dashboard from '../pages/Dashboard.jsx'
 import Invoices, { InvoiceDetail } from '../pages/Invoices.jsx'
 import NotFound from '../pages/NotFound.jsx'
+import PrintQuotation from '../pages/PrintQuotation.jsx'
 import QuotationDetail from '../pages/QuotationDetail.jsx'
 import RootLayout from './RootLayout.jsx'
 import Quotations, { QuotationNew } from '../pages/Quotations.jsx'
@@ -41,6 +46,21 @@ export const routes = [
           <RedirectIfAuthenticated>
             <Login />
           </RedirectIfAuthenticated>
+        ),
+      },
+      {
+        // Chrome-less print surface (§14.2): authenticated, settings-aware, no shell.
+        // The providers are inlined on the leaf route rather than hoisted onto a
+        // pathless parent, because a parent element must render an <Outlet /> and
+        // this route has exactly one child — a wrapper here would render the page
+        // twice, once for the parent and once for the child.
+        path: 'print/quotation/:id',
+        element: (
+          <RequireAuth>
+            <SettingsProvider>
+              <PrintQuotation documentType="quotation" />
+            </SettingsProvider>
+          </RequireAuth>
         ),
       },
       {

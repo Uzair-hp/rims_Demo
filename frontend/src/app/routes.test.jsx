@@ -43,6 +43,8 @@ describe('routing', () => {
       '/clients/9',
       '/settings',
       '/no-such-page',
+      // Chrome-less print surface (§14.2). Still a real route with a real heading.
+      '/print/quotation/42',
     ]
 
     for (const path of paths) {
@@ -60,6 +62,16 @@ describe('routing', () => {
   it('uses the edit variant for /quotations/:id/edit', () => {
     renderAt('/quotations/AQ-1042/edit')
     expect(screen.getByRole('heading', { level: 1, name: 'Edit quotation' })).toBeInTheDocument()
+  })
+
+  it('keeps the print route chrome-less, so no sidebar or bottom bar reaches the paper', () => {
+    renderAt('/print/quotation/42')
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Quotation' })).toBeInTheDocument()
+    // The document renders with a print toolbar and nothing else; the app shell
+    // must not be mounted around it (§14.2).
+    expect(screen.queryByRole('navigation', { name: 'Primary', hidden: true })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Print \/ Save as PDF/ })).toBeInTheDocument()
   })
 
   it('renders a 404 page for unknown paths instead of a blank screen', () => {

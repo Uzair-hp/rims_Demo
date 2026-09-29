@@ -1,13 +1,23 @@
 /*
- * Ruchita Interiors — print layer.
+ * Ruchita Interiors — print layout (§14, FR-DOC2, FR-DOC3, FR-DOC4).
  *
- * Kept deliberately separate from the application UI styles (§14, Appendix B3):
- * the A4 document layout is built in Phase 6 on top of this foundation, and the
- * print routes (/print/quotation/:id, /print/invoice/:id) stay chrome-less.
+ * Kept deliberately separate from the application UI styles (Appendix B3): the A4
+ * document layout is built on top of this foundation, and the print routes
+ * (/print/quotation/:id, /print/invoice/:id) stay chrome-less.
  *
- * Phase 1 scope: the page box, the A4 sheet, and hiding application chrome.
- * The DocumentPaper item table / totals / terms layout is added with the
- * quotation document in Phase 6, per §14.3.
+ * The multi-page rules from §14.4 live here rather than in the component styles:
+ *  - `thead` is a table-header-group, so column headings repeat on every page;
+ *  - rows, the totals block, terms and the signatory refuse to break across a
+ *    page, so nothing is clipped and the grand total is never orphaned alone;
+ *  - the `.no-print` toolbar and preview overlay never reach paper.
+ *
+ * Page numbers are deliberately absent. FR-DOC4 says add them only if the browser
+ * print pipeline can do it cleanly, and it cannot without a JS pagination probe
+ * that would be faked — §14.4 says omit rather than fake, so they are omitted.
+ *
+ * Chromium and Safari both honour the physical `break-*`/`page-break-*` values
+ * used here; `-webkit-print-color-adjust: exact` is what keeps the gold rule and
+ * the grand-total wash from being dropped as "background graphics".
  */
 
 @page {
@@ -39,5 +49,37 @@
     padding: 0 !important;
     max-width: none !important;
     width: 100% !important;
+  }
+
+  /* The sheet is already sized to the A4 content box, so on paper it loses the
+     screen-only paper treatment and becomes the page itself. */
+  [data-document-paper] {
+    inline-size: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* Repeating header on every page. */
+  [data-document-items] thead {
+    display: table-header-group;
+  }
+
+  /* A row is never split across two pages. */
+  [data-document-items] tr,
+  [data-document-totals],
+  [data-document-terms],
+  [data-document-signatory] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Keep the totals block off the end of a page: it starts fresh rather than
+     being separated from the table above it. */
+  [data-document-totals] {
+    break-before: auto;
+    page-break-before: auto;
   }
 }

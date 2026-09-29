@@ -18,11 +18,12 @@ import Card from '../../components/ui/Card.jsx'
 import Skeleton from '../../components/ui/Skeleton.jsx'
 import TextField from '../../components/ui/TextField.jsx'
 import ClientPicker from '../clients/ClientPicker.jsx'
+import QuotationPreview from '../documents/QuotationPreview.jsx'
 import { useSettings } from '../settings/SettingsProvider.jsx'
 import ItemsEditor, { newItem } from './ItemsEditor.jsx'
 import TotalsPanel from './TotalsPanel.jsx'
 import { createQuotation, fetchQuotation, updateQuotation } from '../../api/endpoints/quotations.js'
-import { calcTotals } from '../../lib/calc.js'
+import { calcLineTotal, calcTotals } from '../../lib/calc.js'
 import { paiseToInput, rupeesToPaise } from '../../lib/money.js'
 import { validateQuotation } from '../../lib/validation.js'
 import styles from './QuotationEditor.module.css'
@@ -103,6 +104,61 @@ function buildPayload(form) {
 }
 
 /**
+ * Build a document-shaped object for the preview overlay from the current form.
+ *
+ * Phase 6: the preview is rendered from what is on screen right now, not from a
+ * server round trip, so the user can check a document before committing it. That
+ * is safe because the preview is display-only — the numbers come from the same
+ * `lib/calc` mirror the live totals panel uses, and saving still recomputes
+ * everything server-side (§10.1). An unsaved quotation has no number, which is
+ * why `number` stays null and the overlay labels the document as unsaved.
+ */
+function buildPreviewDocument(form, totals, id, number) {
+  const isPercent = form.discount_type === 'percent'
+  return {
+    id: id ?? null,
+    number: number ?? null,
+    client_id: form.client_id,
+    // Whatever the picker gave us. The saved quotation gets the real snapshot from
+    // the server on its next read, so a partial preview here is honest rather
+    // than a second source of truth for client details (§8.4).
+    client_snapshot: {
+      name: form.client?.name || '',
+      phone: form.client?.phone || '',
+      email: form.client?.email || '',
+      address: form.client?.address || '',
+      project_address: form.client?.project_address || '',
+      gstin: form.client?.gstin || '',
+    },
+    quotation_date: form.quotation_date,
+    valid_until: form.valid_until || null,
+    status: 'draft',
+    discount_type: form.discount_type,
+    discount_bp: isPercent ? form.discount_bp : null,
+    discount_fixed_paise: isPercent ? null : form.discount_fixed_paise,
+    gst_bp: form.gst_bp,
+    other_charges_label: form.other_charges_label,
+    other_charges_paise: form.other_charges_paise,
+    subtotal_paise: totals.subtotalPaise,
+    discount_paise: totals.discountPaise,
+    gst_paise: totals.gstPaise,
+    grand_total_paise: totals.grandTotalPaise,
+    terms_text: form.terms_text || null,
+    items: form.items.map((it, i) => ({
+      id: `preview-${i}`,
+      position: i,
+      category: it.category || null,
+      name: it.name || '',
+      description: it.description || null,
+      unit: it.unit || null,
+      qty_milli: Number(it.qty_milli || 0),
+      rate_paise: Number(it.rate_paise || 0),
+      line_total_paise: calcLineTotal(it.qty_milli, it.rate_paise),
+    })),
+  }
+}
+
+/**
  * Uncontrolled numeric input (commits on blur), so typing a decimal is never
  * reformatted mid-keystroke. Mounted only after the form's initial values exist.
  */
@@ -137,7 +193,7 @@ function NumberInput({ label, defaultValue, onCommit, prefix, suffix, hint, erro
 
 export default function QuotationEditor({ mode = 'create', quotationId = null }) {
   const navigate = useNavigate()
-  const { settings } = useSettings()
+  const { settings, logoSrc } = useSettings()
   const units = settings?.units || []
   const categories = settings?.item_categories || []
 
@@ -146,12 +202,20 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
   const [loadStatus, setLoadStatus] = useState(isEdit ? 'loading' : 'ready')
   const [serverStatus, setServerStatus] = useState('draft')
   const [id, setId] = useState(quotationId)
+  /**
+   * The number the server allocated, once there is one. Held separately from the
+   * form because it is the server's to give (§12): a brand-new quotation previews
+   * without a number rather than with a fabricated one, and picks the real one up
+   * as soon as it has been saved.
+   */
+  const [serverNumber, setServerNumber] = useState(null)
   const [errors, setErrors] = useState({ fields: {}, items: [] })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [dirty, setDirty] = useState(false)
   const [autosaveState, setAutosaveState] = useState('idle')
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -163,6 +227,7 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
         if (cancelled) return
         setForm(fromQuotation(q))
         setServerStatus(q.status)
+        setServerNumber(q.number || null)
         setId(q.id)
         setLoadStatus('ready')
       })
@@ -245,6 +310,11 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
       const saved = id ? await updateQuotation(id, payload) : await createQuotation(payload)
       setDirty(false)
       setAutosaveState('idle')
+      // Adopt the server's identity before leaving, so a subsequent visit to this
+      // editor has a real number to preview and print with.
+      setId(saved.id)
+      setServerNumber(saved.number || null)
+      setServerStatus(saved.status || serverStatus)
       navigate(`/quotations/${saved.id}`)
     } catch (e) {
       setSaveError(e)
@@ -296,6 +366,9 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
           <>
             <Button variant="ghost" size="sm" icon="chevronLeft" to="/quotations">
               Cancel
+            </Button>
+            <Button variant="ghost" size="sm" icon="eye" onClick={() => setPreviewOpen(true)}>
+              Preview
             </Button>
             <Button variant="primary" size="sm" icon="check" loading={saving} onClick={handleSave}>
               Save
@@ -452,6 +525,17 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
           />
         </aside>
       </div>
+
+      <QuotationPreview
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        document={buildPreviewDocument(form, totals, id, serverNumber)}
+        settings={settings}
+        logoSrc={logoSrc}
+        isUnsaved={!id}
+        onSave={handleSave}
+        saving={saving}
+      />
 
       <ClientPicker
         open={pickerOpen}

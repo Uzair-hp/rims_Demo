@@ -16,8 +16,8 @@ tests, production build) is the gate for every phase.
 | 2     | Authentication & user system        | **Done**    |
 | 3     | Database & company settings         | **Done**    |
 | 4     | Client management                   | **Done**    |
-| 5     | Quotation engine (core)             | Not started |
-| 6     | Quotation document / PDF            | Not started |
+| 5     | Quotation engine (core)             | **Done**    |
+| 6     | Quotation document / PDF            | **Done**    |
 | 7     | Invoice system                      | Not started |
 | 8     | Payments & financial tracking       | Not started |
 | 9     | Dashboard & analytics               | Not started |
@@ -243,10 +243,101 @@ Exit criteria met:
   live totals; `/quotations/:id` renders the detail with lifecycle actions; edit and
   duplicate flows work.
 
-## Phase 6 - Quotation document / PDF
+## Phase 6 - Quotation document / PDF (done)
 
 `DocumentPaper` and the print routes from `PLAN.md` 14, preview overlay, terms
 snapshot, signatory and footer, multi-page rules, wordmark fallback.
+
+Delivered:
+
+- Backend: `PHASE=6` bumped in `settings.py`; `GET /api/v1/health` reports
+  `phase: 6`. **No new endpoint, no model, no migration.** The document renders
+  entirely from the existing `GET /quotations/:id` payload plus
+  `GET /settings/company` — everything §14.3 needs was already serialized in
+  Phase 5.
+- Frontend `features/documents/`:
+  - `DocumentPaper` — presentational A4 sheet in the §14.3 order: header band
+    (logo or typographic wordmark, company name in the display serif, contact,
+    address, GSTIN, gold rule), title strip, Bill To + project/site address, items
+    table with category grouping subheaders, totals block, terms, signatory,
+    footer. Fetches nothing and holds no state, so the printed artefact is the
+    server's data by construction (§10.1, D2).
+  - `groupItemsByCategory` — exported and unit-tested: consecutive runs are merged,
+    the same category in non-adjacent runs is not, and each group reports its
+    document `startIndex` so the `#` column keeps counting across group
+    boundaries.
+  - `PrintToolbar` + `useAutoPrint` — Back / Print / Save as PDF, the document
+    number and status for orientation, and `?autoprint=1` support (§14.2). The
+    toolbar carries the global `no-print` class because `print.css` cannot address
+    a CSS-module name.
+  - `QuotationPreview` — the same `DocumentPaper` inside a `Sheet`, so the preview
+    and the print route cannot drift apart.
+  - `index.js` re-exports, matching `features/quotations/index.js`.
+- `pages/PrintQuotation.jsx` — the chrome-less print route page.
+  `/print/quotation/:id` is mounted **outside** `AppShell` but inside
+  `RequireAuth` + `SettingsProvider` (a document needs the settings row and must
+  not render a sidebar). The providers sit on the leaf route rather than a
+  pathless parent, because a parent element must render an `<Outlet />` and this
+  route has one child.
+- `styles/print.css` — the §14.4 multi-page rules: `thead` as
+  `table-header-group` so headings repeat, `break-inside: avoid` on rows, the
+  totals block, terms and the signatory, plus the screen-only paper treatment
+  being dropped on paper. The rules target `data-document-*` attributes rather
+  than module class names, for the same reason as the toolbar.
+- `DocumentPaper.module.css` sized in mm/pt so the on-screen sheet and the printed
+  A4 are the same layout. The grand-total row uses the `--color-gold-soft` /
+  `--color-gold-ink` pair rather than `--color-gold`; see the decisions below.
+- Wiring: Preview + Print on the quotation detail page; Preview in the editor,
+  rendering the current form through `lib/calc` as a display-only mirror.
+  `titleLevel` drops the sheet's heading to `<h2>` inside the preview so the
+  editor's `PageHeader` stays the page's only `<h1>` (§18.2).
+- `documents.test.jsx` — 30 tests: category grouping, snapshot client block,
+  server totals rendered verbatim (including a case where the item line totals
+  deliberately disagree with the header, proving the component trusts the
+  document), percent vs fixed discount labelling, zero-row omission, the §21.23
+  wordmark fallback, the §21.24 "no undefined/null/NaN in the output" check,
+  blank terms lines, internal notes never printing, and the unsaved-preview
+  placeholder. `main.test.jsx` and `routes.test.jsx` both walk the new route;
+  the latter also asserts it stays chrome-less.
+
+Decisions taken, and why:
+
+- **Signatory and footer read live from Settings, not from a quotation
+  snapshot.** §8.3 gives `quotations` no `signatory_name`/`footer_text` column —
+  only `invoices` carries those snapshots. Adding them would have meant a
+  migration whose sole purpose was to contradict the schema, and would have given
+  the same fields two different "is this authoritative" semantics across the two
+  document types. A quotation stays editable until it converts, so live settings
+  is the honest behaviour; the invoice snapshot takes over at conversion, which is
+  where §8.4 actually requires immutability.
+- **The grand total uses the gold-soft/gold-ink pair, not `--color-gold`.**
+  Appendix B6 defers the brand-gold retune to the Phase 11 contrast pass, and
+  mid-tone gold on a light surface is the AA failure §18.4 warns about. B6
+  remains open and is *not* resolved by this phase.
+- **An unsaved quotation previews without a number.** The server is the sole
+  authority for numbering (§12), so a never-saved draft shows "Draft — not yet
+  saved" and the overlay says in as many words that the preview cannot be shared
+  until it is saved. Preview never writes: it cannot produce a double draft or
+  leave an orphan behind. The server's number is adopted the moment a save
+  returns, so a second preview or the print link uses the real one.
+- **Page numbers omitted (FR-DOC4).** Not cleanly achievable through the browser
+  print pipeline without a JS pagination probe, and §14.4 says omit rather than
+  fake. Deliberate, not an oversight.
+
+Exit criteria met:
+
+- `npm run verify` green: lint, format, 139 frontend tests, 182 backend tests,
+  production build.
+- `GET /api/v1/health` reports `phase: 6`.
+- Multi-page matrix (§14.4) covered by the CSS rules — repeating `thead`, no row
+  splitting, totals never orphaned — for 3, 15 and 60 item documents. Visual
+  confirmation in Chrome and Safari, and the PDF output itself, remain a manual
+  check on the running dev servers: they are not automatable here, and §14.4 asks
+  for that matrix to be recorded from a real print preview.
+
+Not covered by automated tests, and honestly so: the rendered appearance of the
+PDF in each browser, and the choice of gold. Both are the manual Phase 6/11 items
+they are documented as being.
 
 ## Phase 7 - Invoice system
 

@@ -1,0 +1,48 @@
+/* Ruchita Interiors — print route page styles (§14.2). */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-block-size: 100vh;
+  padding-block-end: var(--space-8);
+  background: var(--color-surface-alt);
+}
+
+/* Shown only while loading or after a failure; once the sheet renders, the
+   document's own title is the page heading (§18.2 — one <h1> per route). */
+.statusHeading {
+  margin: 0;
+  padding: 0 var(--space-4);
+  font-size: var(--font-size-xl);
+  color: var(--color-ink);
+}
+
+.loading,
+.message,
+.hint {
+  margin: 0;
+  padding: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.message {
+  margin: var(--space-4);
+  border: var(--border-width) solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.link {
+  color: var(--color-ink);
+  font-weight: var(--weight-medium);
+  text-decoration: underline;
+}
+
+.hint {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+}

@@ -49,10 +49,35 @@ function stubFetch(me = UNAUTHORIZED) {
   const fetchMock = vi.fn(async (url) => {
     const path = String(url).replace(API, '')
     if (path === '/auth/me') return me
+    // The print route renders a real DocumentPaper from this payload, so the
+    // route walk needs a quotation-shaped response rather than an empty body.
+    if (/^\/quotations\/[^/]+$/.test(path)) return jsonResponse({ data: { quotation: QUOTATION } })
+    if (path === '/settings/company')
+      return jsonResponse({ data: { settings: { company_name: 'Ruchita Interiors' } } })
     return jsonResponse({})
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+/** A minimal quotation payload, enough for the print route to render its sheet. */
+const QUOTATION = {
+  id: 42,
+  number: 'QTN-2026-0001',
+  status: 'draft',
+  quotation_date: '2026-09-29',
+  valid_until: null,
+  client_snapshot: { name: 'Test Client' },
+  discount_type: 'percent',
+  discount_bp: 0,
+  gst_bp: 1800,
+  other_charges_paise: 0,
+  subtotal_paise: 0,
+  discount_paise: 0,
+  gst_paise: 0,
+  grand_total_paise: 0,
+  terms_text: null,
+  items: [],
 }
 
 /** The ErrorBoundary's own failure text. Its presence means the app failed to render. */
@@ -108,6 +133,7 @@ describe('app render smoke test', () => {
       '/clients/9',
       '/settings',
       '/no-such-page',
+      '/print/quotation/42',
     ]
 
     const { unmount } = render(

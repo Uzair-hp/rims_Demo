@@ -1,0 +1,409 @@
+/*
+ * Ruchita Interiors — document sheet styles (§14.3, FR-DOC2).
+ *
+ * Sized in mm/pt rather than rem so the printed A4 layout is identical to the
+ * on-screen preview (R1, D3: the browser print pipeline is the renderer). Colour
+ * comes entirely from tokens; the only raw value here is the sheet's physical
+ * width, which is a property of the paper, not a brand decision.
+ *
+ * The gold used on this sheet is the soft/ink pair rather than --color-gold.
+ * Appendix B6 defers retuning the brand gold to the Phase 11 contrast pass, and
+ * mid-tone gold on a light surface is exactly the AA failure §18.4 warns about —
+ * so the grand-total row pairs a --color-gold-soft wash with --color-gold-ink
+ * text, which passes 4.5:1.
+ */
+
+.paper {
+  /* 210mm A4 minus the 12mm page margins in print.css. */
+  inline-size: 186mm;
+  margin-inline: auto;
+  padding: 10mm;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 9.5pt;
+  line-height: 1.4;
+}
+
+@media screen {
+  /* A screen preview of a physical document reads as paper, not as an app card. */
+  .paper {
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 1. Header band
+ * ------------------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6mm;
+  padding-block-end: 3mm;
+  border-block-end: 0.6mm solid var(--color-gold);
+}
+
+.brand {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+/* Height-capped, width-auto: an uploaded logo of unknown aspect ratio must never
+   stretch the header or push the contact block off the page. */
+.logo {
+  max-block-size: 18mm;
+  inline-size: auto;
+  max-inline-size: 70mm;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 16pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-ink);
+}
+
+.company {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  text-align: end;
+}
+
+.tagline {
+  margin: 0;
+  font-size: 8.5pt;
+  font-style: italic;
+  color: var(--color-ink-muted);
+}
+
+.companyMeta {
+  display: flex;
+  flex-direction: column;
+  font-style: normal;
+  font-size: 8pt;
+  line-height: 1.35;
+  color: var(--color-ink-muted);
+}
+
+.gstin {
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * 2. Title strip
+ * ------------------------------------------------------------------ */
+
+.titleStrip {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6mm;
+  padding-block: 4mm;
+}
+
+.dates {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+
+.dateLine {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  margin: 0;
+}
+
+.microLabel {
+  min-inline-size: 18mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.dateValue {
+  font-size: 9.5pt;
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+.heading {
+  text-align: end;
+}
+
+.docTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+
+.docNumber {
+  margin: 1mm 0 0;
+  font-size: 11pt;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * 3. Client block
+ * ------------------------------------------------------------------ */
+
+.clientBlock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4mm;
+  padding-block: 3mm;
+  border-block: var(--border-width) solid var(--color-border);
+}
+
+.clientCell {
+  flex: 1 1 60mm;
+  min-inline-size: 0;
+}
+
+.blockLabel {
+  margin: 0 0 1.5mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.clientName {
+  margin: 0 0 1mm;
+  font-size: 11pt;
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.clientLine {
+  margin: 0;
+  font-size: 9pt;
+  color: var(--color-ink-muted);
+  /* A long address wraps; it never overflows the page box. */
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. Items table
+ * ------------------------------------------------------------------ */
+
+.items {
+  inline-size: 100%;
+  margin-block: 4mm;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.items th {
+  padding: 1.5mm 1mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  text-align: start;
+  color: var(--color-ink-subtle);
+  border-block-end: var(--border-width) solid var(--color-border-strong);
+}
+
+.items td {
+  padding: 1.5mm 1mm;
+  vertical-align: top;
+  color: var(--color-ink);
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  white-space: nowrap;
+}
+
+.colIndex {
+  inline-size: 8mm;
+}
+
+.colCategory {
+  inline-size: 24mm;
+  font-size: 8.5pt;
+  color: var(--color-ink-muted);
+}
+
+.colItem {
+  inline-size: auto;
+}
+
+.colUnit {
+  inline-size: 16mm;
+  font-size: 8.5pt;
+  color: var(--color-ink-muted);
+}
+
+.colNum {
+  inline-size: 20mm;
+}
+
+.itemName {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.itemDescription {
+  display: block;
+  margin-block-start: 0.5mm;
+  font-size: 8.5pt;
+  font-weight: var(--weight-regular);
+  color: var(--color-ink-muted);
+  white-space: pre-line;
+}
+
+.unitSuffix {
+  font-size: 8pt;
+  color: var(--color-ink-subtle);
+}
+
+/* Category grouping subheader (§14.3). Reads as a band, not as a data row, so
+   the eye can follow one section of the work down the page. */
+.categoryRow td {
+  padding-block: 1.2mm;
+  background: var(--color-surface-alt);
+  border-block-end: var(--border-width) solid var(--color-border);
+  font-size: 8.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.emptyRow {
+  padding: 6mm 1mm;
+  text-align: center;
+  color: var(--color-ink-subtle);
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. Totals block
+ * ------------------------------------------------------------------ */
+
+.totalsBlock {
+  display: flex;
+  justify-content: flex-end;
+  margin-block: 3mm;
+}
+
+.totals {
+  inline-size: 76mm;
+  margin: 0;
+}
+
+.totalRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4mm;
+  padding: 1.2mm 0;
+}
+
+.totalRow dt {
+  font-size: 9pt;
+  color: var(--color-ink-muted);
+}
+
+.totalRow dd {
+  margin: 0;
+  font-size: 9pt;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+/* The brand moment: a gold-tinted row with a gold edge and gold-ink text, the
+   one place on the document where gold is allowed (§18.4). */
+.totalGrand {
+  margin-block-start: 1mm;
+  padding: 2mm 2.5mm;
+  background: var(--color-gold-soft);
+  border-inline-start: 0.7mm solid var(--color-gold);
+}
+
+.totalGrand dt,
+.totalGrand dd {
+  font-size: 11pt;
+  font-weight: var(--weight-bold);
+  color: var(--color-gold-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. Terms
+ * ------------------------------------------------------------------ */
+
+.terms {
+  margin-block-start: 4mm;
+}
+
+.termList {
+  margin: 0;
+  padding-inline-start: 5mm;
+  list-style: decimal;
+  font-size: 8pt;
+  line-height: 1.5;
+  color: var(--color-ink-muted);
+}
+
+.termItem {
+  margin-block-end: 0.8mm;
+}
+
+/* ------------------------------------------------------------------ *
+ * 7. Signatory + 8. Footer
+ * ------------------------------------------------------------------ */
+
+.signatory {
+  margin-block-start: 10mm;
+  margin-inline-start: auto;
+  inline-size: 62mm;
+  text-align: center;
+}
+
+.signatoryLabel {
+  margin: 0;
+  font-size: 8.5pt;
+  color: var(--color-ink-muted);
+}
+
+.signatoryName {
+  margin: 1mm 0 0;
+  font-size: 9.5pt;
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.signatureLine {
+  margin-block-start: 8mm;
+  border-block-start: var(--border-width) solid var(--color-border-strong);
+}
+
+.footer {
+  margin-block-start: 6mm;
+  padding-block-start: 2mm;
+  border-block-start: var(--border-width) solid var(--color-border);
+  font-size: 7.5pt;
+  text-align: center;
+  color: var(--color-ink-subtle);
+}
