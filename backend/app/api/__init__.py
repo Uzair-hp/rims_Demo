@@ -13,6 +13,7 @@ from flask import Blueprint
 
 from app.api.auth import auth_bp
 from app.api.clients import clients_bp
+from app.api.dashboard import dashboard_bp
 from app.api.health import health_bp
 from app.api.invoices import invoices_bp
 from app.api.payments import payments_bp
@@ -27,5 +28,6 @@ api_bp.register_blueprint(clients_bp)
 api_bp.register_blueprint(quotations_bp)
 api_bp.register_blueprint(invoices_bp)
 api_bp.register_blueprint(payments_bp)
+api_bp.register_blueprint(dashboard_bp)
 api_bp.register_blueprint(settings_bp)
 api_bp.register_blueprint(uploads_bp)

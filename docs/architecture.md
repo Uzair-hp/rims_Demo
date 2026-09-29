@@ -61,6 +61,27 @@ replaying the request.
 CORS, database URI, cookie names, error handlers - reads from `app.config` rather
 than the environment singleton, so tests and per-environment deployments work.
 
+## Read models and derived figures
+
+Nothing in this system stores a running total. `payment_status`, `paid_paise`,
+`outstanding_paise` and every Dashboard figure are computed on read, which is
+why there is no `payment_status` column and no `dashboard` table. Two consequences
+the code depends on:
+
+- **A definition has exactly one home.** `BILLED_STATUS` and
+  `_paid_paise_expr()` live in `services/invoices.py` and are imported by
+  `services/dashboard.py` and `services/clients.py` rather than restated. A second
+  implementation of "is this invoice paid" is how two pages start disagreeing
+  about the same money.
+- **Aggregates run in SQL.** `services/dashboard.py` uses `SUM()`/`GROUP BY`;
+  it never loads rows to total them in Python, which is what §5's response budget
+  (§5, < 300 ms with thousands of records) requires at whole-table scale. The
+  per-client summary in `services/clients.py` sums one client's handful of rows
+  in Python, which is a different scale and a different decision.
+
+The Dashboard is the only read model: one `GET /api/v1/dashboard/summary` serves
+the whole page, so the browser never recomputes a money figure.
+
 ## Authentication
 
 There is no global auth middleware. Each endpoint is either deliberately public

@@ -1,43 +1,58 @@
+/**
+ * Dashboard layout (§18.4, §19).
+ *
+ * Tiles go 1-up on mobile, 3-up from 768 px and stay 3-up on desktop: FR-D1 asks
+ * for six headline figures, and six across on a phone would put each number in a
+ * ~55 px column, which is unreadable rather than dense. Mobile is the primary
+ * target (§19), so it is the case the base rule is written for.
+ *
+ * The two charts sit side by side from 1024 px, where each still has room for a
+ * 12-point x-axis, and stack below that.
+ */
+
 .tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-3);
+  margin-block-end: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+.charts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
   margin-block-end: var(--space-6);
 }
 
-.tile {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+@media (min-width: 1024px) {
+  .charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.tileValue {
-  margin-block: var(--space-1);
+.chartCard {
+  min-inline-size: 0;
 }
 
-.section {
-  padding-block-start: var(--space-4);
-  border-block-start: var(--border-width) solid var(--color-border);
+.recent {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
 }
 
-.sectionHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin-block-end: var(--space-2);
+@media (min-width: 1024px) {
+  .recent {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.sectionTitle {
-  font-family: var(--font-display);
-  font-size: var(--font-size-xl);
-  font-weight: var(--weight-semibold);
-  color: var(--color-ink);
-}
-
-.sectionNote {
-  max-inline-size: 68ch;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-  color: var(--color-ink-muted);
+.recentCard {
+  min-inline-size: 0;
 }

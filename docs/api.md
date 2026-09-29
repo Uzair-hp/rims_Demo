@@ -107,6 +107,68 @@ delete routes above. It is deliberately absent from `Invoice.bank_snapshot` — 
 the Phase 8 section of `docs/phases.md` for why a QR is exempt from §8.4
 immutability while the bank text is not.
 
+### Dashboard (Phase 9)
+
+| Method | Path                     | Guard  | Notes                                        |
+| ------ | ------------------------ | ------ | -------------------------------------------- |
+| GET    | `/api/v1/dashboard/summary` | cookie | The entire Dashboard, in one response. Read-only. |
+
+**One request powers the whole page** (§9.2: "one request, one query set"). The
+Dashboard renders six metric tiles, two charts and three recent lists from this
+single payload; it never calls the quotations, invoices, clients or payments
+endpoints to total them itself, because that would make the browser a second
+implementation of §11's money rules. Every figure arrives already computed, in
+paise. No `@csrf_protect` — there is no mutation.
+
+```json
+{
+  "data": {
+    "quotation_counts": { "draft": 2, "sent": 1, "approved": 1, "rejected": 1, "converted": 7 },
+    "quotation_values": {
+      "draft_value": 800000, "sent_value": 200000, "approved_value": 300000,
+      "rejected_value": 400000, "converted_value": 2830000,
+      "total_quotation_value": 4530000
+    },
+    "money": { "invoiced_value": 1100000, "received_total": 800000, "outstanding_total": 300000 },
+    "monthly": [
+      { "month": "2025-10", "quotation_count": 0, "quotation_value": 0, "invoiced_value": 0, "received_value": 0 }
+    ],
+    "recent": {
+      "quotations": [{ "id": 12, "number": "QTN-2026-0012", "client_name": "Alpha Interiors", "status": "approved", "grand_total_paise": 300000, "date": "2026-09-20" }],
+      "invoices": [{ "id": 5, "number": "INV-2026-0005", "client_name": "Beta Builders", "status": "issued", "grand_total_paise": 500000, "paid_paise": 200000, "outstanding_paise": 300000, "payment_status": "partially_paid", "date": "2026-08-07" }],
+      "clients": [{ "id": 2, "name": "Beta Builders", "phone": "+91 90000 00002", "created_at": "2026-09-01T09:00:00" }]
+    }
+  }
+}
+```
+
+Definitions, so the numbers are not a matter of opinion:
+
+- `quotation_counts` — one entry per §8.3 status. A status with no rows is
+  present as `0` rather than omitted.
+- `quotation_values` — `SUM(grand_total_paise)` grouped by status.
+- **`total_quotation_value` — all quotations, every status** (draft + sent +
+  approved + rejected + converted). §9.2 lists it beside the per-status values
+  without qualifying it, so the total is literally the total. It is the whole
+  pipeline, not the approved slice.
+- `invoiced_value` — `SUM(invoice.grand_total_paise)` over **`BILLED_STATUS`
+  only** (`issued`). Drafts have not been billed and cancelled invoices never
+  will be, so neither appears (§11).
+- `received_total` — `SUM(payments.amount_paise)` joined to invoices and filtered
+  to `BILLED_STATUS` (§11: "only actual payment rows count toward received").
+- `outstanding_total` — `invoiced_value − received_total`, derived from those two
+  figures rather than re-summised, so the three can never disagree.
+- `monthly` — **exactly 12** buckets, oldest first, **zero-filled**, keyed on
+  three different columns: `quotation_date` for the quotation series,
+  `issue_date` for invoiced, `paid_on` for received. A payment in month *N*
+  against an invoice issued in *N−1* lands in *N*.
+- `recent` — 5 of each, newest first. Archived clients are excluded (FR-C4). An
+  archived client still owns its history, so the quotation and invoice lists keep
+  showing them; only the "who is active" list drops them.
+
+All money is integer paise. `payment_status` on a recent invoice comes from the
+same `payment_status()` the invoice page uses, so the two cannot disagree.
+
 `GET /api/v1/health` is deliberately database-free so it can report "is the API
 up" without touching data:
 

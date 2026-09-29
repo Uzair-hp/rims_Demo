@@ -35,6 +35,11 @@ instance/*.db
 *.db-shm
 *.db-wal
 *.db-journal
+# Timestamped database backups, e.g. `ruchita_interiors.db.bak-20260930-001005`.
+# These are full copies of the SQLite file and hold live business data, so they
+# must never reach the repository. The `*.db` rule above does not catch them:
+# the name ends in `-<timestamp>`, not `.db`.
+*.db.bak*
 
 # ---------- Uploads ----------
 # Keep the directory (via .gitkeep) but not uploaded files.

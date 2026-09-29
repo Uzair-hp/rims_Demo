@@ -20,7 +20,7 @@ tests, production build) is the gate for every phase.
 | 6     | Quotation document / PDF            | **Done**    |
 | 7     | Invoice system                      | **Done**    |
 | 8     | Payments & financial tracking       | **Done**    |
-| 9     | Dashboard & analytics               | Not started |
+| 9     | Dashboard & analytics               | **Done**    |
 | 10    | PWA / mobile optimization           | Not started |
 | 11    | Security, validation & edge cases   | Not started |
 | 12    | Full testing & production readiness | Not started |
@@ -520,9 +520,85 @@ Exit criteria met:
   document renders it only on invoices, only inside the payment block, and drops
   the subsection entirely if the image fails to load.
 
-## Phase 9 - Dashboard & analytics
+## Phase 9 - Dashboard & analytics (done)
 
-Dashboard metrics, charts and recent activity.
+Truthful business overview.
+
+### Implemented
+
+- **`services/dashboard.py`** — the whole aggregate. Every figure is a
+  `SUM()`/`GROUP BY` over the four tables; nothing is loaded to be added up in
+  Python.
+- **`GET /api/v1/dashboard/summary`** — one response powering the entire page
+  (§9.2 "one request, one query set"). `@login_required`, read-only, no
+  `@csrf_protect`.
+- **Frontend** — `api/endpoints/dashboard.js`, `features/dashboard/useDashboard.js`,
+  a new `MetricCard`, the real Dashboard page, and a shared `RecentList` for the
+  three FR-D2 lists. Tiles, two charts, three recent lists.
+- **Charts** — Recharts (PLAN §1.2), 12-month invoiced-vs-received trend and a
+  quotation status breakdown. Colours are read from the existing §18.8 chart
+  tokens at render time, so they follow the dark theme.
+- **No migration.** Nothing in the schema changed, and nothing needed to: §8.3
+  already stored every field the dashboard aggregates.
+
+### Decisions
+
+- **Everything derives from existing authoritative definitions.** `BILLED_STATUS`
+  decides which invoices count toward money and `_paid_paise_expr()` computes
+  "paid", both imported from `services/invoices.py`. No payment-status or
+  invoice-money rule is restated here, and `test_summary_rows_agree_with_the_
+  invoice_detail_api` cross-checks each dashboard row against
+  `GET /invoices/:id` so a second implementation could not survive.
+- **Aggregated in SQL, not in Python.** `services/clients.py` sums a single
+  client's rows in Python, which is right for one client and wrong here; copying
+  it would have loaded every invoice to add it in Python. §5's response budget
+  applies.
+- **`total_quotation_value` is every quotation, all five statuses** (D2). §9.2
+  lists it beside the per-status values without qualifying it, so the total is
+  the total — not the approved slice. Asserted on its own so the choice cannot
+  drift silently.
+- **The browser computes no totals.** The page renders the server's paise figures
+  verbatim. The only arithmetic on the client is `shortRupees`, which shortens a
+  figure for a chart axis — a unit change, not a total.
+- **Recharts is code-split.** It is the only charting dependency and by far the
+  heaviest. Inlined, it pushed the entry chunk from 138 KB to 252 KB gzip, which
+  every route would have paid for including `/login`. The chart section is
+  `lazy()`-loaded, leaving the entry at **140 KB gzip** and a separate 112 KB
+  chunk fetched only when the Dashboard opens. The skeleton lives in its own
+  module precisely so importing it does not defeat the split.
+- **No entry animation on the charts.** §18.10 requires "no entrance animations
+  on data"; Recharts animates series in by default, so this is the design rule as
+  much as a testability choice.
+- **A failure that can be acted on is named as such.** A 5xx is reported as "the
+  server returned an error — it is running, but the request failed", distinct from
+  an offline message. Same reasoning as the Phase 8 audit fix: a pending migration
+  once made every request 500 while the page insisted the API was down.
+
+### Known limitations, deliberately not addressed
+
+- **No indexes on the grouped columns** — none exist on `quotations.status`,
+  `quotations.quotation_date`, `invoices.status`, `invoices.issue_date`,
+  `payments.paid_on` or any `created_at`, so the aggregates scan. Fine for a
+  single-user SQLite database at realistic volume; measured before adding a
+  performance-only migration, which §1.3 and PLAN do not ask for.
+- **No date range.** §9.2 defines no query string for this endpoint, so none is
+  accepted. The figures are whole-of-business totals, not a filtered view.
+
+Exit criteria met:
+
+- `npm run verify` green: lint, format, 214 frontend tests, 276 backend tests,
+  production build.
+- All §24 boxes satisfied and individually tested: every §9.2 field present and
+  correct on the seeded scenario; drafts excluded from money metrics and cancelled
+  invoices excluded; `received` = Σ payments only; recent lists navigate to the
+  right places; charts render the 12-month series; one request powers the page; the
+  mobile layout is a single column below 768 px with no horizontal scroll.
+- The §24 gate "dashboard numbers match a hand-computed scenario exactly" is a
+  literal test: `SCENARIO_TRUTH` in `tests/test_dashboard.py` states the expected
+  counts, values and money figures as hand-written constants, and the whole-dict
+  assertions mean a newly added figure cannot slip in unverified. The scenario
+  deliberately places a payment in a different month from its invoice, so the
+  `issue_date` / `paid_on` distinction is observable rather than assumed.
 
 ## Phase 10 - PWA / mobile optimization
 

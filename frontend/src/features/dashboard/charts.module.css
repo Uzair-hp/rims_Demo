@@ -1,0 +1,47 @@
+/**
+ * Dashboard chart chrome (FR-D3, S18.8).
+ *
+ * A fixed block size matters more than it looks: Recharts measures its container
+ * to decide how much SVG to draw, and a container that sizes itself from its
+ * contents collapses to zero in that measurement. An explicit height on a
+ * responsive width is the only reliable arrangement, and it is what keeps the
+ * chart from reflowing the grid around it.
+ */
+
+.figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.captionHint {
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-regular);
+  color: var(--color-ink-subtle);
+}
+
+.plot {
+  inline-size: 100%;
+  block-size: 15rem;
+  min-inline-size: 0;
+}
+
+/* On a 360 px screen the two series overlap visually at this size, and the
+   legend below the plot needs room of its own rather than sitting on the axis. */
+@media (max-width: 480px) {
+  .plot {
+    block-size: 13rem;
+  }
+}

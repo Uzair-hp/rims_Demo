@@ -187,7 +187,7 @@ Priority codes: **M** = must have (v1), **S** = should have (v1 if time allows),
 - FR-P6 (M) Settings-managed UPI QR code printed on invoices only, under a "UPI QR code" subsection inside the existing payment/bank block. Read live from Settings, never snapshotted (§8.4.5). A quotation is not payable and never shows one. If the image is missing or fails to load the subsection is omitted entirely rather than left blank.
 
 ### 4.6 Dashboard
-- FR-D1 (M) Metric cards with strict definitions (§23): quotation counts by status, total quotation value, approved value, invoiced value, received, outstanding.
+- FR-D1 (M) Metric cards with strict definitions (§9.2 field list, §11 inclusion/exclusion rules — the original "§23" cross-reference was wrong, §23 is the folder structure): quotation counts by status, total quotation value, approved value, invoiced value, received, outstanding.
 - FR-D2 (M) Recent lists: quotations (5), invoices (5), clients (5) with quick links.
 - FR-D3 (S) Two-three charts: monthly received vs invoiced (12 months), quotation status breakdown. Nothing more.
 
@@ -1073,7 +1073,9 @@ Verified by 43 backend tests, 50 frontend tests, and a live HTTP smoke run again
 
 Verified by 249 backend tests and 188 frontend tests, plus `npm run verify` (lint, format, backend + frontend tests, production build) green at commit `64662c1`. Outstanding from §8.5: allocation of one payment across several invoices, and ageing / receivables reporting.
 
-**Phase 9** — [ ] All §9.2 dashboard fields present and correct on the seeded scenario · [ ] drafts excluded from money metrics; cancelled invoices excluded; received = Σ payments only · [ ] recent lists navigate correctly · [ ] charts render 12-month series · [ ] single request powers the page · [ ] mobile dashboard layout clean at 360 px.
+**Phase 9** — [x] All §9.2 dashboard fields present and correct on the seeded scenario · [x] drafts excluded from money metrics; cancelled invoices excluded; received = Σ payments only · [x] recent lists navigate correctly · [x] charts render 12-month series · [x] single request powers the page · [x] mobile dashboard layout clean at 360 px.
+
+Verified by 276 backend tests and 214 frontend tests, plus `npm run verify` (lint, format, backend + frontend tests, production build) green. The exit gate is a literal test: the expected counts, values and money figures are stated as hand-written constants in `backend/tests/test_dashboard.py` and asserted as whole dicts, so a newly added figure cannot slip in unverified. Two decisions resolved during implementation: `total_quotation_value` counts **all** quotations regardless of status, and Recharts is code-split behind a lazy boundary so it does not enter the entry chunk.
 
 **Phase 10** — [ ] Lighthouse PWA: installable, no offline-write traps flagged by manual test · [ ] installed app opens standalone with correct icons/splash · [ ] airplane mode: banner shows, save disabled, reads labeled offline, no fake success · [ ] update toast appears on new deploy · [ ] 360 px: zero horizontal scroll across all pages; targets ≥ 44 px · [ ] bottom nav + sheets thumb-friendly.
 
