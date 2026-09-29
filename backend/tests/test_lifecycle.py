@@ -305,6 +305,26 @@ class TestInvoiceLifecycle:
         allowed, _ = validate_invoice_transition(inv, InvoiceAction.CANCEL)
         assert allowed
 
+    def test_issue_refused_when_already_issued(self):
+        """The transition table gates issue on draft, not just the item guard."""
+        inv = self._make_invoice("issued")
+        allowed, error = validate_invoice_transition(inv, InvoiceAction.ISSUE)
+        assert not allowed
+        assert "issued" in error
+
+    def test_cancel_refused_when_already_cancelled(self):
+        inv = self._make_invoice("cancelled")
+        allowed, error = validate_invoice_transition(inv, InvoiceAction.CANCEL)
+        assert not allowed
+        assert "cancelled" in error
+
+    def test_record_payment_refused_on_a_draft_invoice(self):
+        """Payments are an issued-invoice concern (§11)."""
+        inv = self._make_invoice("draft")
+        allowed, error = validate_invoice_transition(inv, InvoiceAction.RECORD_PAYMENT)
+        assert not allowed
+        assert "draft" in error
+
     def test_issued_cancel_with_payments_blocked(self):
         inv = self._make_invoice("issued")
         payment = Payment(

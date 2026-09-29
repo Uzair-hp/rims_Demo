@@ -359,13 +359,25 @@ def validate_quotation_transition(quotation: Quotation, action: QuotationAction)
 def validate_invoice_transition(invoice: Invoice, action: InvoiceAction) -> tuple[bool, str | None]:
     """
     Validate an invoice state transition. Returns (allowed, error_message).
+
+    Two gates, mirroring `validate_quotation_transition`: the action must be legal
+    for the current status (the transition table), and any action-specific guard
+    must pass.
+
+    Checking the table first is what stops a second `issue` on an already-issued
+    invoice, or a `cancel` on one already cancelled — the per-action guards only
+    look at items, totals and payments, so on their own they would wave both
+    through.
     """
+    if action not in INVOICE_TRANSITIONS.get(invoice.status, {}):
+        return False, f"Cannot {action.value} an invoice in status '{invoice.status}'"
+
     if action == InvoiceAction.ISSUE:
         return _can_issue_invoice(invoice)
     elif action == InvoiceAction.CANCEL:
         return _can_cancel_invoice(invoice)
     elif action == InvoiceAction.RECORD_PAYMENT:
-        return invoice.status == "issued", "Payments only allowed on issued invoices"
+        return True, None
     elif action == InvoiceAction.DUPLICATE:
         return True, None
     elif action == InvoiceAction.DELETE:
