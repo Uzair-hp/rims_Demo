@@ -3,7 +3,7 @@ Ruchita Interiors — ORM models.
 
 Phase 2 registered `User`; Phase 3 registers the full §8.3 schema. Because
 Alembic owns DDL (§8.1), every model here is mirrored in
-`migrations/versions/a1c3e5f70b29_phase3_schema.py`, not in a `create_all()`.
+`migrations/versions/4cb5324d6e1e_phase_3_schema.py`, not in a `create_all()`.
 """
 
 from app.extensions.database import db
