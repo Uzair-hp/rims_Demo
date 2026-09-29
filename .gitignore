@@ -50,6 +50,11 @@ logs/
 .idea/
 *.swp
 
+# ---------- Local agent tooling ----------
+# Agent plan/worktree state, including the duplicate worktree it keeps under
+# .kilo/worktrees. Local only: never part of the application.
+.kilo/
+
 # ---------- OS ----------
 .DS_Store
 Thumbs.db
