@@ -193,12 +193,55 @@ Exit criteria met:
   opens the form, edit/archive/restore flow works, `/clients/:id` renders the
   detail page with totals and document links.
 
-## Phase 5 - Quotation engine (core)
+## Phase 5 - Quotation engine (core) (done)
 
 Quotations, items and counters; the calculation service (`PLAN.md` 10) and
 numbering service (`PLAN.md` 12) as the single source of truth; lifecycle and
 `allowed_actions`; the quotation editor with live totals and autosave; list and
 detail pages; duplicate.
+
+Delivered:
+
+- Backend: `PHASE=5` bumped in `settings.py`; `GET /api/v1/health` reports `phase: 5`.
+  - Models: `Quotation` + items, `Invoice` + items, `Counter`, `Terms`,
+    `CompanySettings`; Phase 3 migration.
+  - Services: `calculations.py` (integer paise/milli/basis-point math, half-up
+    rounding — the calculation authority), `numbering.py` (per-year counters,
+    numbers allocated at draft creation), `lifecycle.py` (`allowed_actions` state
+    machine for quotations and invoices), `clients.py`, `settings.py`, seed defaults.
+  - API under `/api/v1/quotations`: list (filter by `q`/status/client, paginated),
+    create, read, update (draft/sent only), delete (draft/rejected only), status
+    action (send/approve/reject/reopen), duplicate, and invoice conversion.
+  - 181 backend tests passing (calculations, numbering, lifecycle, quotations API,
+    settings, uploads, seed/migrations).
+- Frontend:
+  - `lib/calc.js` — display-only mirror of the backend calculation service (BigInt
+    multiply/divide so large `qty × rate` stays exact); `lib/validation.js` — inline
+    form validation mirroring the backend invariants; `lib/money.js` gained
+    `rupeesToPaise` / `paiseToInput`.
+  - `api/endpoints/quotations.js` — list/read/create/update/delete, status action,
+    duplicate, convert-to-invoice.
+  - `features/quotations/`: `useQuotations` hook (search/status filter/pagination),
+    `status.js` (labels + action presentation), `ItemsEditor` (natural-unit inputs
+    stored as milli/paise, stacked cards on mobile), `TotalsPanel` (live breakdown;
+    collapsible sticky bottom bar on mobile), `QuotationEditor` (client picker, header
+    fields, discount/tax, terms/notes, live totals, ~10s debounced autosave for
+    existing drafts + `beforeunload` guard), `QuotationsPage` (debounced search, status
+    filter, paginated rows), `QuotationDetailPage` (line-item table, totals, client,
+    `allowed_actions`-driven buttons with delete confirmation), `index.js` re-exports.
+  - `pages/Quotations.jsx` and `pages/QuotationDetail.jsx` wired to the feature
+    components (replacing the placeholders).
+  - `quotations.test.jsx` — 22 tests over `lib/calc`, `lib/validation`, money helpers
+    and status helpers; `routes.test.jsx` updated for the real pages.
+
+Exit criteria met:
+
+- `npm run verify` green: lint, format, 100 frontend tests, 181 backend tests,
+  production build.
+- `GET /api/v1/health` reports `phase: 5`.
+- Browser smoke: `/quotations` lists and filters; New quotation creates a draft with
+  live totals; `/quotations/:id` renders the detail with lifecycle actions; edit and
+  duplicate flows work.
 
 ## Phase 6 - Quotation document / PDF
 

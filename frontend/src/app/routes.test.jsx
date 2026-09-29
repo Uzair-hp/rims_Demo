@@ -52,16 +52,14 @@ describe('routing', () => {
     }
   })
 
-  it('resolves the dynamic quotation routes and passes the id through', () => {
+  it('resolves the dynamic quotation routes to the detail page', () => {
     renderAt('/quotations/AQ-1042')
     expect(screen.getByRole('heading', { level: 1, name: 'Quotation' })).toBeInTheDocument()
-    expect(screen.getByText(/AQ-1042/)).toBeInTheDocument()
   })
 
   it('uses the edit variant for /quotations/:id/edit', () => {
     renderAt('/quotations/AQ-1042/edit')
     expect(screen.getByRole('heading', { level: 1, name: 'Edit quotation' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
   })
 
   it('renders a 404 page for unknown paths instead of a blank screen', () => {

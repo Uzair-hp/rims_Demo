@@ -1,0 +1,103 @@
+/* TextField — label, control, hint, error. Tokens only (§18.11). */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.required {
+  color: var(--color-danger);
+}
+
+.control {
+  inline-size: 100%;
+  min-block-size: var(--touch-target-comfortable);
+  padding-inline: var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+textarea.control {
+  min-block-size: var(--space-16);
+  padding-block: var(--space-3);
+  line-height: var(--line-height-relaxed);
+  resize: vertical;
+}
+
+select.control {
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-ink-muted) 50%),
+    linear-gradient(135deg, var(--color-ink-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - var(--space-4)) calc(50% - 2px),
+    calc(100% - var(--space-3)) calc(50% - 2px);
+  background-size:
+    var(--space-2) var(--space-2),
+    var(--space-2) var(--space-2);
+  background-repeat: no-repeat;
+  padding-inline-end: var(--space-8);
+}
+
+.control:hover:not(:disabled) {
+  border-color: var(--color-ink-subtle);
+}
+
+.control:focus {
+  border-color: var(--color-ring);
+  /* The global :focus-visible outline stays; this just tightens the border so a
+     typed field reads as active even before the ring animates in. */
+  outline: none;
+}
+
+.control:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.control:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+  background: var(--color-surface-alt);
+}
+
+.control::placeholder {
+  color: var(--color-ink-subtle);
+}
+
+.invalid {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.invalid:focus-visible {
+  outline-color: var(--color-danger);
+}
+
+.hint {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-ink-subtle);
+}
+
+.error {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-danger);
+}

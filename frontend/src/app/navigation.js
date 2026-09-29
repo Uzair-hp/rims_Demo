@@ -22,7 +22,7 @@ export const MORE_NAV_ITEMS = [NAV_ITEMS[3], NAV_ITEMS[4]]
 export const CREATE_ACTIONS = [
   { to: '/quotations/new', label: 'New quotation', icon: 'fileText' },
   { to: '/invoices', label: 'New invoice', icon: 'receipt', hint: 'Phase 7' },
-  { to: '/clients', label: 'New client', icon: 'user', hint: 'Phase 4' },
+  { to: '/clients', label: 'New client', icon: 'user' },
 ]
 
 /** @type {Record<string, string>} path prefix -> document title */

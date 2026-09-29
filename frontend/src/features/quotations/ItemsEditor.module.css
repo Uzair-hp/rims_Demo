@@ -1,0 +1,164 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tableHead {
+  display: none;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.cellName {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.input,
+.inputSubtle {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.inputSubtle {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.input:focus,
+.inputSubtle:focus {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 1px;
+  border-color: var(--color-gold);
+}
+
+.num {
+  text-align: right;
+}
+
+.invalid {
+  border-color: var(--color-danger);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+}
+
+.cellQty,
+.cellUnit,
+.cellRate {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cellTotal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.totalLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.totalValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+.cellRemove {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.right {
+  text-align: right;
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--color-ink-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.remove:hover:not(:disabled) {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Desktop: a real table-like grid with a header row. */
+@media (min-width: 900px) {
+  .tableHead {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) 6rem 6rem 8rem minmax(6rem, 1fr) 2.5rem;
+    gap: var(--space-3);
+    padding: 0 var(--space-3);
+    font-size: var(--font-size-xs);
+    font-weight: var(--weight-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-ink-subtle);
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 3fr) 6rem 6rem 8rem minmax(6rem, 1fr) 2.5rem;
+    align-items: start;
+  }
+
+  .cellName {
+    grid-column: auto;
+  }
+
+  .totalLabel {
+    display: none;
+  }
+
+  .cellTotal {
+    justify-content: flex-end;
+    padding-top: var(--space-2);
+  }
+}

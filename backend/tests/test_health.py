@@ -15,7 +15,7 @@ def test_health_returns_ok_envelope(client):
     payload = response.get_json()
     assert payload["data"]["status"] == "ok"
     assert payload["data"]["service"] == "ruchita-interiors-api"
-    assert payload["data"]["phase"] == 3
+    assert payload["data"]["phase"] == 5
     assert "version" in payload["data"]
     assert "error" not in payload
 
@@ -51,11 +51,10 @@ def test_root_points_at_the_api(client):
     assert response.get_json()["data"]["api"] == "/api/v1/health"
 
 
-def test_business_endpoints_are_not_implemented_yet(client):
-    """Client/quotation endpoints arrive in Phases 4–5, so these must 404, not half-work."""
-    assert client.get("/api/v1/quotations").status_code == 404
-    assert client.post("/api/v1/quotations", json={}).status_code == 404
-    assert client.get("/api/v1/clients").status_code == 404
+def test_quotation_endpoints_exist_and_are_guarded(client):
+    """Phase 5 mounts the quotation endpoints; unauthenticated access is 401, not 404."""
+    assert client.get("/api/v1/quotations").status_code == 401
+    assert client.post("/api/v1/quotations", json={}).status_code in (401, 403)
 
 
 def _app_with_origins(origins: str):

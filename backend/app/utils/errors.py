@@ -76,6 +76,16 @@ def not_found(message: str = "That record could not be found.") -> ApiError:
     return ApiError("NOT_FOUND", message)
 
 
+def conflict(message: str, details: Iterable[dict[str, Any]] | None = None) -> ApiError:
+    """A request that contradicts the current state (409), e.g. restore an active client."""
+    return ApiError("CONFLICT", message, details)
+
+
+def business_rule(message: str, details: Iterable[dict[str, Any]] | None = None) -> ApiError:
+    """A domain rule that is not a field error (422), e.g. "send with no items"."""
+    return ApiError("BUSINESS_RULE", message, details)
+
+
 def rate_limited(retry_after_seconds: int) -> ApiError:
     return ApiError("RATE_LIMITED", "Too many sign-in attempts. Please wait and try again.")
 

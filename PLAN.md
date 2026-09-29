@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | PLANNING — do not start implementation until this plan is approved |
-| **Version** | 1.0 — 2026-09-26 |
+| **Status** | APPROVED — **Phases 1, 2 and 3 are complete and verified; Phase 4 is next.** Appendix B records the decisions that supersede parts of this document (JavaScript-only frontend, plain CSS design tokens, no TypeScript, no Tailwind) and the Phase 2 deviations (B7–B9). |
+| **Version** | 1.5 — 2026-09-28 (Phase 4 specified: client restore added to FR-C4/§9.2, picker contract and summary behavior clarified, frontend tests added to the Phase 4 gate; Phase 3 exit confirmed in v1.4; status mirror in `docs/phases.md`) |
 | **Client** | Ruchita Interiors — https://ruchitainteriors.in/ |
 | **Product** | Internal, single-user business management PWA for quotations, invoices and payments |
 | **Purpose of this document** | A complete, unambiguous implementation plan. Another developer/agent must be able to build the system phase-by-phase from this document alone, without rediscovering requirements. |
@@ -27,8 +27,8 @@ Take a client from first enquiry to fully-paid invoice in one system:
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Frontend | **React 18 + TypeScript + Vite** | Component architecture, fast dev loop |
-| Styling | **Tailwind CSS** + small custom component library | Brand-token driven; no generic admin template |
+| Frontend | **React 19 + JavaScript/JSX + Vite** | Component architecture, fast dev loop. **No TypeScript** (Appendix B, B1) |
+| Styling | **Structured plain CSS + centralized CSS design tokens** + small custom component library | Brand-token driven; no CSS framework, no utility framework (Appendix B, B2) |
 | Server state | **TanStack Query** | Caching, retries, loading/error states |
 | Routing | **React Router** | Protected routes, print routes |
 | Forms | **React Hook Form + Zod** | Zod schemas mirror backend validation rules |
@@ -149,9 +149,9 @@ Priority codes: **M** = must have (v1), **S** = should have (v1 if time allows),
 
 ### 4.2 Clients
 - FR-C1 (M) CRUD: name (required), phone, email, address, project/site address, GSTIN (optional), notes; created/updated timestamps.
-- FR-C2 (M) Search by name/phone/email; list sorted by recent activity.
+- FR-C2 (M) Server-side search by name/phone/email (`q`); list sorted by most recently updated first (`updated_at` desc — the only client-side activity signal until documents arrive in Phase 5+).
 - FR-C3 (M) Client detail: profile + tabs/sections for quotations, invoices, payment history, totals (billed, received, outstanding).
-- FR-C4 (M) Archive (soft delete) with confirmation; hard delete blocked when quotations/invoices exist; archived clients excluded from lists and pickers but preserved in history.
+- FR-C4 (M) Archive (soft delete) with confirmation; **restore** from the client detail page clears the archive; hard delete blocked when quotations/invoices exist (a hard-delete endpoint is never exposed); archived clients excluded from lists and pickers but preserved in history and reachable at their detail URL.
 - FR-C5 (M) Inline "create client" modal from the quotation editor (no context loss).
 
 ### 4.3 Quotations
@@ -220,7 +220,7 @@ Priority codes: **M** = must have (v1), **S** = should have (v1 if time allows),
 | **Reliability** | No data loss on refresh during editing: quotation editor autosaves draft (debounced) or warns on unload — decision: **debounced autosave to Draft every ~10 s while editing + beforeunload warning when dirty**. |
 | **Usability** | Mobile-first; no horizontal scrolling at 360 px; touch targets ≥ 44 px; keyboard-efficient on desktop. |
 | **Compatibility** | Latest Chrome/Edge (primary, incl. Android Chrome), Safari iOS ≥ 16, Firefox — print CSS verified in Chrome + Safari. |
-| **Maintainability** | Layered architecture (§23), typed frontend, documented API, Alembic migrations for every schema change. |
+| **Maintainability** | Layered architecture (§23), componentized frontend (§18 inventory, CSS Modules + shared token stylesheets), documented API, Alembic migrations for every schema change. |
 | **Observability** | Structured JSON logs (request, user, status, duration, error id); enough to debug issues from logs alone. No external APM in v1. |
 | **Backup** | SQLite DB + `uploads/` are the entire state. Documented copy/backup runbook (§27/R7); optional Settings → "Download backup" action. |
 | **Time zone** | Store UTC timestamps; business dates (quotation/invoice/payment dates) stored as plain DATEs (Asia/Kolkata business context); UI renders dates as `DD MMM YYYY`. |
@@ -239,7 +239,7 @@ Priority codes: **M** = must have (v1), **S** = should have (v1 if time allows),
 | 6 | Invoices list | `/invoices` | Find & manage invoices | Search, payment-status filter chips, table→cards with paid/outstanding | New (via quotation only — helper text), row → detail |
 | 7 | Invoice Detail | `/invoices/:id` | Review, bill, collect | Header, totals, **Amount paid / Outstanding** highlight, payment history | Issue, Record Payment, Cancel, Print |
 | 8 | Clients | `/clients` | Client book | Search, cards/table, per-client mini-stats | New Client, row → detail |
-| 9 | Client Detail | `/clients/:id` | Full relationship history | Profile card, tabs: Quotations / Invoices / Payments, totals strip | Edit, Archive, New Quotation |
+| 9 | Client Detail | `/clients/:id` | Full relationship history | Profile card, tabs: Quotations / Invoices / Payments, totals strip, archived badge | Edit, Archive (Restore when archived), New Quotation |
 | 10 | Settings | `/settings` | Configure everything | Left section nav (stacked tabs on mobile), forms per section, Save per section | Save section, Upload logo, Change password |
 
 **Modals / overlays (no extra pages):** New/Edit Client, Client Picker (search), Preview Document (print route in overlay), Record Payment, Confirm dialogs, Mark Rejected (reason), Duplicate Quotation confirm, Mobile filter sheet, Toasts.
@@ -457,7 +457,7 @@ Codes: `VALIDATION_ERROR` (422), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NO
 
 **Auth** — `POST /auth/login` {email,password} → sets cookies + user; `POST /auth/logout`; `POST /auth/refresh`; `GET /auth/me`; `PUT /auth/password` (current + new). Login rate-limited (§16).
 
-**Clients** — `GET /clients?q=&include_archived=false&page=`; `POST /clients`; `GET /clients/:id`; `PUT /clients/:id`; `DELETE /clients/:id` → archives (409 if FK-forbidden — though archive is always allowed, hard delete is never exposed); `GET /clients/:id/summary` → { quotations:[], invoices:[], payments:[], totals:{ billed, received, outstanding } }.
+**Clients** — `GET /clients?q=&include_archived=false&page=` (q matches name/phone/email; default sort `updated_at` desc); `POST /clients`; `GET /clients/:id` (works for archived clients too — history deep links never 404); `PUT /clients/:id`; `DELETE /clients/:id` → archives (soft delete; a hard-delete endpoint is never exposed); `POST /clients/:id/restore` → clears `archived_at` (409 if the client is already active); `GET /clients/:id/summary` → { quotations:[], invoices:[], payments:[], totals:{ billed, received, outstanding } }.
 
 **Quotations** — `GET /quotations?q=&status=&client_id=&date_from=&date_to=&min_amount=&max_amount=&sort=`; `POST /quotations` (creates Draft, allocates number); `GET /quotations/:id` (items + computed totals + allowed_actions list); `PUT /quotations/:id` (full replace of header+items, Draft/Sent-reopened only — 409 otherwise); `DELETE /quotations/:id` (Draft only — retires number); `POST /quotations/:id/status` `{ action: "send" | "approve" | "reject" | "reopen" }` (server validates guards; returns updated doc); `POST /quotations/:id/duplicate`; `POST /quotations/:id/invoice` → converts (409 if active invoice exists or status ≠ approved).
 
@@ -782,9 +782,9 @@ Max 3 series per chart; magnitude shown by position/label, not hue; tooltips lab
 - Motion: 120–160 ms ease-out on opacity/transform only; no entrance animations on data.
 
 ### 18.11 Implementation notes
-- All colors are CSS custom properties in `styles/tokens.css`, mapped into Tailwind theme; **no raw hex in components** — this is what makes the dark theme a swap, not a rewrite.
-- Contrast pairs are locked in a token test (Vitest snapshot asserting the documented ratios) so a future tweak can't silently break AA.
-- Final gold hex tuned against the real logo in Phase 1 (keep hue, adjust lightness) — the rules in §18.4 are fixed even if values shift.
+- All colors are CSS custom properties in `styles/tokens.css`, which every stylesheet consumes via `var(--token)`; **no raw hex in component or page stylesheets** — this is what makes the dark theme a swap, not a rewrite. Reusable components own their classes (CSS Modules); page-specific styles stay with the page, so shared and page styles never mix.
+- Contrast pairs are locked in a token test (Vitest asserting the documented ratios) so a future tweak can't silently break AA.
+- Final gold hex tuned against the real logo when the document surface is first rendered (Phase 6) and re-checked in the Phase 11 contrast pass (Appendix B, B6) — the rules in §18.4 are fixed even if values shift.
 
 **Design tokens** live in `frontend/src/styles/tokens.css` (§23); the tables above are the spec.
 
@@ -916,17 +916,19 @@ ruchita-interiors/
 │        └─ seed_defaults.py    # settings row, default terms, category list
 └─ frontend/
    ├─ index.html
-   ├─ vite.config.ts            # + vite-plugin-pwa config
+   ├─ vite.config.js            # + vite-plugin-pwa config
+   ├─ eslint.config.js          # ESLint flat config (react, react-hooks)
    ├─ package.json
    ├─ public/
    │  ├─ manifest.webmanifest
+   │  ├─ brand/                # bundled wordmark (Settings logo upload arrives Phase 3)
    │  └─ icons/                 # 192, 512, maskable, apple-touch
    └─ src/
-      ├─ main.tsx
-      ├─ app/                   # router.tsx  providers.tsx  guards.tsx
-      ├─ api/                   # client.ts (fetch wrapper + CSRF + 401 refresh)  endpoints/*.ts  types.ts
-      ├─ components/ui/         # Button, Input, MoneyInput, Modal, StatusBadge, DataTable, ... (§18)
-      ├─ components/layout/     # AppShell, Sidebar, BottomNav, TopBar, OfflineBanner
+      ├─ main.jsx
+      ├─ app/                   # router.jsx  providers.jsx  guards.jsx
+      ├─ api/                   # client.js (fetch wrapper + CSRF + 401 refresh)  endpoints/*.js  types.js (JSDoc)
+      ├─ components/ui/         # Button, Input, MoneyInput, Modal, StatusBadge, DataTable, ... (§18) + *.module.css
+      ├─ components/layout/     # AppShell, Sidebar, BottomNav, TopBar, OfflineBanner + *.module.css
       ├─ features/
       │  ├─ auth/               # LoginPage, useAuth
       │  ├─ dashboard/
@@ -937,11 +939,11 @@ ruchita-interiors/
       │  └─ documents/          # DocumentPaper, PrintToolbar
       ├─ pages/                 # thin route components mapping to features (+ /print/*)
       ├─ hooks/                 # useQuery wrappers, useOnline, useConfirm
-      ├─ lib/                   # money.ts  quantity.ts  calc.ts (display mirror)  format.ts  validation.ts (zod)
-      └─ styles/                # tokens.css  base.css  print.css
+      ├─ lib/                   # money.js  quantity.js  calc.js (display mirror)  format.js  validation.js (zod)
+      └─ styles/                # tokens.css  base.css  print.css  index.css
 ```
 
-**Layering rules:** API blueprints are thin (parse → validate → call service → respond). Business rules live in `services/`. Models hold no logic beyond relationships. Frontend `features/*` own their pages/state; `components/ui` stays domain-agnostic; no fetch calls outside `api/`; no money math outside `lib/calc.ts` (frontend) and `services/calculations.py` (backend).
+**Layering rules:** API blueprints are thin (parse → validate → call service → respond). Business rules live in `services/`. Models hold no logic beyond relationships. Frontend `features/*` own their pages/state; `components/ui` stays domain-agnostic; no fetch calls outside `api/`; no money math outside `lib/calc.js` (frontend) and `services/calculations.py` (backend).
 
 ---
 
@@ -951,8 +953,8 @@ ruchita-interiors/
 
 **Phase 1 — Architecture & project foundation**
 Objective: running skeleton of the whole system.
-Work: monorepo scaffold (backend app factory + config + `/health`; frontend Vite + TS + Tailwind + tokens + router + AppShell with sidebar/bottom-nav + empty pages; PWA manifest + basic SW; lint/typecheck/format tooling; `.env.example`s; README run instructions).
-Tests: health endpoint test; frontend build + typecheck green; smoke render test.
+Work: monorepo scaffold (backend app factory + config + `/health`; frontend Vite + React/JSX + plain-CSS design tokens + router + AppShell with sidebar/bottom-nav + empty pages; PWA manifest + basic SW; ESLint/format/test tooling; `.env.example`s; README run instructions).
+Tests: health endpoint test; frontend lint + unit tests + production build green; smoke render test.
 Dependencies: none. Exit: one-command run for both apps; shell responsive at 360/768/1280.
 
 **Phase 2 — Authentication & user system**
@@ -969,9 +971,9 @@ Dependencies: Phase 2. Exit: all settings editable with no code change and persi
 
 **Phase 4 — Client management**
 Objective: client book with history foundation.
-Work: clients API (CRUD, archive, search, summary); Clients list + detail pages; client form modal; client picker component (used later by quotation editor).
-Tests: `test_clients.py` (validation, archive, summary totals placeholder-safe).
-Dependencies: Phase 3. Exit: create/search/edit/archive client; detail shows relationship sections (empty states OK).
+Work: clients API (CRUD, archive/restore, search, summary) — the `clients` table and model already exist from Phase 3's migration, so no schema work; Clients list + detail pages (detail reachable for archived clients, archived badge + Restore there); client form modal; client picker with inline create — built and component-tested here as a reusable unit, first consumed by the Phase 5 quotation editor. Summary reads the real quotations/invoices/payments tables, which stay empty until Phases 5–8, so relationship sections show empty states and totals compute to zero.
+Tests: `test_clients.py` (validation, search, archive + restore, summary totals incl. seeded fixture rows); frontend component tests — list search/filter, ClientFormModal validation, ClientPicker select and inline-create return.
+Dependencies: Phase 3. Exit: create/search/edit/archive/restore client; detail shows relationship sections (empty states OK).
 
 **Phase 5 — Quotation engine (core)**
 Objective: the complete quotation feature.
@@ -1025,13 +1027,37 @@ Dependencies: all. Exit: §25 Phase-12 checklist green → production release.
 
 ## 25. Acceptance Criteria (per phase)
 
-**Phase 1** — [ ] `backend` serves `/health` 200 · [ ] `frontend` renders branded shell with nav on mobile + desktop · [ ] typecheck + lint clean both sides · [ ] manifest present, install prompt available · [ ] README: clone → run steps work on a clean machine.
+### Gate for closing any phase
 
-**Phase 2** — [ ] Login with seeded env credentials works · [ ] wrong password → generic error, no user enumeration · [ ] reload keeps session; restart of browser too (refresh cookie) · [ ] logout clears session; protected APIs return 401 without cookies · [ ] missing CSRF header on POST → 403 · [ ] 6th login attempt in 5 min → 429 · [ ] password change works and old sessions' refresh is invalidated.
+A phase is **not done** until all three hold:
 
-**Phase 3** — [ ] All §8.3 tables exist via migrations; `alembic downgrade base` then `upgrade head` succeeds · [ ] every Settings section saves, validates and reloads correctly · [ ] PNG ≤ 2 MB uploads; SVG and 3 MB file rejected with clear errors · [ ] starter terms + categories seeded · [ ] changing settings needs no code (verified by editing prefix and seeing it in new-document preview defaults).
+1. `npm run verify` (lint, format, all tests, production build) is green.
+2. The dev environment is up and the app is **loaded in a real browser** at
+   `http://127.0.0.1:5173`, with the phase's own flows exercised there.
+3. The backend and frontend were started via `npm run dev:start`, and remain
+   reachable after the command that started them has exited.
 
-**Phase 4** — [ ] Client CRUD with validation (name required) · [ ] search matches name/phone/email · [ ] archive hides from lists/pickers, `include_archived=true` shows · [ ] client detail shows sections + totals (empty-safe) · [ ] client modal opens from picker with return-to-editor flow.
+Criterion 2 exists because criterion 1 is not sufficient. In Phase 1 the app never
+rendered at all — `DocumentTitle` was mounted as a sibling of `<RouterProvider>`
+in `main.jsx`, so its `useLocation()` call threw and the whole UI showed the
+ErrorBoundary. Every automated check passed, because each test built its own
+memory router and the entry point itself was never under test. A green
+`npm run verify` proves the parts are correct; only loading the app proves they
+are wired together. Criterion 3 exists for the same reason: a dev server that dies
+with the shell that launched it silently invalidates any browser check.
+
+**Phase 1** — [x] `backend` serves `/health` 200 · [x] `frontend` renders branded shell with nav on mobile + desktop · [x] lint + unit tests + production build clean both sides · [x] manifest present, install prompt available · [x] README: clone → run steps work on a clean machine.
+
+Retrospective note: the "renders branded shell" criterion was ticked on the strength
+of automated checks alone and was not true — the app raised on first paint. Found
+and fixed during Phase 2's browser check; `frontend/src/app/main.test.jsx` now
+mounts the real entry point so it cannot regress unnoticed.
+
+**Phase 2** — [x] Login with seeded env credentials works · [x] wrong password → generic error, no user enumeration · [x] reload keeps session; restart of browser too (refresh cookie) · [x] logout clears session; protected APIs return 401 without cookies · [x] missing CSRF header on POST → 403 · [x] 6th login attempt in 5 min → 429 · [x] password change works and old sessions' refresh is invalidated.
+
+Verified by 43 backend tests, 50 frontend tests, and a live HTTP smoke run against the dev server (real `Set-Cookie` headers, refresh-cookie path scoping, CSRF rejection without the header). One criterion is qualified: see B7 — the limiter counts failures rather than attempts.**Phase 3** — [x] All §8.3 tables exist via migrations; `alembic downgrade base` then `upgrade head` succeeds · [x] every Settings section saves, validates and reloads correctly · [x] PNG ≤ 2MB uploads; SVG and 3MB file rejected with clear errors · [x] starter terms + categories seeded · [x] changing settings needs no code — prefix edits persist and read back live (the *new-document preview* that consumes them arrives with Phase 5's editor; verified at the API level today).
+
+**Phase 4** — [ ] Client CRUD with validation (name required) · [ ] search matches name/phone/email · [ ] archive asks for confirmation, hides from lists/pickers, `include_archived=true` shows · [ ] restore from client detail brings an archived client back (active again in pickers) · [ ] client detail shows sections + totals (empty-safe), and an archived client's URL still resolves · [ ] picker + inline create modal work as one unit (search → select; inline create returns the new client selected) — full round-trip inside the quotation editor verified when Phase 5 lands.
 
 **Phase 5** — [ ] New quotation allocates `QTN-2026-0001` then `-0002` sequentially · [ ] items add/remove/reorder; totals live and correct in paise-exact terms · [ ] percent and fixed discount both work; >subtotal blocked client- and server-side · [ ] GST + other charges flow into grand total · [ ] Send blocked with zero/invalid items (message shown) · [ ] approve requires confirm; converted lock verified · [ ] duplicate creates a new draft with a new number · [ ] list search/filters/sort/pagination work · [ ] calculation + numbering test suites pass at ≥ 90% service coverage.
 
@@ -1086,7 +1112,7 @@ Dependencies: all. Exit: §25 Phase-12 checklist green → production release.
 | D5 | Snapshot-on-conversion + quotation-level client snapshot | Historical documents immutable; client edits safe | Storage duplication (trivial at this scale) |
 | D6 | JWT in httpOnly cookies + CSRF double-submit | XSS-resistant, PWA-friendly persistence | Slightly more moving parts than localStorage tokens |
 | D7 | Invoice items lock at Issue; quotation items lock at Sent/Approved | Prevents retroactive document mutation | Users must duplicate/revise to change sent quotes |
-| D8 | Tailwind + custom component set (no UI kit) | Exact brand control; small bundle | More components to build (bounded inventory in §18) |
+| D8 | Plain CSS design tokens + custom component set (no CSS/utility framework) | Exact brand control; small bundle; tokens are the only place a raw value is written | More CSS to write by hand (bounded inventory in §18) |
 | D9 | Archive/soft-delete for all financial records; hard delete only for drafts | Financial safety | Archived data accumulates (fine at this scale) |
 | D10 | No offline writes (visible network requirement) | No silent data loss or fake success in a financial app | Reduced convenience; honest UX per requirement §27 |
 | D11 | `allowed_actions[]` from server drives all action buttons | One source of truth for lifecycle rules | Slightly richer API payloads |
@@ -1134,5 +1160,28 @@ Dependencies: all. Exit: §25 Phase-12 checklist green → production release.
 
 ### Appendix A — Reference material
 - Website/brand: https://ruchitainteriors.in/ (gold / near-black / warm off-white identity)
-- Provided assets (pending): logo files, quotation screenshot (visual reference only — improve, don't copy)
+- Brand assets: `brand/logo.svg` (official source vector, as supplied) → optimized shipped vector at `frontend/public/brand/logo.svg` (~124 KB, under the 150 KB guard) → generated PWA icon set in `frontend/public/icons/`; reference quotation screenshot (visual reference only — improve, don't copy)
 - Requirement source: client brief (this document's §4–§21 trace to it)
+
+---
+
+## Appendix B — Approved decisions & supersessions
+
+> This appendix is part of the single source of truth. Where it conflicts with §1–§28, **this appendix wins**. Everything else in this document stands as written.
+
+| # | Decision | Supersedes / changes | Rationale & effect |
+|---|---|---|---|
+| **B1** | **The frontend is JavaScript + JSX only, permanently.** `.js` / `.jsx` only. **No** `.ts` / `.tsx`, **no** `tsconfig.json`, **no** TypeScript dependencies, **no typecheck requirement**. Where types are needed, use JSDoc + ESLint. | §1.2 (React 18 + TypeScript + Vite), §5 "typed frontend", §22, §23 `*.ts` paths, §24 Phase 1 "typecheck", §25 Phase 1 "typecheck clean", §28.28 numbering unaffected. §1.2's React version also superseded: **React 19** is used. | Client's explicit technology decision. Quality gates become **ESLint + unit tests + production build**. |
+| **B2** | **Styling is structured plain CSS with centralized design tokens. No Tailwind, no Bootstrap, no CSS/utility framework** (unless a later phase explicitly requires one). | §1.2 "Tailwind CSS", §18.11 "mapped into Tailwind theme", §27.1 D8. | Client's explicit decision. Tokens (`styles/tokens.css`) remain the single place a raw value is written; dark theme stays a variable swap. |
+| **B3** | **Styling architecture** | — | `styles/tokens.css` (all tokens: colour, type scale, spacing, radii, borders, shadows, transitions, z-index, UI states, breakpoints) + `styles/base.css` (reset, element defaults, a11y utilities) + `styles/print.css` (A4/print, kept separate from app chrome) + `styles/index.css` (import order). Reusable components use **CSS Modules** co-located with the component (`Button.jsx` + `Button.module.css`); page-only styles live with the page. **No raw hex/rgba/px colour values outside `tokens.css`.** |
+| **B4** | **Tooling:** ESLint (flat config, `eslint-plugin-react` + `eslint-plugin-react-hooks`) for linting, Prettier for formatting, Vitest + Testing Library for unit/component tests, `vite build` for the production gate. | §24 Phase 1 "lint/typecheck/format tooling", §25 Phase 1. | Matches the client's "use ESLint, production build, tests" instruction. |
+| **B5** | **One-command run** | §24 Phase 1 exit gate. | Root `package.json` + `concurrently`; `npm run dev` starts both apps, with `dev:api` / `dev:web` for single-service work. |
+| **B6** | **Gold token tuning deferred** | §18.11 "tuned against the real logo in Phase 1". | The official logo's dominant gold measures ≈ `#D08A18` (hue ≈ 41°, i.e. the same hue as `--gold` but far more saturated). Raising saturation now would erode the deliberate separation from `--warning` (§18.5) and invalidate the contrast-locked token test. Tokens ship as documented in §18.3/§18.5/§18.7; the real-logo match is tuned where gold is first visible on a document (**Phase 6**) and re-verified in the **Phase 11** contrast pass. **Open item — must not be forgotten.** |
+| **B7** | **The login rate limiter counts *failures* per window, not attempts.** 5 failures per 5 minutes per IP+email; a successful sign-in clears that identity's history. | §16 and §25 "5 attempts", "6th login attempt in 5 min → 429". | A user who mistypes once and then signs in correctly should not be locked out, and this system has no self-service recovery (§8.3, FR-A4) — a locked-out owner has no way back in. Brute force is still bounded: every wrong guess consumes budget, and only a success clears it. The §25 criterion is satisfied as written, because five failures are needed before the next request is refused. |
+| **B8** | **`X-Forwarded-For` is ignored unless `TRUST_PROXY_HEADERS=true`.** With it on, `TRUSTED_PROXY_COUNT` proxies are assumed to append to the header. | §16 "keyed by IP + email" is unchanged; only the trust decision is added. | The header is client-controlled. Honouring it with no proxy in front would let an attacker mint a fresh IP per guess and defeat the limit entirely. Off by default is the safe reading; §16's intent is preserved. |
+| **B9** | **`users.token_version` (integer) is an extra column, and `token_version`-based revocation is the mechanism for logout and password change.** | §8.3 table definition. | §25 requires logout to clear server-side and password change to invalidate other sessions; a stateless JWT cannot be revoked and §8.3 has no column to revoke against. One integer and one write, no extra table. |
+| **B10** | **Dev servers start detached via `scripts/dev.ps1` (`npm run dev:start`), not as children of the invoking shell.** `npm run dev` remains for a human watching both logs in one terminal. | Supersedes B5's mechanism, not its intent — one command still starts both apps. | A server started as a child of the agent's shell dies when that shell is torn down, which silently invalidates any browser check performed afterwards. WMI `Win32_Process.Create` parents the new process to the WMI service host instead, so it outlives the caller. The script also refuses to kill a port holder it does not recognise, and reuses a healthy server rather than restarting it. |
+| **B11** | **A phase closes only after a real-browser check on the running dev servers, not on `npm run verify` alone.** See the gate at the top of §25. | Tightens §25 for every phase, including Phases 3–12. | Phase 1 shipped an app that could not render: `DocumentTitle` sat outside the router, so first paint threw and every automated check still passed, because the tests exercised the route table and never the entry point. `frontend/src/app/main.test.jsx` now mounts the real composition, but that cannot cover CSS, fonts, service worker, PWA install or genuine layout — only loading the app can. |
+
+### Explicitly NOT changed by this appendix
+Calculation rules (§10–§11), numbering (§12), lifecycle (§13), documents (§14), data model (§8), API contract (§9), security (§16), PWA policy (§17), design principles and palette allocation (§18.1–§18.8, §18.10), responsive rules (§19), error/empty/loading conventions (§20), edge cases (§21), backend architecture (§23), the 12 phases and their acceptance criteria (§24–§25) — all remain as written.

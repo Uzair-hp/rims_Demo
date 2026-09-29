@@ -57,3 +57,41 @@ def _reset_login_rate_limit():
     reset_rate_limit()
     yield
     reset_rate_limit()
+
+
+def _csrf_token(client) -> str:
+    """Read the CSRF cookie the test client carries after a request sets it."""
+    return next(
+        (c.value for k, c in getattr(client, "_cookies", {}).items() if isinstance(k, tuple) and k[2] == "csrf_token"),
+        "",
+    )
+
+
+def _csrf(client) -> dict:
+    """Drop a fresh CSRF header onto the cookie the `client` fixture holds."""
+    client.get("/api/v1/auth/csrf")
+    return {"X-CSRF-Token": _csrf_token(client)}
+
+
+@pytest.fixture()
+def authed_client(client):
+    """A test client carrying a valid access cookie (login is Phase 2 behaviour)."""
+    from app.models import User
+
+    with client.application.app_context():
+        user = User(email="owner@test.local", name="Owner", role="owner", is_active=True)
+        user.set_password("password-123456")
+        db.session.add(user)
+        db.session.commit()
+
+    # GET /auth/csrf sets the csrf cookie; read it *after* so it matches the cookie
+    # the browser will send on the login POST (double-submit, §16).
+    client.get("/api/v1/auth/csrf")
+    token = _csrf_token(client) or client.get("/api/v1/auth/csrf").get_json().get("csrf_token", "")
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "owner@test.local", "password": "password-123456"},
+        headers={"X-CSRF-Token": token},
+    )
+    assert login.status_code == 200, login.get_data(as_text=True)
+    return client

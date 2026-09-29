@@ -97,7 +97,7 @@ export default function AppShell() {
         open={newOpen}
         onClose={closeSheets}
         title="Create new"
-        description="Quotations open in Phase 2."
+        description="Quotations open in Phase 2. Clients open in Phase 4."
       >
         <SheetList items={CREATE_ACTIONS} onSelect={closeSheets} />
       </Sheet>
