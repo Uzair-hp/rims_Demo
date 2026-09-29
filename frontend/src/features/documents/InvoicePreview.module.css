@@ -1,0 +1,23 @@
+/* Ruchita Interiors — invoice preview overlay styles (§14.2). */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+/* The sheet is wider than a phone, so it scrolls within the overlay rather than
+   forcing horizontal page scroll (§19 overflow guardrails). */
+.sheetScroll {
+  overflow-x: auto;
+  padding: var(--space-3) 0;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

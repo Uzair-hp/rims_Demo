@@ -5,34 +5,36 @@
  * table, so no sidebar, bottom bar or top bar is mounted. What renders is the
  * `PrintToolbar` (hidden in the print stylesheet) above the `DocumentPaper`.
  *
- * Still authenticated — the backend enforces auth on `GET /quotations/:id`
- * regardless of the route guard (§16), and an unauthenticated visit here is
- * simply an error state rather than a document.
+ * Both document kinds share this shell; `documentType` decides which payload is
+ * fetched and which `docKind` the sheet renders. The document differs (issue and
+ * due dates, amount paid, balance due, bank details) but the layout is one
+ * component, so the two can never drift apart.
+ *
+ * Still authenticated — the backend enforces auth on every endpoint regardless
+ * of the route guard (§16), and an unauthenticated visit is an error state rather
+ * than a document.
  */
 
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { fetchInvoice } from '../api/endpoints/invoices.js'
 import { fetchQuotation } from '../api/endpoints/quotations.js'
 import { useSettings } from '../features/settings/SettingsProvider.jsx'
+import { invoiceStatusLabel, paymentStatusLabel } from '../features/invoices/status.js'
 import { statusLabel } from '../features/quotations/status.js'
 import DocumentPaper from '../features/documents/DocumentPaper.jsx'
 import PrintToolbar, { useAutoPrint } from '../features/documents/PrintToolbar.jsx'
 import styles from './PrintQuotation.module.css'
 
 /**
- * @param {{
- *   documentType?: 'quotation' | 'invoice',
- * }} props
- *
- * `documentType` is a parameter, not a hard-coded quotation screen, because
- * `/print/invoice/:id` is Phase 7 and shares this shell. Only the quotation
- * variant is routed today.
+ * @param {{ documentType?: 'quotation' | 'invoice' }} props
  */
 export default function PrintQuotation({ documentType = 'quotation' }) {
   const { id } = useParams()
   const [params] = useSearchParams()
   const { settings, logoSrc } = useSettings()
 
+  const isInvoice = documentType === 'invoice'
   const [doc, setDoc] = useState(null)
   const [state, setState] = useState('loading')
 
@@ -40,10 +42,11 @@ export default function PrintQuotation({ documentType = 'quotation' }) {
   useEffect(() => {
     let cancelled = false
     setState('loading')
-    fetchQuotation(id)
-      .then((quotation) => {
+    const load = isInvoice ? fetchInvoice(id) : fetchQuotation(id)
+    load
+      .then((document_) => {
         if (cancelled) return
-        setDoc(quotation)
+        setDoc(document_)
         setState('ready')
       })
       .catch(() => {
@@ -52,11 +55,23 @@ export default function PrintQuotation({ documentType = 'quotation' }) {
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, isInvoice])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // §14.2: `?autoprint=1` opens the print dialog on arrival.
   useAutoPrint(state === 'ready' && params.get('autoprint') === '1')
+
+  const title = isInvoice ? 'Invoice' : 'Quotation'
+  const listPath = isInvoice ? '/invoices' : '/quotations'
+
+  // An invoice shows its payment status, which is what the user is checking.
+  const statusText = isInvoice
+    ? doc
+      ? `${invoiceStatusLabel(doc.status)} · ${paymentStatusLabel(doc.payment_status)}`
+      : undefined
+    : doc
+      ? statusLabel(doc.status)
+      : undefined
 
   /**
    * The `<h1>` for this route is the document's own title once it has loaded.
@@ -65,17 +80,18 @@ export default function PrintQuotation({ documentType = 'quotation' }) {
    * invariant `main.test.jsx` and `routes.test.jsx` both walk for. It is
    * `no-print`, so a paper never carries a heading that is not the document's.
    */
-  const fallbackHeading = <h1 className={`${styles.statusHeading} no-print`}>Quotation</h1>
+  const fallbackHeading = <h1 className={`${styles.statusHeading} no-print`}>{title}</h1>
 
   if (state === 'error') {
     return (
       <div className={styles.page}>
-        <PrintToolbar title="Quotation" backTo="/quotations" />
+        <PrintToolbar title={title} backTo={listPath} />
         {fallbackHeading}
         <p className={styles.message} role="alert">
-          This quotation could not be loaded. It may have been deleted, or your session may have expired.{' '}
-          <a href="/quotations" className={styles.link}>
-            Back to quotations
+          This {title.toLowerCase()} could not be loaded. It may have been deleted, or your session may have
+          expired.{' '}
+          <a href={listPath} className={styles.link}>
+            Back to {title.toLowerCase()}s
           </a>
           .
         </p>
@@ -86,10 +102,10 @@ export default function PrintQuotation({ documentType = 'quotation' }) {
   return (
     <div className={styles.page}>
       <PrintToolbar
-        title="Quotation"
+        title={title}
         number={doc?.number}
-        statusLabel={doc ? statusLabel(doc.status) : undefined}
-        backTo={doc ? `/quotations/${doc.id}` : '/quotations'}
+        statusLabel={statusText}
+        backTo={doc ? `${listPath}/${doc.id}` : listPath}
       />
       {state === 'loading' ? (
         <>
@@ -98,13 +114,11 @@ export default function PrintQuotation({ documentType = 'quotation' }) {
         </>
       ) : (
         <div className="print-full-bleed">
-          <DocumentPaper document={doc} settings={settings} logoSrc={logoSrc} />
+          <DocumentPaper document={doc} settings={settings} logoSrc={logoSrc} docKind={documentType} />
         </div>
       )}
       <p className={`${styles.hint} no-print`}>
-        {documentType === 'quotation'
-          ? 'Printing opens your browser dialog — choose "Save as PDF" to keep a copy.'
-          : null}
+        Printing opens your browser dialog &mdash; choose &ldquo;Save as PDF&rdquo; to keep a copy.
       </p>
     </div>
   )

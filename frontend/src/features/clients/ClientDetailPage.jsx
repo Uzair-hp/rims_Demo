@@ -231,10 +231,13 @@ export default function ClientDetailPage() {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Invoices</h2>
         {s.invoices_count === 0 ? (
+          // Invoices cannot be created from here: an invoice only exists by
+          // converting an approved quotation (FR-I1), so the honest destination
+          // is this client's quotations, where the conversion action lives.
           <p className={styles.emptyList}>
-            No invoices yet.{' '}
-            <Link to={`/invoices/new?client=${client.id}`} className={styles.link}>
-              Create one
+            No invoices yet. Invoices are created from an approved quotation —{' '}
+            <Link to="/quotations" className={styles.link}>
+              see this client&rsquo;s quotations
             </Link>
             .
           </p>

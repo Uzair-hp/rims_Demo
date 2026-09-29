@@ -43,8 +43,9 @@ describe('routing', () => {
       '/clients/9',
       '/settings',
       '/no-such-page',
-      // Chrome-less print surface (§14.2). Still a real route with a real heading.
+      // Chrome-less print surfaces (§14.2). Still real routes with real headings.
       '/print/quotation/42',
+      '/print/invoice/7',
     ]
 
     for (const path of paths) {

@@ -36,6 +36,14 @@ import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
 import styles from './DocumentPaper.module.css'
 
+/**
+ * The official brand lockup shipped in `public/brand/`, used when Settings has no
+ * uploaded logo. It is the same source the sidebar and login page fall back to,
+ * and being a static asset it is precached by vite-plugin-pwa — so it is present
+ * for the print/PDF renderer, which does not share the app's JS lifecycle.
+ */
+const BUNDLED_LOGO = '/brand/logo.svg'
+
 /** Join the non-empty parts of an address into a single printable line. */
 function joinAddress(...parts) {
   return parts
@@ -77,12 +85,24 @@ export default function DocumentPaper({
   titleLevel: TitleLevel = 'h1',
   numberOverride = null,
   isUnsaved = false,
+  docKind = 'quotation',
 }) {
-  // §21.23: a missing or broken logo falls back to a typographic wordmark rather
-  // than leaving an empty brand slot. Tracked locally so an upload that fails to
-  // load degrades the same way as "no logo at all".
+  // §21.23: the brand mark degrades through three steps rather than disappearing.
+  // A configured upload wins; failing that we fall back to the bundled official
+  // vector, which is a static public asset and therefore always available to the
+  // browser's print/PDF renderer (an authenticated API route is a worse bet when
+  // the print pipeline fetches images). Only if that also fails do we fall back
+  // to a typographic wordmark.
   const [logoFailed, setLogoFailed] = useState(false)
-  const showLogo = Boolean(logoSrc) && !logoFailed
+  const logoSrcResolved = logoSrc || BUNDLED_LOGO
+  const showLogo = !logoFailed
+
+  // Phase 7: one sheet, two document kinds. The shared spine — header, client
+  // block, items, tax breakdown, terms, signatory, footer — is identical; only
+  // the title, the date pair and the money rows below the grand total differ.
+  const isInvoice = docKind === 'invoice'
+  const title = isInvoice ? 'Tax Invoice' : 'Quotation'
+  const documentLabel = isInvoice ? 'Invoice document' : 'Quotation document'
 
   const s = settings || {}
   const number = numberOverride || doc.number || ''
@@ -99,6 +119,12 @@ export default function DocumentPaper({
   const discountLabel = isPercentDiscount ? `Discount (${(doc.discount_bp || 0) / 100}%)` : 'Discount'
   const gstLabel = `GST ${(doc.gst_bp || 0) / 100}%`
 
+  // §11 figures. Computed server-side and passed through untouched — the sheet
+  // never re-derives money (D2). Defaulted so a quotation, which has neither,
+  // renders exactly as it did in Phase 6.
+  const paid = doc.paid_paise || 0
+  const outstanding = doc.outstanding_paise ?? Math.max(0, grandTotal - paid)
+
   const companyAddress = joinAddress(
     s.address_line1,
     s.address_line2,
@@ -106,14 +132,29 @@ export default function DocumentPaper({
   )
   const clientAddress = joinAddress(client.address, client.city, client.state, client.pincode)
 
+  // §8.4: an invoice prints the bank details and signatory it snapshotted at
+  // conversion. A quotation has no snapshot, so it falls back to live Settings.
+  const bank = doc.bank_snapshot || null
+  const signatory = doc.signatory_name || s.signatory_name || 'Authorised Signatory'
+  const bankLines = bank
+    ? [
+        bank.account_name && { label: 'Account name', value: bank.account_name },
+        bank.account_number && { label: 'Account number', value: bank.account_number },
+        bank.bank_name && { label: 'Bank', value: bank.bank_name },
+        bank.branch && { label: 'Branch', value: bank.branch },
+        bank.ifsc && { label: 'IFSC', value: bank.ifsc },
+        bank.upi_id && { label: 'UPI ID', value: bank.upi_id },
+      ].filter(Boolean)
+    : []
+
   return (
-    <article className={styles.paper} data-document-paper aria-label="Quotation document">
+    <article className={styles.paper} data-document-paper aria-label={documentLabel}>
       {/* 1. Header band: brand left, company contact right, gold rule beneath (§14.3). */}
       <header className={styles.header}>
         <div className={styles.brand}>
           {showLogo ? (
             <img
-              src={logoSrc}
+              src={logoSrcResolved}
               alt={`${s.company_name || 'Company'} logo`}
               className={styles.logo}
               onError={() => setLogoFailed(true)}
@@ -123,6 +164,11 @@ export default function DocumentPaper({
             // on a light surface — that is the contrast case §18.4 forbids.
             <span className={styles.wordmark}>{s.company_name || 'Ruchita Interiors'}</span>
           )}
+          {/* The company name is printed whether or not a logo loaded. It used to
+              be an either/or with the mark, which meant uploading a logo silently
+              removed the business name from every issued document (§14.3 asks for
+              both). */}
+          {showLogo ? <p className={styles.companyName}>{s.company_name || 'Ruchita Interiors'}</p> : null}
         </div>
 
         <div className={styles.company}>
@@ -141,16 +187,20 @@ export default function DocumentPaper({
       <div className={styles.titleStrip}>
         <div className={styles.dates}>
           <p className={styles.dateLine}>
-            <span className={styles.microLabel}>Date</span>
-            <span className={styles.dateValue}>{formatDate(doc.quotation_date) || '—'}</span>
+            <span className={styles.microLabel}>{isInvoice ? 'Issue date' : 'Date'}</span>
+            <span className={styles.dateValue}>
+              {formatDate(isInvoice ? doc.issue_date : doc.quotation_date) || '—'}
+            </span>
           </p>
           <p className={styles.dateLine}>
-            <span className={styles.microLabel}>Valid until</span>
-            <span className={styles.dateValue}>{formatDate(doc.valid_until) || '—'}</span>
+            <span className={styles.microLabel}>{isInvoice ? 'Due date' : 'Valid until'}</span>
+            <span className={styles.dateValue}>
+              {formatDate(isInvoice ? doc.due_date : doc.valid_until) || '—'}
+            </span>
           </p>
         </div>
         <div className={styles.heading}>
-          <TitleLevel className={styles.docTitle}>Quotation</TitleLevel>
+          <TitleLevel className={styles.docTitle}>{title}</TitleLevel>
           <p className={styles.docNumber}>{isUnsaved ? 'Draft — not yet saved' : number || 'Draft'}</p>
         </div>
       </div>
@@ -252,10 +302,39 @@ export default function DocumentPaper({
             <dt>Grand Total</dt>
             <dd>{formatPaise(grandTotal)}</dd>
           </div>
+          {/* §11: Amount Paid and Balance Due appear only on an invoice, and only
+              once the money has actually been recorded. */}
+          {isInvoice && paid > 0 ? (
+            <div className={styles.totalRow}>
+              <dt>Amount Paid</dt>
+              <dd>−{formatPaise(paid)}</dd>
+            </div>
+          ) : null}
+          {isInvoice ? (
+            <div className={`${styles.totalRow} ${styles.totalBalance}`}>
+              <dt>Balance Due</dt>
+              <dd>{formatPaise(outstanding)}</dd>
+            </div>
+          ) : null}
         </dl>
       </section>
 
-      {/* 6. Terms — the quotation's own snapshot, not the current default (§8.4). */}
+      {/* Bank / UPI details, from the snapshot taken at conversion (§8.4). */}
+      {isInvoice && bankLines.length > 0 ? (
+        <section className={styles.bank} data-document-bank>
+          <h2 className={styles.blockLabel}>Payment Details</h2>
+          <dl className={styles.bankRows}>
+            {bankLines.map((line) => (
+              <div key={line.label} className={styles.bankRow}>
+                <dt>{line.label}</dt>
+                <dd>{line.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+
+      {/* 6. Terms — the document's own snapshot, not the current default (§8.4). */}
       {doc.terms_text ? (
         <section className={styles.terms} data-document-terms>
           <h2 className={styles.blockLabel}>Terms &amp; Conditions</h2>
@@ -263,10 +342,11 @@ export default function DocumentPaper({
         </section>
       ) : null}
 
-      {/* 7. Signatory + 8. Footer, both read live from Settings (§15). */}
+      {/* 7. Signatory + 8. Footer. An invoice prints the signatory it snapshotted
+          at conversion; a quotation has no snapshot and reads live Settings. */}
       <section className={styles.signatory} data-document-signatory>
         <p className={styles.signatoryLabel}>For {s.company_name || 'Ruchita Interiors'}</p>
-        <p className={styles.signatoryName}>{s.signatory_name || 'Authorised Signatory'}</p>
+        <p className={styles.signatoryName}>{signatory}</p>
         <div className={styles.signatureLine} aria-hidden="true" />
       </section>
 
@@ -313,10 +393,11 @@ function ItemRow({ item, index }) {
         {item.description ? <span className={styles.itemDescription}>{item.description}</span> : null}
       </td>
       <td className={styles.colUnit}>{item.unit || ''}</td>
-      <td className={`${styles.colNum} ${styles.num}`}>
-        {milliToInput(item.qty_milli) || '0'}
-        {item.unit ? <span className={styles.unitSuffix}> {item.unit}</span> : null}
-      </td>
+      {/* Quantity only. The unit used to be repeated here as well as in its own
+          column, which contradicted the 14.3 column spec and — because this cell
+          is `white-space: nowrap` — made a two-word unit like "running ft" an
+          unbreakable token wide enough to widen the whole table. */}
+      <td className={`${styles.colNum} ${styles.num}`}>{milliToInput(item.qty_milli) || '0'}</td>
       <td className={`${styles.colNum} ${styles.num}`}>{formatPaise(item.rate_paise)}</td>
       <td className={`${styles.colNum} ${styles.num}`}>{formatPaise(lineTotal)}</td>
     </tr>

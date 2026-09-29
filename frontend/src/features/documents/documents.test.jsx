@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import DocumentPaper, { groupItemsByCategory } from './DocumentPaper.jsx'
 
 const SETTINGS = {
@@ -153,18 +153,41 @@ describe('DocumentPaper — identity and header', () => {
     expect(screen.getByText('GSTIN: 23ABCDE1234F1Z5')).toBeInTheDocument()
   })
 
-  it('falls back to the bundled wordmark when no logo is set (§21.23)', () => {
+  it('falls back to the typographic wordmark only if the mark cannot load (§21.23)', () => {
     render(<DocumentPaper document={quotation()} settings={SETTINGS} logoSrc={null} />)
 
-    // The company name serves as the wordmark, in place of an <img>.
+    // No configured logo, so the bundled brand vector stands in — the company name
+    // is printed underneath it, not swapped for it.
+    expect(screen.getByRole('img', { name: /logo/i })).toHaveAttribute('src', '/brand/logo.svg')
     expect(screen.getByText('Ruchita Interiors')).toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: /logo/i })).not.toBeInTheDocument()
   })
 
   it('renders the uploaded logo when one is set', () => {
     render(<DocumentPaper document={quotation()} settings={SETTINGS} logoSrc="/api/v1/uploads/logo?v=1" />)
 
     expect(screen.getByRole('img', { name: /logo/i })).toHaveAttribute('src', '/api/v1/uploads/logo?v=1')
+  })
+
+  it('prints the company name alongside the logo, not instead of it', () => {
+    // Regression: the brand slot used to be an either/or, so uploading a logo
+    // silently removed the business name from every printed document, where §14.3
+    // asks for both.
+    render(<DocumentPaper document={quotation()} settings={SETTINGS} logoSrc="/api/v1/uploads/logo?v=1" />)
+
+    expect(screen.getByRole('img', { name: /logo/i })).toBeInTheDocument()
+    expect(screen.getByText('Ruchita Interiors')).toBeInTheDocument()
+  })
+
+  it('falls back to the wordmark text if the mark fails to load', () => {
+    // Last resort in the three-step chain: a broken asset must still leave a
+    // legible business name rather than an empty header slot.
+    const { container } = render(
+      <DocumentPaper document={quotation()} settings={SETTINGS} logoSrc="/api/v1/uploads/logo?v=1" />,
+    )
+    fireEvent.error(container.querySelector('img'))
+
+    expect(screen.queryByRole('img', { name: /logo/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Ruchita Interiors')).toBeInTheDocument()
   })
 })
 
@@ -315,6 +338,57 @@ describe('DocumentPaper — terms, signatory and footer', () => {
 
     const terms = screen.getByRole('heading', { name: 'Terms & Conditions' }).parentElement
     expect(within(terms).getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('keeps every non-empty line of a multi-paragraph terms block', () => {
+    const paragraphs = quotation({
+      terms_text:
+        '1. 50% advance is required to begin work.\n' +
+        '2. Prices are valid for the stated validity period.\n' +
+        '\n' +
+        '3. Work begins on mutual agreement of drawings.\n' +
+        '4. Payment terms as per the invoice.',
+    })
+    render(<DocumentPaper document={paragraphs} settings={SETTINGS} />)
+
+    const terms = screen.getByRole('heading', { name: 'Terms & Conditions' }).parentElement
+    const items = within(terms).getAllByRole('listitem')
+    // The blank line is dropped; all four real lines survive, in order.
+    expect(items).toHaveLength(4)
+    expect(items.map((li) => li.textContent)).toEqual([
+      '1. 50% advance is required to begin work.',
+      '2. Prices are valid for the stated validity period.',
+      '3. Work begins on mutual agreement of drawings.',
+      '4. Payment terms as per the invoice.',
+    ])
+  })
+
+  it('places the terms section at the end of the document, after the totals', () => {
+    // The requirement that terms appear at the end of the printed quotation. This
+    // asserts document order, not just presence, so a future refactor cannot move
+    // the section above the totals and still pass.
+    const { container } = render(<DocumentPaper document={quotation()} settings={SETTINGS} />)
+
+    const terms = screen.getByRole('heading', { name: 'Terms & Conditions' })
+    const totals = document.querySelector('[data-document-totals]')
+    const signatory = document.querySelector('[data-document-signatory]')
+
+    expect(totals).toBeTruthy()
+    expect(signatory).toBeTruthy()
+    // Compare document position: the terms heading must come after the totals
+    // block and before the signatory, i.e. at the tail of the sheet.
+    expect(totals.compareDocumentPosition(terms) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(terms.compareDocumentPosition(signatory) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container.querySelector('footer')).toBeTruthy()
+  })
+
+  it('marks the terms section so the print layer can keep it off a page break', () => {
+    render(<DocumentPaper document={quotation()} settings={SETTINGS} />)
+
+    // The print stylesheet targets this attribute with `break-after: avoid` on the
+    // heading, so the hook has to exist for the rule to apply.
+    const terms = screen.getByRole('heading', { name: 'Terms & Conditions' }).parentElement
+    expect(terms.getAttribute('data-document-terms')).toBe('true')
   })
 
   it('renders the signatory and footer from settings', () => {

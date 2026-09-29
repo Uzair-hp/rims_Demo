@@ -1,0 +1,287 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.message {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.link {
+  color: var(--color-gold);
+  font-weight: var(--weight-medium);
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.expired {
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+
+.validUntil {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.itemsCard,
+.clientCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.table th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-subtle);
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.table td {
+  padding: var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-border);
+  color: var(--color-ink);
+  vertical-align: top;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.itemName {
+  display: block;
+  font-weight: var(--weight-medium);
+}
+
+.itemDesc {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-muted);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.blockText {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+  white-space: pre-wrap;
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.clientName {
+  margin: 0;
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+.clientMeta {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+/* Invoice-specific, on top of the shared quotation-detail layout above. */
+
+/* Document lifecycle status sits as text beside the payment badge: the badge is
+   the thing worth scanning, and two competing badges would be noise. */
+.docStatus {
+  padding-inline: var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-ink-muted);
+}
+
+.meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.cancelledNote {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* §4.4 FR-I6: paid and outstanding are what the user opened the invoice for, so
+   they get a dedicated strip rather than a line in the totals panel. */
+.moneyStrip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.moneyTile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.moneyLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.moneyValue {
+  font-size: var(--font-size-xl);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+/* Outstanding is the number the client owes. Amber, not red: unpaid is ordinary
+   business state, and §18.5 reserves danger for actual failures. */
+.moneyTileDue {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.moneyTileDue .moneyValue,
+.moneyTileDue .moneyLabel {
+  color: var(--color-warning);
+}
+
+.itemCat {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-ink-subtle);
+}
+
+.paymentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.paymentRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.paymentAmount {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.paymentMeta {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paymentDate {
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-subtle);
+}
+
+.emptyPayments {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.draftBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.draftActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+@media (min-width: 640px) {
+  .moneyStrip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+  }
+}

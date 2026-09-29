@@ -18,9 +18,9 @@
  *
  * The print routes are the other chrome-less surfaces (§14.2). They are
  * deliberately *outside* `AppShell` but still inside `RequireAuth` and
- * `SettingsProvider` — a quotation document needs the company settings row for
- * its header, signatory and footer, and it must not render a sidebar.
- * `/print/invoice/:id` arrives with Phase 7 and reuses `PrintQuotation`.
+ * `SettingsProvider` — a document needs the company settings row for
+ * its header and footer, and it must not render a sidebar. Both document kinds
+ * share the `PrintQuotation` shell.
  */
 import AppShell from '../components/layout/AppShell.jsx'
 import Clients, { ClientDetail } from '../pages/Clients.jsx'
@@ -59,6 +59,17 @@ export const routes = [
           <RequireAuth>
             <SettingsProvider>
               <PrintQuotation documentType="quotation" />
+            </SettingsProvider>
+          </RequireAuth>
+        ),
+      },
+      {
+        // The invoice sibling of the route above, same shell and same guards.
+        path: 'print/invoice/:id',
+        element: (
+          <RequireAuth>
+            <SettingsProvider>
+              <PrintQuotation documentType="invoice" />
             </SettingsProvider>
           </RequireAuth>
         ),

@@ -52,9 +52,21 @@
   }
 
   /* The sheet is already sized to the A4 content box, so on paper it loses the
-     screen-only paper treatment and becomes the page itself. */
+     screen-only paper treatment and becomes the page itself.
+
+     `inline-size: 100%` rather than a fixed millimetre value is deliberate: the
+     @page margins above already produce a 186mm content box, so 100% tracks the
+     browser's own rounding of that box instead of competing with it. Setting the
+     sheet to exactly 186mm gave the page zero tolerance, and any sub-pixel
+     rounding overflowed the printable area. `max-inline-size` is a backstop so a
+     long unbreakable run can never stretch the sheet past the page.
+
+     `overflow` is deliberately NOT set to hidden: that would hide the overflow
+     rather than fix it. The table's own `table-layout: fixed` is what stops the
+     content from overflowing in the first place. */
   [data-document-paper] {
-    inline-size: auto;
+    inline-size: 100%;
+    max-inline-size: 100%;
     margin: 0;
     padding: 0;
     border: 0;
@@ -70,8 +82,27 @@
   /* A row is never split across two pages. */
   [data-document-items] tr,
   [data-document-totals],
-  [data-document-terms],
   [data-document-signatory] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* The terms section is NOT given a blanket `break-inside: avoid`.
+     A quotation with a long terms block would be pushed wholesale onto a fresh
+     page, leaving a large gap — or a blank-looking page — before it. Instead the
+     heading is kept away from the page break so it can never dangle at the bottom
+     with its list stranded overleaf, and the list itself is free to flow across
+     pages. A short terms list still stays on one page naturally, because there is
+     nothing tall enough to need breaking. */
+  [data-document-terms] h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  [data-document-terms] li {
+    /* No single term is left alone at the foot of a page. */
+    orphans: 2;
+    widows: 2;
     break-inside: avoid;
     page-break-inside: avoid;
   }

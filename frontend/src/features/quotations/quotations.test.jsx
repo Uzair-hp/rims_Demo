@@ -24,6 +24,7 @@ import { statusLabel, STATUS_OPTIONS, ACTION_META } from './status.js'
 import { PAGE_SIZE } from './useQuotations.js'
 import { buildQuotationListQuery } from '../../api/endpoints/quotations.js'
 import ItemsEditor, { newItem } from './ItemsEditor.jsx'
+import { pickDefaultTerms } from './QuotationEditor.jsx'
 
 describe('calcLineTotal', () => {
   it('computes qty × rate / 1000 with half-up rounding', () => {
@@ -287,5 +288,46 @@ describe('ItemsEditor — per-item category (FR-Q2/Q3)', () => {
   it('preserves an existing category when the item loads', () => {
     render(<ItemsHarness initial={[newItem({ name: 'Sofa', category: 'Kitchen' })]} />)
     expect(screen.getByLabelText('Item 1 category').value).toBe('Kitchen')
+  })
+})
+
+/**
+ * FR-S4 / §15: a new document starts from the default terms for its scope.
+ *
+ * This is the rule behind the fix for printed quotations carrying no Terms &
+ * Conditions at all — a new quotation used to start with an empty terms field,
+ * saved `terms_text: null`, and the document had nothing to render.
+ */
+describe('pickDefaultTerms', () => {
+  const both = { id: 1, scope: 'both', is_default: true, body: 'Shared terms.' }
+  const quotationOnly = { id: 2, scope: 'quotation', is_default: true, body: 'Quotation terms.' }
+
+  it('prefers an exact-scope default over a shared one', () => {
+    expect(pickDefaultTerms([both, quotationOnly], 'quotation')).toBe('Quotation terms.')
+  })
+
+  it('falls back to the shared "both" default when there is no exact one', () => {
+    expect(pickDefaultTerms([both], 'quotation')).toBe('Shared terms.')
+  })
+
+  it('does not use an exact-scope default belonging to the other document type', () => {
+    const invoiceOnly = { id: 3, scope: 'invoice', is_default: true, body: 'Invoice terms.' }
+    expect(pickDefaultTerms([invoiceOnly], 'quotation')).toBe('')
+  })
+
+  it('ignores entries that are not flagged as the default', () => {
+    const notDefault = { id: 4, scope: 'quotation', is_default: false, body: 'Not the default.' }
+    expect(pickDefaultTerms([notDefault], 'quotation')).toBe('')
+  })
+
+  it('ignores a default with an empty body', () => {
+    const empty = { id: 5, scope: 'quotation', is_default: true, body: '' }
+    expect(pickDefaultTerms([empty], 'quotation')).toBe('')
+  })
+
+  it('returns an empty string for a missing or empty list', () => {
+    expect(pickDefaultTerms([], 'quotation')).toBe('')
+    expect(pickDefaultTerms(null, 'quotation')).toBe('')
+    expect(pickDefaultTerms(undefined, 'quotation')).toBe('')
   })
 })

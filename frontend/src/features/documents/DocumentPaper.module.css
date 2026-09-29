@@ -51,17 +51,32 @@
   min-inline-size: 0;
 }
 
-/* Height-capped, width-auto: an uploaded logo of unknown aspect ratio must never
-   stretch the header or push the contact block off the page. */
+/* Printed under the mark, never instead of it. The company name is the document's
+   strongest hierarchy cue, so it is the largest type on the sheet — above the
+   "QUOTATION"/"TAX INVOICE" title, which is now deliberately calmer. */
+.companyName {
+  margin: 2mm 0 0;
+  font-family: var(--font-display);
+  font-size: 18pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-ink);
+}
+
+/* Height-capped, width-auto: the bundled lockup is 1424x772.5 (~1.84:1), so this
+   scales it proportionally and never distorts it. `block-size: auto` is
+   deliberately absent — it would override the max-height and let the SVG fall
+   back to its intrinsic 772.5px height (the `a362c3e` ballooning bug).
+   `max-inline-size` keeps it inside narrow rails. */
 .logo {
-  max-block-size: 18mm;
+  max-block-size: 16mm;
   inline-size: auto;
-  max-inline-size: 70mm;
+  max-inline-size: 62mm;
 }
 
 .wordmark {
   font-family: var(--font-display);
-  font-size: 16pt;
+  font-size: 18pt;
   font-weight: var(--weight-semibold);
   line-height: var(--line-height-tight);
   color: var(--color-ink);
@@ -141,7 +156,10 @@
 .docTitle {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 20pt;
+  /* Reduced from 20pt: the company name in the header is now the largest type on
+     the sheet, so the document kind reads as a clear second and the header has a
+     proper hierarchy instead of the title out-shouting the business. */
+  font-size: 16pt;
   font-weight: var(--weight-semibold);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-wide);
@@ -202,8 +220,26 @@
  * 4. Items table
  * ------------------------------------------------------------------ */
 
+/*
+ * `table-layout: fixed` is the fix for the printed document being clipped left
+ * and right.
+ *
+ * With the default `auto` layout the browser sizes columns from their *content*,
+ * so the sheet's min-content width is the sum of every column's widest unbreakable
+ * run. The money cells are `white-space: nowrap`, so a six-figure amount such as
+ * "₹12,34,567.00" is one unbreakable token wider than its 22mm column, and a long
+ * unbroken product code in the item column does the same. Either one pushes the
+ * table past the A4 printable width and the overflow is clipped at the page edges.
+ *
+ * With a fixed layout the declared widths below are honoured exactly and long
+ * content wraps inside its column instead of expanding the table, so the sheet can
+ * no longer outgrow the page box. `overflow-wrap` on the item text supplies the
+ * wrapping that fixed layout relies on.
+ */
 .items {
   inline-size: 100%;
+  max-inline-size: 100%;
+  table-layout: fixed;
   margin-block: 4mm;
   border-collapse: collapse;
   font-size: 9pt;
@@ -234,12 +270,26 @@
   white-space: nowrap;
 }
 
+/* ------------------------------------------------------------------ *
+ * Column widths.
+ *
+ * Budget against the 186mm printable box (210mm A4 less the 12mm @page
+ * margins): fixed columns 8 + 22 + 16 + 3x23 = 115mm, plus 2mm of horizontal
+ * cell padding on each of the 7 columns = 14mm. That leaves ~57mm for the
+ * item column, which is the remainder `table-layout: fixed` hands out.
+ *
+ * The three money columns are the ones that must not be squeezed: at 9pt a
+ * grouped six-figure amount needs ~23mm to sit on one unwrapped line, and these
+ * cells are `white-space: nowrap` because the figures are the part of a
+ * quotation that must line up.
+ * ------------------------------------------------------------------ */
+
 .colIndex {
   inline-size: 8mm;
 }
 
 .colCategory {
-  inline-size: 24mm;
+  inline-size: 22mm;
   font-size: 8.5pt;
   color: var(--color-ink-muted);
 }
@@ -255,12 +305,14 @@
 }
 
 .colNum {
-  inline-size: 20mm;
+  inline-size: 23mm;
 }
 
 .itemName {
   display: block;
   font-weight: var(--weight-medium);
+  /* Fixed table layout depends on long words being breakable. */
+  overflow-wrap: anywhere;
 }
 
 .itemDescription {
@@ -270,11 +322,7 @@
   font-weight: var(--weight-regular);
   color: var(--color-ink-muted);
   white-space: pre-line;
-}
-
-.unitSuffix {
-  font-size: 8pt;
-  color: var(--color-ink-subtle);
+  overflow-wrap: anywhere;
 }
 
 /* Category grouping subheader (§14.3). Reads as a band, not as a data row, so
@@ -347,6 +395,68 @@
   font-size: 11pt;
   font-weight: var(--weight-bold);
   color: var(--color-gold-ink);
+}
+
+/* Balance Due is the number the client is actually asked for, so it gets the
+   heaviest weight on the sheet — but in ink, not gold: the grand-total row
+   already owns the brand moment (§18.4) and two gold rows would compete. */
+.totalBalance {
+  margin-block-start: 1mm;
+  padding-block-start: 1.5mm;
+  border-block-start: var(--border-width) solid var(--color-border-strong);
+}
+
+.totalBalance dt,
+.totalBalance dd {
+  font-size: 10.5pt;
+  font-weight: var(--weight-bold);
+  color: var(--color-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * Payment details (invoice only, §14.3)
+ * ------------------------------------------------------------------ */
+
+.bank {
+  margin-block-start: 5mm;
+  padding: 3mm 4mm;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.bankRows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1mm 6mm;
+  margin: 0;
+}
+
+.bankRow {
+  display: flex;
+  gap: 2mm;
+  align-items: baseline;
+  min-inline-size: 0;
+}
+
+.bankRow dt {
+  flex: 0 0 26mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.bankRow dd {
+  margin: 0;
+  font-size: 8.5pt;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+  /* A long account number wraps rather than pushing the card wider. */
+  overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------------------ *

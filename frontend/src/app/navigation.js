@@ -18,10 +18,16 @@ export const BOTTOM_NAV_ITEMS = [NAV_ITEMS[0], NAV_ITEMS[1], NAV_ITEMS[2]]
 
 export const MORE_NAV_ITEMS = [NAV_ITEMS[3], NAV_ITEMS[4]]
 
-/** New-button targets, ordered by usefulness (§18.6). */
+/**
+ * New-button targets, ordered by usefulness (§18.6).
+ *
+ * There is deliberately no "New invoice" entry: an invoice only ever exists by
+ * converting an approved quotation (FR-I1), so offering a direct create would
+ * point at a flow that does not exist. The quotations entry above is where new
+ * invoices actually come from.
+ */
 export const CREATE_ACTIONS = [
   { to: '/quotations/new', label: 'New quotation', icon: 'fileText' },
-  { to: '/invoices', label: 'New invoice', icon: 'receipt', hint: 'Phase 7' },
   { to: '/clients', label: 'New client', icon: 'user' },
 ]
 

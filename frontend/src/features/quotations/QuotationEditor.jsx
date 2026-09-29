@@ -23,6 +23,7 @@ import { useSettings } from '../settings/SettingsProvider.jsx'
 import ItemsEditor, { newItem } from './ItemsEditor.jsx'
 import TotalsPanel from './TotalsPanel.jsx'
 import { createQuotation, fetchQuotation, updateQuotation } from '../../api/endpoints/quotations.js'
+import { fetchTerms } from '../../api/endpoints/settings.js'
 import { calcLineTotal, calcTotals } from '../../lib/calc.js'
 import { paiseToInput, rupeesToPaise } from '../../lib/money.js'
 import { validateQuotation } from '../../lib/validation.js'
@@ -32,7 +33,31 @@ const AUTOSAVE_MS = 10000
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
-function emptyForm() {
+/**
+ * Pick the default terms body for a document type (FR-S4, §15).
+ *
+ * §15's rule for "one default per scope" is applied literally: an exact-scope
+ * default wins, and a `both` default is the shared fallback. That mirrors
+ * `_promote_default` in the backend settings service, so the editor and the
+ * server agree on which entry is "the" default.
+ *
+ * Exported so it can be unit-tested on its own — this is the rule that decides
+ * what a brand-new quotation starts with, and getting it wrong is what left
+ * printed quotations with no terms at all.
+ *
+ * @param {Array<{scope: string, is_default: boolean, body: string}>} terms
+ * @param {'quotation' | 'invoice'} scope
+ * @returns {string} the default body, or '' when none is configured
+ */
+export function pickDefaultTerms(terms, scope) {
+  if (!Array.isArray(terms) || terms.length === 0) return ''
+  const exact = terms.find((t) => t?.is_default && t?.scope === scope && t.body)
+  if (exact) return exact.body
+  const shared = terms.find((t) => t?.is_default && t?.scope === 'both' && t.body)
+  return shared ? shared.body : ''
+}
+
+function emptyForm(defaultTerms = '') {
   return {
     client: null,
     client_id: null,
@@ -44,7 +69,10 @@ function emptyForm() {
     gst_bp: 1800,
     other_charges_label: 'Other charges',
     other_charges_paise: 0,
-    terms_text: '',
+    // Seeded from Settings for a new document so the printed quotation carries
+    // terms (FR-S4). An existing quotation keeps whatever it was saved with —
+    // its terms are a snapshot and are never silently rewritten (§8.4).
+    terms_text: defaultTerms,
     notes: '',
     items: [newItem()],
   }
@@ -239,6 +267,40 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
     }
   }, [isEdit, quotationId])
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  /**
+   * Seed a brand-new quotation with the default terms (FR-S4, §15).
+   *
+   * Without this a new quotation started with an empty Terms box, so it saved with
+   * `terms_text: null` and the printed document had no Terms & Conditions section
+   * at all — the document renderer was correct, it simply had nothing to render.
+   *
+   * Three deliberate guards:
+   * - create mode only, so an existing quotation's snapshot is never rewritten;
+   * - only when the field is still empty, so a value the user has already typed
+   *   or a default that arrived first is not clobbered by a slower response;
+   * - `setForm` rather than `patch`, because this is seeded state, not a user
+   *   edit, and must not mark the form dirty or trip the autosave indicator.
+   */
+  useEffect(() => {
+    if (isEdit) return undefined
+    let cancelled = false
+    fetchTerms()
+      .then((data) => {
+        if (cancelled) return
+        const list = Array.isArray(data) ? data : data?.terms || []
+        const body = pickDefaultTerms(list, 'quotation')
+        if (!body) return
+        setForm((f) => (f.terms_text ? f : { ...f, terms_text: body }))
+      })
+      .catch(() => {
+        // §20: settings being unreachable leaves an empty Terms box, which the
+        // user can fill in. It is not worth surfacing an error for.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isEdit])
 
   const totals = useMemo(
     () =>
