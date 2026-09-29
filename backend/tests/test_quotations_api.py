@@ -137,6 +137,27 @@ def test_fixed_discount_and_other_charges(authed_client):
     assert q["grand_total_paise"] == 4_745_000
 
 
+def test_fixed_discount_exceeding_subtotal_is_422(authed_client):
+    # Subtotal is 5_000_000 paise (see _quotation_payload). A fixed discount
+    # larger than that is a validation error (§10.3) — it must return
+    # 422 VALIDATION_ERROR, not a 500 from an unhandled ValueError.
+    c = _make_client(authed_client)
+    resp = authed_client.post(
+        "/api/v1/quotations",
+        json=_quotation_payload(
+            c["id"],
+            discount_type="fixed",
+            discount_bp=0,
+            discount_fixed_paise=6_000_000,
+        ),
+        headers=_csrf(authed_client),
+    )
+    assert resp.status_code == 422, resp.get_data(as_text=True)
+    body = resp.get_json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert "exceed" in body["error"]["message"].lower()
+
+
 # ------------------------------------------------------------------- validation
 
 

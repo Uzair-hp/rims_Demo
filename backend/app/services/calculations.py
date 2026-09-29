@@ -179,6 +179,22 @@ def validate_document(
         fixed = discount_fixed_paise or 0
         if fixed < 0:
             errors.append("Fixed discount cannot be negative")
+        else:
+            # A fixed discount larger than the subtotal is a validation error
+            # (§10.3), not a 500. Compute the subtotal with the same line math
+            # the recompute step uses so this check matches the stored totals.
+            # `calculate_discount` still guards this as defence-in-depth, but by
+            # validating here the API returns 422 VALIDATION_ERROR instead of
+            # letting a bare ValueError fall through to the 500 handler.
+            subtotal = sum(
+                calculate_line_total(
+                    max(0, item.get("qty_milli", 0)),
+                    max(0, item.get("rate_paise", 0)),
+                ).line_total_paise
+                for item in line_items
+            )
+            if fixed > subtotal:
+                errors.append("Discount cannot exceed subtotal")
 
     if gst_bp < 0 or gst_bp > 2800:
         errors.append("GST must be between 0% and 28%")
