@@ -116,16 +116,27 @@ class Settings:
     # authenticated API route rather than by the web server directly.
     UPLOADS_DIR = os.getenv("UPLOADS_DIR", str(BACKEND_ROOT / "uploads"))
     LOGO_SUBDIR = "branding"
+    # The payment QR (§8.5) gets its own subdirectory so clearing a logo can never
+    # unlink a QR, and vice versa.
+    PAYMENT_QR_SUBDIR = "payment-qr"
 
     # §15/§16 upload policy: images only (PNG/JPEG/WEBP - SVG is rejected for XSS),
     # ≤ 2 MB, validated by extension + MIME + magic bytes, stored under a UUID name.
-    LOGO_MAX_SIZE_BYTES = _as_int("LOGO_MAX_SIZE_BYTES", 2 * 1024 * 1024)
-    LOGO_ALLOWED_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "webp"})
-    LOGO_ALLOWED_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+    #
+    # The logo and the payment QR share one policy: both are small raster images
+    # the owner uploads through the same control, and a second copy of the rules
+    # would be free to drift. Slot-specific names below stay for .env compatibility.
+    IMAGE_UPLOAD_MAX_SIZE_BYTES = _as_int("IMAGE_UPLOAD_MAX_SIZE_BYTES", 2 * 1024 * 1024)
+    IMAGE_UPLOAD_ALLOWED_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "webp"})
+    IMAGE_UPLOAD_ALLOWED_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+
+    LOGO_MAX_SIZE_BYTES = _as_int("LOGO_MAX_SIZE_BYTES", IMAGE_UPLOAD_MAX_SIZE_BYTES)
+    LOGO_ALLOWED_EXTENSIONS = IMAGE_UPLOAD_ALLOWED_EXTENSIONS
+    LOGO_ALLOWED_MIME_TYPES = IMAGE_UPLOAD_ALLOWED_MIME_TYPES
 
     API_PREFIX = "/api/v1"
     APP_VERSION = "1.0.0"
-    PHASE = 7
+    PHASE = 8
 
 
 settings = Settings()

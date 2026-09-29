@@ -147,3 +147,149 @@ def test_serving_without_logo_is_404(authed_client):
 
 def test_logo_endpoints_require_authentication(client):
     assert client.get("/api/v1/uploads/logo").status_code == 401
+
+
+# ------------------------------------------------------------- Phase 8 QR
+
+
+def _upload_qr(client, data: bytes, filename: str, mimetype: str):
+    header = _csrf(client)
+    return client.post(
+        "/api/v1/settings/payment-qr",
+        data={"payment_qr": (io.BytesIO(data), filename, mimetype)},
+        content_type="multipart/form-data",
+        headers=header,
+    )
+
+
+def test_payment_qr_upload_succeeds_and_is_served(authed_client):
+    response = _upload_qr(authed_client, _png_bytes(), "qr.png", "image/png")
+    assert response.status_code == 200, response.get_data(as_text=True)
+    qr_path = response.get_json()["data"]["payment_qr_path"]
+    assert qr_path.endswith(".png")
+    # Its own subdirectory, so clearing a logo can never unlink the QR (§8.5).
+    assert qr_path.startswith("payment-qr/")
+
+    served = authed_client.get("/api/v1/uploads/payment-qr")
+    assert served.status_code == 200
+    assert served.headers["Content-Type"].startswith("image/png")
+    assert bytes(served.data).startswith(b"\x89PNG")
+
+
+def test_payment_qr_is_reported_in_settings(authed_client):
+    """The invoice render reads the QR through the settings payload (§8.5)."""
+    _upload_qr(authed_client, _png_bytes(), "qr.png", "image/png")
+    payload = authed_client.get("/api/v1/settings/company").get_json()["data"]["settings"]
+    assert payload["payment_qr_path"].endswith(".png")
+
+
+def test_payment_qr_rejects_svg(authed_client):
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    response = _upload_qr(authed_client, svg, "qr.svg", "image/svg+xml")
+
+    assert response.status_code == 422
+    error = response.get_json()["error"]
+    assert "SVG" in error["message"] or "PNG" in error["message"]
+    # The error field is the QR slot, not the logo's.
+    assert error["details"][0]["field"] == "payment_qr"
+
+
+def test_payment_qr_rejects_a_forged_png(authed_client):
+    assert _upload_qr(authed_client, b"not an image", "qr.png", "image/png").status_code == 422
+
+
+def test_payment_qr_replace_removes_the_previous_file(authed_client):
+    first = _upload_qr(authed_client, _png_bytes(), "qr.png", "image/png")
+    first_path = first.get_json()["data"]["payment_qr_path"]
+
+    second = _upload_qr(authed_client, _png_bytes(color=(10, 20, 30)), "qr2.png", "image/png")
+    second_path = second.get_json()["data"]["payment_qr_path"]
+    assert second_path != first_path
+
+    from pathlib import Path
+
+    from flask import current_app
+
+    with authed_client.application.app_context():
+        root = Path(current_app.config["UPLOADS_DIR"])
+        assert not (root / first_path).exists()
+        assert (root / second_path).exists()
+
+
+def test_payment_qr_delete_removes_file_and_reference(authed_client):
+    uploaded = _upload_qr(authed_client, _png_bytes(), "qr.png", "image/png")
+    qr_path = uploaded.get_json()["data"]["payment_qr_path"]
+
+    deleted = authed_client.delete("/api/v1/settings/payment-qr", headers=_csrf(authed_client))
+    assert deleted.status_code == 200
+
+    from pathlib import Path
+
+    from flask import current_app
+
+    with authed_client.application.app_context():
+        assert CompanySettings.get_row().payment_qr_path is None
+        assert not (Path(current_app.config["UPLOADS_DIR"]) / qr_path).exists()
+
+    assert authed_client.get("/api/v1/uploads/payment-qr").status_code == 404
+
+
+def test_serving_without_payment_qr_is_404(authed_client):
+    assert authed_client.get("/api/v1/uploads/payment-qr").status_code == 404
+
+
+def test_payment_qr_endpoints_require_authentication(client):
+    assert client.get("/api/v1/uploads/payment-qr").status_code == 401
+    assert client.post(
+        "/api/v1/settings/payment-qr",
+        data={"payment_qr": (io.BytesIO(_png_bytes()), "qr.png", "image/png")},
+        content_type="multipart/form-data",
+    ).status_code == 401
+    assert client.delete("/api/v1/settings/payment-qr").status_code == 401
+
+
+def test_payment_qr_upload_requires_a_csrf_token(authed_client):
+    """Phase 8's mutating QR routes are `@csrf_protect` (§16)."""
+    response = authed_client.post(
+        "/api/v1/settings/payment-qr",
+        data={"payment_qr": (io.BytesIO(_png_bytes()), "qr.png", "image/png")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 403
+
+
+def test_payment_qr_is_not_writable_through_put_settings(authed_client):
+    """`payment_qr_path` changes only via the upload/delete routes, never by JSON."""
+    response = authed_client.put(
+        "/api/v1/settings/company",
+        json={"payment_qr_path": "payment-qr/forged.png"},
+        headers=_csrf(authed_client),
+    )
+    assert response.status_code == 200
+    assert CompanySettings.get_row().payment_qr_path is None
+
+
+def test_logo_and_qr_are_independent_slots(authed_client):
+    """Uploading a QR must not disturb an existing logo, and vice versa."""
+    logo = authed_client.post(
+        "/api/v1/settings/logo",
+        data={"logo": (io.BytesIO(_png_bytes()), "logo.png", "image/png")},
+        content_type="multipart/form-data",
+        headers=_csrf(authed_client),
+    )
+    logo_path = logo.get_json()["data"]["logo_path"]
+
+    _upload_qr(authed_client, _png_bytes(), "qr.png", "image/png")
+
+    from pathlib import Path
+
+    from flask import current_app
+
+    row = CompanySettings.get_row()
+    assert row.logo_path == logo_path
+    assert row.payment_qr_path is not None
+    with authed_client.application.app_context():
+        assert (Path(current_app.config["UPLOADS_DIR"]) / logo_path).exists()
+
+    authed_client.delete("/api/v1/settings/payment-qr", headers=_csrf(authed_client))
+    assert CompanySettings.get_row().logo_path == logo_path

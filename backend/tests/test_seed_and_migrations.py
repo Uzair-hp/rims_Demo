@@ -100,6 +100,12 @@ def test_migration_downgrade_upgrade_cycle(tmp_path):
             "company_settings",
         }
         assert expected.issubset(set(inspector.get_table_names()))
+        # Phase 8: the column the new migration adds must be present, or the
+        # table-name subset above would still pass with a migration that did
+        # nothing.
+        assert "payment_qr_path" in {
+            col["name"] for col in inspector.get_columns("company_settings")
+        }
 
         downgrade(revision="base")
         inspector = inspect(db.engine)
@@ -108,3 +114,7 @@ def test_migration_downgrade_upgrade_cycle(tmp_path):
         upgrade()
         inspector = inspect(db.engine)
         assert expected.issubset(set(inspector.get_table_names()))
+        # The column must come back on the way up again, or the cycle is lossy.
+        assert "payment_qr_path" in {
+            col["name"] for col in inspector.get_columns("company_settings")
+        }

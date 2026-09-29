@@ -77,6 +77,35 @@ from either is final.
 | POST   | `/api/v1/settings/logo`  | cookie + CSRF | Multipart upload, field `logo`         |
 | DELETE | `/api/v1/settings/logo`  | cookie + CSRF | Remove the stored logo                  |
 | GET    | `/api/v1/uploads/logo`   | cookie  | The stored logo file (long cache)       |
+| POST   | `/api/v1/settings/payment-qr` | cookie + CSRF | Multipart upload, field `payment_qr` |
+| DELETE | `/api/v1/settings/payment-qr` | cookie + CSRF | Remove the stored payment QR        |
+| GET    | `/api/v1/uploads/payment-qr`  | cookie  | The stored payment QR (long cache)   |
+
+### Payments (Phase 8)
+
+A payment is a row. Everything an invoice reports about money — `payment_status`,
+`paid_paise`, `outstanding_paise` — is derived from the payment rows on every
+serialization, so no endpoint ever accepts or returns a stored total.
+
+| Method | Path                          | Guard            | Notes                                             |
+| ------ | ----------------------------- | ---------------- | ------------------------------------------------- |
+| GET    | `/api/v1/invoices/:id/payments` | cookie         | History, newest first (`paid_on DESC, id DESC`)   |
+| POST   | `/api/v1/invoices/:id/payments` | cookie + CSRF  | `{amount_paise, method, paid_on?, reference?, notes?}` |
+| DELETE | `/api/v1/payments/:id`          | cookie + CSRF  | Deletes the row and recalculates the invoice      |
+
+`POST` and `DELETE` both return the **re-serialized invoice** alongside the
+affected payment, so a client never recomputes a money figure locally.
+
+An amount above the outstanding balance is rejected with `422`, not clamped. The
+outstanding is re-read inside the write, so two concurrent payments cannot both
+succeed against a stale pre-check. Only `issued` invoices accept a payment
+(§11), and only an invoice with no payments can be cancelled.
+
+`payment_qr_path` is readable through `GET /settings/company` but is **not**
+writable through `PUT /settings/company`; it changes only via the upload and
+delete routes above. It is deliberately absent from `Invoice.bank_snapshot` — see
+the Phase 8 section of `docs/phases.md` for why a QR is exempt from §8.4
+immutability while the bank text is not.
 
 `GET /api/v1/health` is deliberately database-free so it can report "is the API
 up" without touching data:

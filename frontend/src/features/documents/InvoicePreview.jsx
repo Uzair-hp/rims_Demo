@@ -23,9 +23,17 @@ import styles from './InvoicePreview.module.css'
  *   document: object,
  *   settings?: object,
  *   logoSrc?: string | null,
+ *   qrSrc?: string | null,
  * }} props
  */
-export default function InvoicePreview({ open, onClose, document: doc, settings = null, logoSrc = null }) {
+export default function InvoicePreview({
+  open,
+  onClose,
+  document: doc,
+  settings = null,
+  logoSrc = null,
+  qrSrc = null,
+}) {
   const navigate = useNavigate()
 
   return (
@@ -36,6 +44,7 @@ export default function InvoicePreview({ open, onClose, document: doc, settings 
             document={doc}
             settings={settings}
             logoSrc={logoSrc}
+            qrSrc={qrSrc}
             titleLevel="h2"
             docKind="invoice"
           />

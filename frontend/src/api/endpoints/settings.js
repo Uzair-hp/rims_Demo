@@ -35,6 +35,16 @@ export const uploadLogo = (file) => {
 /** DELETE /settings/logo → remove the stored logo. */
 export const removeLogo = () => del('/settings/logo').then((body) => body.data)
 
+/** POST /settings/payment-qr (multipart) → upload a new payment QR. */
+export const uploadPaymentQr = (file) => {
+  const form = new FormData()
+  form.append('payment_qr', file)
+  return post('/settings/payment-qr', form).then((body) => body.data)
+}
+
+/** DELETE /settings/payment-qr → remove the stored payment QR. */
+export const removePaymentQr = () => del('/settings/payment-qr').then((body) => body.data)
+
 /**
  * URL of the stored logo, or null when none is set.
  *
@@ -47,4 +57,21 @@ export const logoImageUrl = (settings) => {
   const version = settings.updated_at || ''
   const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
   return `${base.replace(/\/+$/, '')}/uploads/logo?v=${encodeURIComponent(version)}`
+}
+
+/**
+ * URL of the live payment QR, or null when none is set (§8.5).
+ *
+ * Deliberately resolved from the *live* settings row on every render rather
+ * than from `Invoice.bank_snapshot`. The bank text is snapshotted because it
+ * states the terms an invoice was issued under; a QR is a payment *instruction*
+ * that can change (new account, closed UPI handle). A snapshot would keep
+ * printing a QR that sends money to the wrong place, so the QR is read live and
+ * an invoice is the only document that shows one — a quotation is not payable.
+ */
+export const paymentQrImageUrl = (settings) => {
+  if (!settings?.payment_qr_path) return null
+  const version = settings.updated_at || ''
+  const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  return `${base.replace(/\/+$/, '')}/uploads/payment-qr?v=${encodeURIComponent(version)}`
 }

@@ -52,6 +52,10 @@ class CompanySettings(db.Model):
     company_name = db.Column(db.String(200), nullable=False, server_default="Ruchita Interiors")
     tagline = db.Column(db.String(200))
     logo_path = db.Column(db.String(255))
+    # UPI QR code shown on invoice documents. Read live at render time rather than
+    # snapshotted onto an invoice: it is a payment instruction, and a stale QR
+    # could point a paying client at a closed or wrong account.
+    payment_qr_path = db.Column(db.String(255))
     phone = db.Column(db.String(32))
     email = db.Column(db.String(254))
     website = db.Column(db.String(200))
@@ -140,6 +144,7 @@ class CompanySettings(db.Model):
             "company_name": self.company_name,
             "tagline": self.tagline,
             "logo_path": self.logo_path,
+            "payment_qr_path": self.payment_qr_path,
             "phone": self.phone,
             "email": self.email,
             "website": self.website,

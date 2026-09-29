@@ -12,7 +12,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { fetchCompanySettings, logoImageUrl } from '../../api/endpoints/settings.js'
+import { fetchCompanySettings, logoImageUrl, paymentQrImageUrl } from '../../api/endpoints/settings.js'
 
 const SettingsContext = createContext(null)
 
@@ -74,6 +74,13 @@ export function SettingsProvider({ children }) {
       isLoading: status === INITIAL_STATUS,
       isError: status === 'error',
       logoSrc: logoImageUrl(settings),
+      /**
+       * Live payment QR (§8.5). Derived from the same settings row, so uploading
+       * or replacing the QR is a normal `refresh()` and every consumer — the
+       * Settings preview, the invoice preview and the printed document — picks
+       * up the new code at once. Never read from a document's bank snapshot.
+       */
+      qrSrc: paymentQrImageUrl(settings),
       refresh: load,
       /** Merge a freshly saved row into local state without a round trip. */
       applySettings: (row) => {

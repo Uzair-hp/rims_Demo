@@ -1,18 +1,25 @@
 """
-Ruchita Interiors — logo upload & serving endpoints (§9.2, §15, §16).
+Ruchita Interiors — image upload & serving endpoints (§9.2, §15, §16).
 
-    POST   /api/v1/settings/logo  (multipart) -> validate + store + remember
-    GET    /api/v1/uploads/logo              -> the stored file (long cache)
-    DELETE /api/v1/settings/logo             -> remove it
+    POST   /api/v1/settings/logo        (multipart) -> validate + store + remember
+    GET    /api/v1/uploads/logo                 -> the stored file (long cache)
+    DELETE /api/v1/settings/logo                -> remove it
+    POST   /api/v1/settings/payment-qr   (multipart) -> validate + store + remember
+    GET    /api/v1/uploads/payment-qr            -> the stored file (long cache)
+    DELETE /api/v1/settings/payment-qr           -> remove it
 
 Upload policy (§15/§16): PNG/JPEG/WEBP only, ≤ 2 MB, checked by extension +
-MIME + magic bytes, stored under a UUID name in `uploads/branding/` outside the
-static folder. **SVG is rejected on purpose**: an SVG can carry script, and it
-would be rendered same-origin in the app shell and on every printed document.
+MIME + magic bytes, stored under a UUID name outside the static folder.
+**SVG is rejected on purpose**: an SVG can carry script, and it would be rendered
+same-origin in the app shell and on every printed document.
 
-`GET /uploads/logo` is authenticated like every other endpoint (§16 "served via
-authenticated API route") but allows long browser caching, because a logo file's
-name changes whenever its content does.
+The logo (§15) and the payment QR (§8.5) are the same kind of asset — a small
+owner-supplied raster image behind an authenticated route — so they share one
+policy and one validation gauntlet rather than two copies free to drift.
+
+`GET /uploads/...` is authenticated like every other endpoint (§16 "served via
+authenticated API route") but allows long browser caching, because a stored
+file's name changes whenever its content does.
 """
 
 from __future__ import annotations
@@ -20,11 +27,19 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from flask import Blueprint, current_app, send_file
+from flask import Blueprint, current_app, request, send_file
 from PIL import Image, UnidentifiedImageError
 
 from app.models import CompanySettings
-from app.services.settings import clear_logo, set_logo_path
+from app.services.csrf import csrf_protect
+from app.services.settings import (
+    clear_logo,
+    clear_payment_qr,
+    logo_absolute_path,
+    payment_qr_absolute_path,
+    set_logo_path,
+    set_payment_qr_path,
+)
 from app.utils.errors import not_found, success, validation_error
 from app.utils.guards import login_required
 
@@ -40,85 +55,66 @@ _MAGIC = {
     "webp": (b"RIFF", {"image/webp"}),
 }
 
-_DOWNLOAD_NAMES = {"png": "logo.png", "jpg": "logo.jpg", "jpeg": "logo.jpg", "webp": "logo.webp"}
-
-
 @uploads_bp.post("/settings/logo")
 @login_required
 def upload_logo():
-    file = _uploaded_file()
-    extension = _validate(file)
-
-    branding_dir = Path(current_app.config["UPLOADS_DIR"]) / current_app.config.get("LOGO_SUBDIR", "branding")
-    branding_dir.mkdir(parents=True, exist_ok=True)
-
-    # A UUID name: the client never controls the path, and re-uploads do not
-    # collide. The old file is removed after the new one is committed.
-    stored_name = f"{uuid.uuid4().hex}.{extension}"
-    target = branding_dir / stored_name
-
-    previous = CompanySettings.get_row().logo_path
-    previous_file = None
-    if previous:
-        candidate = (branding_dir / Path(previous).name).resolve()
-        if branding_dir.resolve() in candidate.parents:
-            previous_file = candidate
-
-    file.save(target)
-    try:
-        set_logo_path(f"{current_app.config.get('LOGO_SUBDIR', 'branding')}/{stored_name}")
-    except Exception:
-        # The row write failed; do not leave an orphan file behind.
-        target.unlink(missing_ok=True)
-        raise
-    if previous_file and previous_file.is_file():
-        previous_file.unlink(missing_ok=True)
-
-    return success({"logo_path": f"{current_app.config.get('LOGO_SUBDIR', 'branding')}/{stored_name}"})
+    return _store_image("logo")
 
 
 @uploads_bp.get("/uploads/logo")
 @login_required
 def serve_logo():
-    path = _stored_logo_path()
-    if path is None:
-        raise not_found("No logo has been uploaded yet.")
-
-    extension = path.suffix.lower().lstrip(".")
-    if extension not in _MAGIC:
-        raise not_found("The stored logo has an unsupported format.")
-    mimetype = next(iter(_MAGIC[extension][1]))
-    response = send_file(path, mimetype=mimetype, conditional=True)
-    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    return response
+    return _serve_image("logo")
 
 
 @uploads_bp.delete("/settings/logo")
 @login_required
 def delete_logo():
-    path = _stored_logo_path()
-    if path is not None and path.is_file():
-        path.unlink(missing_ok=True)
-    clear_logo()
-    return success({"deleted": True})
+    return _remove_image("logo", clear_logo, logo_absolute_path)
+
+
+# ---------------------------------------------------------------- payment QR
+#
+# The QR is a *live* payment instruction, read from CompanySettings on every
+# invoice render — it is never copied into `Invoice.bank_snapshot`. Snapshotting
+# it would mean a re-issued or re-sent document could still show a QR for an
+# account that has been closed or changed.
+
+
+@uploads_bp.post("/settings/payment-qr")
+@login_required
+@csrf_protect
+def upload_payment_qr():
+    return _store_image("payment_qr")
+
+
+@uploads_bp.get("/uploads/payment-qr")
+@login_required
+def serve_payment_qr():
+    return _serve_image("payment_qr")
+
+
+@uploads_bp.delete("/settings/payment-qr")
+@login_required
+@csrf_protect
+def delete_payment_qr():
+    return _remove_image("payment_qr", clear_payment_qr, payment_qr_absolute_path)
 
 
 # --------------------------------------------------------------------- helpers
 
 
-def _uploaded_file():
-    from flask import request
-
-    file = request.files.get("logo")
+def _uploaded_file(field: str, label: str):
+    file = request.files.get(field)
     if file is None or not file.filename:
         raise validation_error(
-            "Choose a logo file to upload.",
-            [{"field": "logo", "message": "A file is required."}],
+            f"Choose a {label} file to upload.",
+            [{"field": field, "message": "A file is required."}],
         )
     return file
 
 
-def _validate(file) -> str:
+def _validate(file, *, field: str, label: str) -> str:
     """
     Full §16 gauntlet; returns the normalized extension on success.
 
@@ -127,35 +123,38 @@ def _validate(file) -> str:
     """
     filename = file.filename or ""
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if extension not in current_app.config["LOGO_ALLOWED_EXTENSIONS"]:
+    if extension not in current_app.config["IMAGE_UPLOAD_ALLOWED_EXTENSIONS"]:
         raise validation_error(
-            "The logo must be a PNG, JPEG or WEBP image. SVG files are not accepted for security reasons.",
-            [{"field": "logo", "message": "Use a PNG, JPEG or WEBP file."}],
+            f"The {label} must be a PNG, JPEG or WEBP image. SVG files are not accepted for security reasons.",
+            [{"field": field, "message": "Use a PNG, JPEG or WEBP file."}],
         )
 
     declared = (file.mimetype or "").lower()
-    if declared and declared not in current_app.config["LOGO_ALLOWED_MIME_TYPES"]:
+    # `image/jpg` and `image/pjpeg` are the two common non-standard spellings of
+    # JPEG that browsers and scanners emit; they are covered by the magic check.
+    accepted_mimes = current_app.config["IMAGE_UPLOAD_ALLOWED_MIME_TYPES"] | {"image/jpg", "image/pjpeg"}
+    if declared and declared not in accepted_mimes:
         raise validation_error(
             "That file is not an accepted image type.",
-            [{"field": "logo", "message": "The file type is not an accepted image."}],
+            [{"field": field, "message": "The file type is not an accepted image."}],
         )
 
     blob = file.read()
     file.seek(0)
     if len(blob) == 0:
-        raise validation_error("The file is empty.", [{"field": "logo", "message": "The file is empty."}])
-    if len(blob) > current_app.config["LOGO_MAX_SIZE_BYTES"]:
-        limit_mb = current_app.config["LOGO_MAX_SIZE_BYTES"] // (1024 * 1024)
+        raise validation_error("The file is empty.", [{"field": field, "message": "The file is empty."}])
+    if len(blob) > current_app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"]:
+        limit_mb = current_app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"] // (1024 * 1024)
         raise validation_error(
-            f"The logo must be {limit_mb} MB or smaller.",
-            [{"field": "logo", "message": f"Keep the file under {limit_mb} MB."}],
+            f"The {label} must be {limit_mb} MB or smaller.",
+            [{"field": field, "message": f"Keep the file under {limit_mb} MB."}],
         )
 
     magic, _allowed_mimes = _MAGIC[extension]
     if not blob.startswith(magic):
         raise validation_error(
             "The file's contents do not match its extension.",
-            [{"field": "logo", "message": "That file is not a valid image."}],
+            [{"field": field, "message": "That file is not a valid image."}],
         )
 
     # WEBP is a RIFF container; the magic check above only proves "RIFF". Look
@@ -163,7 +162,7 @@ def _validate(file) -> str:
     if extension == "webp" and blob[8:12] != b"WEBP":
         raise validation_error(
             "The file's contents do not match its extension.",
-            [{"field": "logo", "message": "That file is not a valid image."}],
+            [{"field": field, "message": "That file is not a valid image."}],
         )
 
     # Final decode check: Pillow opens and verifies the image, which rejects
@@ -174,7 +173,7 @@ def _validate(file) -> str:
     except (UnidentifiedImageError, OSError, ValueError):
         raise validation_error(
             "The file's contents do not match its extension.",
-            [{"field": "logo", "message": "That file is not a valid image."}],
+            [{"field": field, "message": "That file is not a valid image."}],
         )
     finally:
         file.seek(0)
@@ -182,10 +181,73 @@ def _validate(file) -> str:
     return extension
 
 
-def _stored_logo_path():
-    from app.services.settings import logo_absolute_path
+def _store_image(slot: str):
+    """
+    Validate, save and remember one image slot; returns `{f"{slot}_path": ...}`.
 
+    `slot` is "logo" or "payment_qr". The write order is deliberate: the file is
+    saved first, the row is committed second, and a failed commit unlinks the
+    new file so a rejected upload never leaves an orphan on disk. The previous
+    file is only unlinked *after* the new row is committed, so a failure at any
+    point leaves the slot pointing at a file that still exists.
+    """
+    subdir_key = f"{slot.upper()}_SUBDIR"
+    subdir = current_app.config.get(subdir_key, "branding")
+    label = "payment QR" if slot == "payment_qr" else "logo"
+
+    file = _uploaded_file(slot, label)
+    extension = _validate(file, field=slot, label=label)
+
+    target_dir = Path(current_app.config["UPLOADS_DIR"]) / subdir
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # A UUID name: the client never controls the path, and re-uploads do not
+    # collide.
+    stored_name = f"{uuid.uuid4().hex}.{extension}"
+    target = target_dir / stored_name
+    relative_path = f"{subdir}/{stored_name}"
+
+    previous = getattr(CompanySettings.get_row(), f"{slot}_path")
+    previous_file = None
+    if previous:
+        candidate = (target_dir / Path(previous).name).resolve()
+        if target_dir.resolve() in candidate.parents:
+            previous_file = candidate
+
+    setter = set_payment_qr_path if slot == "payment_qr" else set_logo_path
+    file.save(target)
     try:
-        return logo_absolute_path()
+        setter(relative_path)
     except Exception:
-        return None
+        # The row write failed; do not leave an orphan file behind.
+        target.unlink(missing_ok=True)
+        raise
+    if previous_file and previous_file.is_file():
+        previous_file.unlink(missing_ok=True)
+
+    return success({f"{slot}_path": relative_path})
+
+
+def _serve_image(slot: str):
+    """Serve the current file for a slot with a long immutable cache."""
+    resolver = payment_qr_absolute_path if slot == "payment_qr" else logo_absolute_path
+    label = "payment QR" if slot == "payment_qr" else "logo"
+    path = resolver()
+    if path is None:
+        raise not_found(f"No {label} has been uploaded yet.")
+
+    extension = path.suffix.lower().lstrip(".")
+    if extension not in _MAGIC:
+        raise not_found(f"The stored {label} has an unsupported format.")
+    mimetype = next(iter(_MAGIC[extension][1]))
+    response = send_file(path, mimetype=mimetype, conditional=True)
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+def _remove_image(slot: str, clearer, resolver):
+    path = resolver()
+    if path is not None and path.is_file():
+        path.unlink(missing_ok=True)
+    clearer()
+    return success({"deleted": True})

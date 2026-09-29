@@ -32,7 +32,7 @@ import styles from './PrintQuotation.module.css'
 export default function PrintQuotation({ documentType = 'quotation' }) {
   const { id } = useParams()
   const [params] = useSearchParams()
-  const { settings, logoSrc } = useSettings()
+  const { settings, logoSrc, qrSrc } = useSettings()
 
   const isInvoice = documentType === 'invoice'
   const [doc, setDoc] = useState(null)
@@ -114,7 +114,13 @@ export default function PrintQuotation({ documentType = 'quotation' }) {
         </>
       ) : (
         <div className="print-full-bleed">
-          <DocumentPaper document={doc} settings={settings} logoSrc={logoSrc} docKind={documentType} />
+          <DocumentPaper
+            document={doc}
+            settings={settings}
+            logoSrc={logoSrc}
+            qrSrc={qrSrc}
+            docKind={documentType}
+          />
         </div>
       )}
       <p className={`${styles.hint} no-print`}>

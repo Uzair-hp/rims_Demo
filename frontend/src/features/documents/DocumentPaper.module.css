@@ -427,6 +427,56 @@
   page-break-inside: avoid;
 }
 
+/*
+ * Bank details on the left, QR on the right.
+ *
+ * The QR is a *sibling of the definition list inside the bank block*, not a
+ * third grid child: keeping it in a two-column flex row means the list keeps its
+ * own `1fr 1fr` pair layout no matter whether a QR is present, so adding a QR
+ * can never reflow or re-wrap the account rows above it.
+ *
+ * Every length is in mm because this is the printed stylesheet — the whole point
+ * is that the block occupies the same physical space on A4 as it does on screen.
+ */
+.bankBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 3mm 5mm;
+}
+
+.bankQr {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1mm;
+}
+
+.bankQrLabel {
+  margin: 0;
+  font-size: 7pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+/*
+ * 32mm ≈ 1.26in, the size a phone camera reads reliably at a printed A4 — the
+ * same range payment apps expect. It is capped rather than allowed to grow with
+ * an uploaded source image, because a 4000px QR printed at its natural size
+ * would push the bank block onto a second page.
+ */
+.bankQrImage {
+  inline-size: 32mm;
+  block-size: 32mm;
+  object-fit: contain;
+  /* Square codes need a quiet zone to scan; a hairline keeps it off the block edge. */
+  border: 0.25mm solid var(--color-surface);
+  background: #fff;
+}
+
 .bankRows {
   display: grid;
   grid-template-columns: 1fr 1fr;

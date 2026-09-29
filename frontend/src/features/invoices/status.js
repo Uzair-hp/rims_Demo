@@ -40,15 +40,43 @@ export function paymentStatusLabel(status) {
 }
 
 /**
+ * Human labels for the payment method enum (§8.3 / `PaymentSchema`).
+ *
+ * Lives here rather than inside the detail page so the payment sheet and the
+ * history list cannot drift apart. The keys match the model CHECK constraint
+ * exactly, so a new backend method shows up here as the raw key rather than
+ * silently rendering blank.
+ */
+export const PAYMENT_METHOD_LABELS = {
+  cash: 'Cash',
+  upi: 'UPI',
+  bank_transfer: 'Bank transfer',
+  cheque: 'Cheque',
+  card: 'Card',
+  other: 'Other',
+}
+
+/** Options for the payment sheet's method select, in the order an owner uses. */
+export const PAYMENT_METHOD_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'card', label: 'Card' },
+  { value: 'other', label: 'Other' },
+]
+
+/**
  * Presentation for each invoice action the server may permit.
  *
- * Deliberately limited to the two actions Phase 7 actually implements. The
- * lifecycle service advertises more for an issued invoice — `record_payment`
- * (Phase 8), and `duplicate`/`delete` (no endpoint at all) — and anything absent
- * from this map gets no button, so the page can never offer an action the API
- * would reject. Adding the endpoint later means adding an entry here.
+ * `record_payment` arrives in Phase 8. `duplicate` and `delete` are still
+ * advertised by the lifecycle service for an issued invoice but have no endpoint
+ * at all, so they stay unmapped and the page gives them no button — the same
+ * mechanism that let `record_payment` appear without any change to the page's
+ * action loop.
  */
 export const INVOICE_ACTION_META = {
   issue: { label: 'Issue', icon: 'check', variant: 'primary' },
   cancel: { label: 'Cancel', icon: 'x', variant: 'secondary' },
+  record_payment: { label: 'Record payment', icon: 'wallet', variant: 'primary' },
 }

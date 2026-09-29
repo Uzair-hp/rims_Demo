@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../auth/AuthProvider.jsx'
@@ -21,6 +21,7 @@ const SETTINGS = {
   company_name: 'Ruchita Interiors',
   tagline: 'Spaces, finished right',
   logo_path: null,
+  payment_qr_path: null,
   phone: '+91 98765 43210',
   email: 'hello@ruchitainteriors.in',
   website: '',
@@ -86,6 +87,12 @@ function mockApi({ settings = SETTINGS, terms = [], settingsError = false } = {}
       if (path === '/settings/logo' && method === 'DELETE') {
         return jsonResponse({ data: { deleted: true } })
       }
+      if (path === '/settings/payment-qr' && method === 'POST') {
+        return jsonResponse({ data: { payment_qr_path: 'payment-qr/new.png' } })
+      }
+      if (path === '/settings/payment-qr' && method === 'DELETE') {
+        return jsonResponse({ data: { deleted: true } })
+      }
       if (path === '/settings/terms' && method === 'GET') {
         return jsonResponse({ data: { terms } })
       }
@@ -120,6 +127,107 @@ function renderPage() {
 
 const companyPut = ({ calls }) =>
   calls.find((call) => call.path === '/settings/company' && call.method === 'PUT')
+
+/**
+ * Phase 8 §8.5: the live UPI QR control.
+ *
+ * The QR's defining property is that it is *not* part of the bank-detail save —
+ * it changes the moment the file is chosen, without touching the snapshotted
+ * fields. These assert the two halves of that: the upload posts on its own
+ * endpoint, and the section's PUT is never used to set a path.
+ */
+describe('settings — UPI QR subsection', () => {
+  it('offers the QR control inside the payment section when none is set', async () => {
+    mockApi()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    const control = within(bank).getByLabelText(/upi qr code/i)
+    expect(control).toHaveAttribute('type', 'file')
+    // The whole point: it says the code is not snapshotted.
+    expect(within(bank).getByText(/never snapshotted/i)).toBeInTheDocument()
+    // Nothing to remove yet, so no destructive button is offered.
+    expect(within(bank).queryByRole('button', { name: /remove qr/i })).toBeNull()
+  })
+
+  it('uploads a QR immediately, without a section save', async () => {
+    const { calls } = mockApi()
+    const user = userEvent.setup()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    const file = new File([new Uint8Array([1, 2, 3])], 'qr.png', { type: 'image/png' })
+    await user.upload(within(bank).getByLabelText(/upi qr code/i), file)
+
+    await waitFor(() => {
+      expect(calls.some((c) => c.path === '/settings/payment-qr' && c.method === 'POST')).toBe(true)
+    })
+    // The bank fields were not saved as a side effect of the upload.
+    expect(companyPut({ calls })).toBeUndefined()
+  })
+
+  it('blocks SVG at the picker, and again in the handler if one gets past', async () => {
+    const { calls } = mockApi()
+    const user = userEvent.setup()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    const input = within(bank).getByLabelText(/upi qr code/i)
+    // First line of defence: the picker itself will not offer an SVG.
+    expect(input).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp')
+
+    await user.upload(input, new File(['<svg/>'], 'qr.svg', { type: 'image/svg+xml' }))
+    expect(calls.some((c) => c.path === '/settings/payment-qr')).toBe(false)
+
+    // Second line of defence, for a file forced past the picker: the handler
+    // still refuses, and still sends no request.
+    fireEvent.change(input, {
+      target: { files: [new File(['<svg/>'], 'qr.svg', { type: 'image/svg+xml' })] },
+    })
+
+    expect(await within(bank).findByRole('alert')).toHaveTextContent(/SVG/i)
+    expect(calls.some((c) => c.path === '/settings/payment-qr')).toBe(false)
+  })
+
+  it('rejects an oversize QR before any request is made', async () => {
+    const { calls } = mockApi()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    const input = within(bank).getByLabelText(/upi qr code/i)
+    fireEvent.change(input, {
+      target: { files: [new File([new Uint8Array(3 * 1024 * 1024)], 'qr.png', { type: 'image/png' })] },
+    })
+
+    expect(await within(bank).findByRole('alert')).toHaveTextContent(/2 MB or smaller/i)
+    expect(calls.some((c) => c.path === '/settings/payment-qr')).toBe(false)
+  })
+
+  it('offers Remove only when a QR is stored', async () => {
+    mockApi({ settings: { ...SETTINGS, payment_qr_path: 'payment-qr/abc.png' } })
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    expect(within(bank).getByRole('img', { name: /upi payment qr code/i })).toHaveAttribute(
+      'src',
+      expect.stringContaining('/uploads/payment-qr'),
+    )
+    expect(within(bank).getByRole('button', { name: /remove qr/i })).toBeInTheDocument()
+  })
+
+  it('removes a stored QR', async () => {
+    const { calls } = mockApi({ settings: { ...SETTINGS, payment_qr_path: 'payment-qr/abc.png' } })
+    const user = userEvent.setup()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    await user.click(within(bank).getByRole('button', { name: /remove qr/i }))
+
+    await waitFor(() => {
+      expect(calls.some((c) => c.path === '/settings/payment-qr' && c.method === 'DELETE')).toBe(true)
+    })
+  })
+})
 
 beforeEach(() => {
   document.cookie.split(';').forEach((entry) => {

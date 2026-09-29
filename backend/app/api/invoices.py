@@ -7,10 +7,14 @@ Endpoints:
 - PUT    /invoices/:id                 — update Draft fields (dates, notes, terms)
 - POST   /invoices/:id/issue           — draft -> issued
 - POST   /invoices/:id/cancel          — cancel, releasing the quotation to approved
+- GET    /invoices/:id/payments        — payment history, newest first
+- POST   /invoices/:id/payments        — record a payment (rejects overpayment)
 
 Deliberately absent: `POST /invoices` (an invoice is only ever created by
-converting an approved quotation, FR-I1) and every `/payments` route (Phase 8).
-The 404 on the list of routes is the API, not an oversight.
+converting an approved quotation, FR-I1). That 404 is the API, not an oversight.
+
+`DELETE /payments/:id` lives in the sibling `payments.py` blueprint, because §9.2
+scopes it to a payment rather than to an invoice.
 
 The blueprint stays thin (§23): parse and validate, call the invoice service,
 respond in the §9.1 envelope. Every route is `@login_required`; mutations are
@@ -20,10 +24,14 @@ the computed figures and `allowed_actions` have exactly one producer.
 
 from __future__ import annotations
 
-from flask import Blueprint, request
+from flask import Blueprint, g, request
 
 from app.schemas import load_or_raise
-from app.schemas.quotations import invoice_draft_schema, invoice_list_query_schema
+from app.schemas.quotations import (
+    invoice_draft_schema,
+    invoice_list_query_schema,
+    payment_schema,
+)
 from app.services.csrf import csrf_protect
 from app.services.invoices import (
     cancel_invoice,
@@ -33,6 +41,7 @@ from app.services.invoices import (
     serialize_invoice,
     update_invoice_draft,
 )
+from app.services.payments import list_payments, record_payment
 from app.utils.errors import success
 from app.utils.guards import login_required
 
@@ -99,3 +108,42 @@ def cancel_invoice_route(invoice_id: int):
     """
     invoice = cancel_invoice(get_invoice(invoice_id))
     return success({"invoice": serialize_invoice(invoice)})
+
+
+@invoices_bp.get("/<int:invoice_id>/payments")
+@login_required
+def list_invoice_payments_route(invoice_id: int):
+    """GET /invoices/:id/payments — payment history, newest first."""
+    invoice = get_invoice(invoice_id)
+    payments = list_payments(invoice)
+    # Serialised once: it is the single producer of the derived figures, and it
+    # is not free.
+    figures = serialize_invoice(invoice)
+    return success(
+        {
+            "payments": [payment_schema.dump(payment) for payment in payments],
+            "paid_paise": figures["paid_paise"],
+            "outstanding_paise": figures["outstanding_paise"],
+            "payment_status": figures["payment_status"],
+        }
+    )
+
+
+@invoices_bp.post("/<int:invoice_id>/payments")
+@login_required
+@csrf_protect
+def record_invoice_payment_route(invoice_id: int):
+    """
+    POST /invoices/:id/payments — record a payment against an issued invoice.
+
+    Returns the refreshed invoice as well as the payment, because the client must
+    re-render from the server's computed figures rather than from its own
+    arithmetic (D2). An overpayment is a 422 BUSINESS_RULE (§11).
+    """
+    invoice = get_invoice(invoice_id)
+    data = load_or_raise(payment_schema, request.get_json(silent=True))
+    payment = record_payment(invoice, data, created_by=g.current_user.id)
+    return success(
+        {"payment": payment_schema.dump(payment), "invoice": serialize_invoice(invoice)},
+        status=201,
+    )

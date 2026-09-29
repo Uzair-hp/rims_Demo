@@ -70,7 +70,16 @@ class Invoice(db.Model):
         cascade="all, delete-orphan",
         order_by="InvoiceItem.position",
     )
-    payments = db.relationship("Payment", back_populates="invoice")
+    # Newest first, pinned rather than left to whatever order the query returns:
+    # the same ordering `services/clients._payments_for` uses, so the invoice
+    # detail and the client summary list a payment history identically. Payment
+    # was added by Phase 3 and first written by Phase 8; before this it had no
+    # ordering at all, which made the history order incidental.
+    payments = db.relationship(
+        "Payment",
+        back_populates="invoice",
+        order_by=lambda: (Payment.paid_on.desc(), Payment.id.desc()),
+    )
 
 
 class InvoiceItem(db.Model):

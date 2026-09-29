@@ -24,6 +24,7 @@
  *   document: object,
  *   settings?: object,
  *   logoSrc?: string | null,
+ *   qrSrc?: string | null,
  *   titleLevel?: 1 | 2,
  *   numberOverride?: string,
  *   isUnsaved?: boolean,
@@ -82,6 +83,7 @@ export default function DocumentPaper({
   document: doc,
   settings = null,
   logoSrc = null,
+  qrSrc = null,
   titleLevel: TitleLevel = 'h1',
   numberOverride = null,
   isUnsaved = false,
@@ -96,6 +98,17 @@ export default function DocumentPaper({
   const [logoFailed, setLogoFailed] = useState(false)
   const logoSrcResolved = logoSrc || BUNDLED_LOGO
   const showLogo = !logoFailed
+
+  // The payment QR degrades the same way but only has two steps. It has no bundled
+  // equivalent, and unlike the logo it is served from the authenticated API route
+  // like every other image on an authenticated page, so the browser's print/PDF
+  // renderer fetches it with the same cookies the page already has.
+  //
+  // If the image is missing or fails, the whole subsection is dropped rather than
+  // left blank: a broken-image icon in a bank block reads as a defect, and an
+  // omitted QR still leaves the UPI ID above it as a way to pay.
+  const [qrFailed, setQrFailed] = useState(false)
+  const showQr = Boolean(qrSrc) && !qrFailed
 
   // Phase 7: one sheet, two document kinds. The shared spine — header, client
   // block, items, tax breakdown, terms, signatory, footer — is identical; only
@@ -134,6 +147,17 @@ export default function DocumentPaper({
 
   // §8.4: an invoice prints the bank details and signatory it snapshotted at
   // conversion. A quotation has no snapshot, so it falls back to live Settings.
+  //
+  // One deliberate exception to §8.4's immutability: the payment QR is NOT
+  // snapshotted, and is read live from Settings on every render. Everything else
+  // here is frozen because it states the terms the invoice was issued under, so
+  // reprinting it must keep saying the same thing. A QR is not a statement of
+  // terms — it is an instruction to send money somewhere. Owners change bank
+  // accounts and close UPI handles, and a frozen QR would keep directing
+  // customers to an account that no longer exists, which is worse than the
+  // document not matching the Settings page byte for byte. The `payment_qr_path`
+  // column is consequently absent from `bank_snapshot` by design, and
+  // `backend/tests/test_invoices_api.py` pins that.
   const bank = doc.bank_snapshot || null
   const signatory = doc.signatory_name || s.signatory_name || 'Authorised Signatory'
   const bankLines = bank
@@ -320,17 +344,39 @@ export default function DocumentPaper({
       </section>
 
       {/* Bank / UPI details, from the snapshot taken at conversion (§8.4). */}
-      {isInvoice && bankLines.length > 0 ? (
+      {isInvoice && (bankLines.length > 0 || showQr) ? (
         <section className={styles.bank} data-document-bank>
           <h2 className={styles.blockLabel}>Payment Details</h2>
-          <dl className={styles.bankRows}>
-            {bankLines.map((line) => (
-              <div key={line.label} className={styles.bankRow}>
-                <dt>{line.label}</dt>
-                <dd>{line.value}</dd>
+          <div className={styles.bankBody}>
+            {bankLines.length > 0 ? (
+              <dl className={styles.bankRows}>
+                {bankLines.map((line) => (
+                  <div key={line.label} className={styles.bankRow}>
+                    <dt>{line.label}</dt>
+                    <dd>{line.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+
+            {/* §8.5 "UPI QR code" — a subsection of the payment block, not a
+                sibling of it. Read from live Settings and deliberately *not*
+                from `bank_snapshot`: the QR is a payment instruction rather
+                than a term of the invoice, so a stale snapshot could send money
+                to an account that has since been closed. Invoices only — a
+                quotation is not payable, so it never shows one. */}
+            {showQr ? (
+              <div className={styles.bankQr} data-document-qr>
+                <h3 className={styles.bankQrLabel}>UPI QR code</h3>
+                <img
+                  className={styles.bankQrImage}
+                  src={qrSrc}
+                  alt="UPI payment QR code"
+                  onError={() => setQrFailed(true)}
+                />
               </div>
-            ))}
-          </dl>
+            ) : null}
+          </div>
         </section>
       ) : null}
 

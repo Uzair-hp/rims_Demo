@@ -8,15 +8,20 @@
  * them — a client that recomputes is how two screens start disagreeing (D2).
  */
 
-import { describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { act, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import DocumentPaper, { groupItemsByCategory } from '../documents/DocumentPaper.jsx'
+import PaymentSheet from './PaymentSheet.jsx'
 import { buildInvoiceListQuery } from '../../api/endpoints/invoices.js'
 import {
   INVOICE_ACTION_META,
   invoiceStatusLabel,
   paymentStatusLabel,
   PAYMENT_STATUS_OPTIONS,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_METHOD_OPTIONS,
 } from './status.js'
 import { PAGE_SIZE } from './useInvoices.js'
 
@@ -167,15 +172,27 @@ describe('invoice status helpers', () => {
     expect(PAYMENT_STATUS_OPTIONS.map((o) => o.value)).toEqual(['', 'unpaid', 'partially_paid', 'paid'])
   })
 
-  it('maps only the actions the API implements', () => {
-    // `issue` and `cancel` have endpoints in Phase 7. `record_payment` is Phase 8
-    // and `duplicate`/`delete` have no endpoint at all, so none of the three get a
-    // button — the detail page skips anything with no entry.
+  it('maps the actions the API implements, and no others', () => {
+    // Phase 8 adds `record_payment`. `duplicate` and `delete` are still advertised
+    // by the lifecycle service with no endpoint at all, so they must stay unmapped
+    // or the page would render buttons the API would reject.
     expect(INVOICE_ACTION_META.issue).toBeTruthy()
     expect(INVOICE_ACTION_META.cancel).toBeTruthy()
-    expect(INVOICE_ACTION_META.record_payment).toBeUndefined()
+    expect(INVOICE_ACTION_META.record_payment).toBeTruthy()
     expect(INVOICE_ACTION_META.duplicate).toBeUndefined()
     expect(INVOICE_ACTION_META.delete).toBeUndefined()
+  })
+
+  it('labels all six payment methods with the backend enum as keys', () => {
+    expect(Object.keys(PAYMENT_METHOD_LABELS).sort()).toEqual(
+      ['bank_transfer', 'card', 'cash', 'cheque', 'other', 'upi'].sort(),
+    )
+    expect(PAYMENT_METHOD_LABELS.bank_transfer).toBe('Bank transfer')
+    expect(PAYMENT_METHOD_OPTIONS).toHaveLength(6)
+    // The select options and the history labels come from one source.
+    expect(PAYMENT_METHOD_OPTIONS.map((o) => o.value).sort()).toEqual(
+      Object.keys(PAYMENT_METHOD_LABELS).sort(),
+    )
   })
 
   it('shares the quotations page size', () => {
@@ -218,6 +235,74 @@ describe('DocumentPaper — invoice variant', () => {
     expect(within(bank).getByText('00123456789')).toBeInTheDocument()
     expect(within(bank).getByText('HDFC0001234')).toBeInTheDocument()
     expect(within(bank).getByText('ruchita@hdfcbank')).toBeInTheDocument()
+  })
+
+  // --------------------------------------------------------------- QR (§8.5)
+
+  describe('live payment QR', () => {
+    const QR_URL = '/api/v1/uploads/payment-qr?v=2026-09-29'
+
+    it('renders the QR as a subsection inside the payment block', () => {
+      renderInvoice({}, { qrSrc: QR_URL })
+
+      const bank = document.querySelector('[data-document-bank]')
+      const qr = document.querySelector('[data-document-qr]')
+      expect(qr).toBeTruthy()
+      // A subsection of the bank block, not a sibling of it.
+      expect(bank.contains(qr)).toBe(true)
+      expect(within(qr).getByText('UPI QR code')).toBeInTheDocument()
+      expect(within(qr).getByRole('img', { name: /upi payment qr/i })).toHaveAttribute('src', QR_URL)
+    })
+
+    it('is omitted entirely when Settings has no QR', () => {
+      renderInvoice({}, { qrSrc: null })
+      expect(document.querySelector('[data-document-qr]')).toBeNull()
+      // The rest of the payment block is unaffected.
+      expect(document.querySelector('[data-document-bank]')).toBeTruthy()
+    })
+
+    it('never appears on a quotation, which is not payable', () => {
+      render(
+        <DocumentPaper
+          document={{
+            number: 'QTN-1',
+            quotation_date: '2026-09-29',
+            items: [],
+            grand_total_paise: 0,
+            bank_snapshot: { bank_name: 'HDFC Bank', account_number: '00123456789' },
+          }}
+          settings={SETTINGS}
+          qrSrc={QR_URL}
+          docKind="quotation"
+        />,
+      )
+      expect(document.querySelector('[data-document-qr]')).toBeNull()
+    })
+
+    it('drops the whole subsection when the image fails to load', async () => {
+      // A broken-image icon inside a bank block reads as a defect on a document
+      // a customer is meant to pay from.
+      renderInvoice({}, { qrSrc: '/api/v1/uploads/payment-qr?v=broken' })
+      const img = document.querySelector('[data-document-qr] img')
+      expect(img).toBeTruthy()
+
+      await act(async () => {
+        img.dispatchEvent(new Event('error'))
+      })
+
+      expect(document.querySelector('[data-document-qr]')).toBeNull()
+      // The UPI ID text is still there to pay by.
+      expect(
+        within(document.querySelector('[data-document-bank]')).getByText('ruchita@hdfcbank'),
+      ).toBeInTheDocument()
+    })
+
+    it('shows the QR even when there is no bank snapshot to sit beside', () => {
+      renderInvoice({ bank_snapshot: null }, { qrSrc: QR_URL })
+      const bank = document.querySelector('[data-document-bank]')
+      expect(bank).toBeTruthy()
+      expect(document.querySelector('[data-document-qr]')).toBeTruthy()
+    })
   })
 
   it('omits the bank block when the snapshot has no details (§21.24)', () => {
@@ -306,5 +391,116 @@ describe('groupItemsByCategory — reused by the invoice sheet', () => {
     ])
     expect(groups.map((g) => g.category)).toEqual(['Kitchen', 'Paint'])
     expect(groups.map((g) => g.startIndex)).toEqual([0, 2])
+  })
+})
+
+// --------------------------------------------------------------- Phase 8
+
+/**
+ * PaymentSheet (§4.5 FR-P1, FR-P4).
+ *
+ * The two behaviours that matter: it opens on the outstanding balance so a full
+ * payment needs no typing, and it warns before an overpayment is submitted. The
+ * warning is display only — the server is what rejects (§11).
+ */
+describe('PaymentSheet', () => {
+  const OUTSTANDING = 1171000
+
+  function renderSheet(props = {}) {
+    const onSubmit = props.onSubmit || (() => {})
+    render(
+      <MemoryRouter>
+        <PaymentSheet open onClose={() => {}} outstandingPaise={OUTSTANDING} onSubmit={onSubmit} {...props} />
+      </MemoryRouter>,
+    )
+    return { onSubmit }
+  }
+
+  it('prefills the amount with the outstanding balance', () => {
+    renderSheet()
+    const amount = screen.getByLabelText(/amount received/i)
+    // paiseToInput: ungrouped, two decimals, no rupee sign.
+    expect(amount.value).toBe('11710.00')
+    // Stated twice on purpose — in the sheet subtitle and on the field itself.
+    expect(screen.getAllByText('Outstanding ₹11,710.00').length).toBeGreaterThan(0)
+  })
+
+  it('offers every payment method from the shared enum', () => {
+    renderSheet()
+    const select = screen.getByLabelText(/method/i)
+    const values = [...select.querySelectorAll('option')].map((o) => o.value)
+    expect(values).toEqual(['cash', 'upi', 'bank_transfer', 'cheque', 'card', 'other'])
+  })
+
+  it('warns live when the amount exceeds the outstanding balance', async () => {
+    const user = userEvent.setup()
+    renderSheet()
+
+    const amount = screen.getByLabelText(/amount received/i)
+    await user.clear(amount)
+    await user.type(amount, '20000')
+
+    expect(screen.getByText(/more than the ₹11,710\.00 outstanding/i)).toBeInTheDocument()
+    // And the submit is blocked, so the warning is not merely advisory copy.
+    expect(screen.getByRole('button', { name: 'Record payment' })).toBeDisabled()
+  })
+
+  it('rejects a zero amount', async () => {
+    const user = userEvent.setup()
+    renderSheet()
+
+    const amount = screen.getByLabelText(/amount received/i)
+    await user.clear(amount)
+
+    expect(screen.getByRole('button', { name: 'Record payment' })).toBeDisabled()
+  })
+
+  it('submits paise with the chosen method and date', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    renderSheet({ onSubmit })
+
+    const amount = screen.getByLabelText(/amount received/i)
+    await user.clear(amount)
+    await user.type(amount, '5000')
+    await user.selectOptions(screen.getByLabelText(/method/i), 'bank_transfer')
+    await user.type(screen.getByLabelText(/reference/i), 'TXN-99')
+    await user.click(screen.getByRole('button', { name: 'Record payment' }))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    const payload = onSubmit.mock.calls[0][0]
+    // 5000 rupees -> 500000 paise. The client sends integers, never rupees.
+    expect(payload.amount_paise).toBe(500000)
+    expect(payload.method).toBe('bank_transfer')
+    expect(payload.reference).toBe('TXN-99')
+  })
+
+  it('defaults the date to today', () => {
+    renderSheet()
+    const today = new Date().toISOString().slice(0, 10)
+    expect(screen.getByLabelText(/date received/i).value).toBe(today)
+  })
+
+  it('re-seeds when the outstanding changes, so a stale amount is never shown', () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <PaymentSheet open onClose={() => {}} outstandingPaise={OUTSTANDING} onSubmit={() => {}} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByLabelText(/amount received/i).value).toBe('11710.00')
+
+    rerender(
+      <MemoryRouter>
+        <PaymentSheet open onClose={() => {}} outstandingPaise={500000} onSubmit={() => {}} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByLabelText(/amount received/i).value).toBe('5000.00')
+  })
+
+  it('shows a server rejection without discarding what was typed', () => {
+    renderSheet({ error: 'Payment exceeds outstanding balance of ₹300.00.' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Payment exceeds outstanding balance of ₹300.00.')
+    // The field keeps its value so the amount can be corrected in place.
+    expect(screen.getByLabelText(/amount received/i).value).toBe('11710.00')
   })
 })

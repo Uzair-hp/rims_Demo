@@ -455,6 +455,70 @@ creates a payment yet.
 
 Payment recording, allocation and financial reporting.
 
+### Implemented
+
+Payments are **derived, not stored**. `Invoice` has no `payment_status` column:
+`payment_status()`, `paid_paise_for()` and `payment_status_predicate()` in
+`services/invoices.py` remain the single definition of the figures, and Phase 7
+already read them. A payment is a row; the status, the amount paid and the
+outstanding are all computed from the rows every time the invoice is serialized,
+so there is no second copy to fall out of date.
+
+- **Migration** `a7c4e19b2d80` adds `company_settings.payment_qr_path`. Nothing
+  else changed: `payments` already exists from Phase 7.
+- **`services/payments.py`** — `record_payment`, `list_payments`, `get_payment`
+  and `delete_payment`. Every mutation returns the re-serialized invoice so the
+  client never recomputes a figure locally.
+- **Routes** `GET`/`POST /invoices/:id/payments` and `DELETE /payments/:id`, all
+  `@login_required` + `@csrf_protect`.
+- **`Invoice.payments`** is ordered `paid_on DESC, id DESC`, so the history list
+  is deterministic even when two payments land on the same day.
+- **Frontend** — `PaymentSheet` (prefilled with the outstanding balance, live
+  overpayment warning, all six methods), a real payment history with per-row
+  delete, and an explanation of why Cancel disappears once a payment exists
+  (§11 forbids cancelling a paid invoice, so the action stops being advertised).
+
+### Decisions
+
+- **The payment QR is never snapshotted.** This is the one deliberate exception to
+  §8.4's immutability, and it is deliberate enough to spell out. Everything else
+  in `bank_snapshot` is frozen because it states the terms the invoice was issued
+  under, so a reprint must keep saying the same thing. A QR is not a statement of
+  terms — it is an instruction to send money somewhere. Owners change bank
+  accounts and close UPI handles; a frozen QR would keep directing customers to an
+  account that no longer exists, which is a worse failure than a document that
+  does not match the Settings page byte for byte. The QR is therefore read live
+  from `CompanySettings` on every render, and `payment_qr_path` is absent from
+  `bank_snapshot` by design — pinned by a regression test in `test_invoices_api.py`.
+- **Invoices only.** A quotation is not payable, so it never shows a QR. It is a
+  subsection of the existing Payment Details block rather than a sibling of it, so
+  the bank layout does not change for anyone who has not set a QR.
+- **Overpayment is rejected, not clamped** (422), in the service and again in the
+  UI. The sheet blocks the submit and explains why, but the server is the
+  authority: the outstanding is re-read inside the write, so two concurrent
+  payments cannot both pass a stale pre-check.
+- **The QR reuses the logo's upload policy** rather than a second copy: same
+  formats, same 2 MB cap, same extension + MIME + magic-byte + decode gauntlet,
+  in its own `payment-qr/` subdirectory so clearing a logo can never unlink a QR.
+
+### Not done
+
+- Allocation of one payment across several invoices, and ageing / receivables
+  reporting — §8.5 lists these, and they remain open.
+
+Exit criteria met:
+
+- `npm run lint`, `npm run format:check` and `npm run build` clean, 188 frontend
+  tests and 249 backend tests passing.
+- `GET /api/v1/health` reports `phase: 8`.
+- Advance / multiple partials / exact full / overpayment 422 / delete-recalculates,
+  plus draft and cancelled rejection, zero amount, invalid method, all six
+  methods, CSRF guards, and a concurrent-overpayment rollback guard.
+- QR: upload, serve, replace-without-orphan, delete, `payment_qr_path`
+  non-writable via `PUT /settings/company`, logo/QR slot independence, and the
+  document renders it only on invoices, only inside the payment block, and drops
+  the subsection entirely if the image fails to load.
+
 ## Phase 9 - Dashboard & analytics
 
 Dashboard metrics, charts and recent activity.

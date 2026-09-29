@@ -6,10 +6,14 @@
  * to find), and payment history. Header actions come entirely from the server's
  * `allowed_actions`, so the page can only offer what the API permits (D11).
  *
- * Payment *management* is Phase 8, so there is no Record Payment action here even
- * though the lifecycle advertises `record_payment` for an issued invoice. The
- * payment history shows an explicit empty state rather than pretending there is
- * nothing to manage.
+ * Payment *management* arrived in Phase 8: `record_payment` is now mapped in
+ * `status.js`, so the action loop below renders it automatically for any issued
+ * invoice without touching this component, and payments can be recorded and
+ * deleted (corrected) here.
+ *
+ * Every mutation re-renders from the invoice the server returned, because
+ * `paid_paise` / `outstanding_paise` / `payment_status` are derived on read
+ * (§11) and the client must not recompute them (D2).
  */
 
 import { useEffect, useState } from 'react'
@@ -24,25 +28,23 @@ import TextField from '../../components/ui/TextField.jsx'
 import InvoicePreview from '../documents/InvoicePreview.jsx'
 import { useSettings } from '../settings/SettingsProvider.jsx'
 import { cancelInvoice, fetchInvoice, issueInvoice, updateInvoice } from '../../api/endpoints/invoices.js'
+import { deletePayment, recordPayment } from '../../api/endpoints/payments.js'
 import { calcLineTotal } from '../../lib/calc.js'
 import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
 import TotalsPanel from '../quotations/TotalsPanel.jsx'
-import { INVOICE_ACTION_META, invoiceStatusLabel, paymentStatusLabel } from './status.js'
+import PaymentSheet from './PaymentSheet.jsx'
+import {
+  INVOICE_ACTION_META,
+  invoiceStatusLabel,
+  paymentStatusLabel,
+  PAYMENT_METHOD_LABELS,
+} from './status.js'
 import styles from './InvoiceDetailPage.module.css'
-
-const PAYMENT_METHOD_LABELS = {
-  cash: 'Cash',
-  upi: 'UPI',
-  bank_transfer: 'Bank transfer',
-  cheque: 'Cheque',
-  card: 'Card',
-  other: 'Other',
-}
 
 export default function InvoiceDetailPage() {
   const { id } = useParams()
-  const { settings, logoSrc } = useSettings()
+  const { settings, logoSrc, qrSrc } = useSettings()
 
   const [invoice, setInvoice] = useState(null)
   const [loadState, setLoadState] = useState('loading')
@@ -53,6 +55,10 @@ export default function InvoiceDetailPage() {
   const [draft, setDraft] = useState({ due_date: '', notes: '', terms_text: '' })
   const [editing, setEditing] = useState(false)
   const [savingDraft, setSavingDraft] = useState(false)
+  const [paymentSheetOpen, setPaymentSheetOpen] = useState(false)
+  const [savingPayment, setSavingPayment] = useState(false)
+  const [paymentError, setPaymentError] = useState(null)
+  const [confirmDeletePayment, setConfirmDeletePayment] = useState(null)
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -75,6 +81,13 @@ export default function InvoiceDetailPage() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const runAction = async (action) => {
+    // `record_payment` opens the sheet rather than calling the API: it needs a
+    // form, and the action loop has no way to express that.
+    if (action === 'record_payment') {
+      setPaymentError(null)
+      setPaymentSheetOpen(true)
+      return
+    }
     setActionError(null)
     setBusy(action)
     try {
@@ -83,6 +96,42 @@ export default function InvoiceDetailPage() {
       } else if (action === 'cancel') {
         setInvoice(await cancelInvoice(id))
       }
+    } catch (e) {
+      setActionError(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /**
+   * Record a payment, then adopt the invoice the server returned.
+   *
+   * The response carries the refreshed invoice precisely so this does not have to
+   * add the amount to anything locally — the derived figures are the server's.
+   */
+  const handleRecordPayment = async (payload) => {
+    setSavingPayment(true)
+    setPaymentError(null)
+    try {
+      const { invoice: updated } = await recordPayment(id, payload)
+      setInvoice(updated)
+      setPaymentSheetOpen(false)
+    } catch (e) {
+      // Kept inside the sheet so the user can correct the amount in place rather
+      // than losing everything they typed.
+      setPaymentError(e.message || 'The payment could not be recorded.')
+    } finally {
+      setSavingPayment(false)
+    }
+  }
+
+  const handleDeletePayment = async (paymentId) => {
+    setActionError(null)
+    setBusy('delete_payment')
+    try {
+      const { invoice: updated } = await deletePayment(paymentId)
+      setInvoice(updated)
+      setConfirmDeletePayment(null)
     } catch (e) {
       setActionError(e)
     } finally {
@@ -169,8 +218,8 @@ export default function InvoiceDetailPage() {
             </Button>
             {allowed.map((action) => {
               const meta = INVOICE_ACTION_META[action]
-              // Actions the lifecycle advertises but the API does not expose
-              // (record_payment is Phase 8) have no entry and are skipped.
+              // `duplicate` and `delete` are still advertised by the lifecycle
+              // service with no endpoint, so they have no entry and are skipped.
               if (!meta) return null
               const isCancel = action === 'cancel'
               return (
@@ -201,6 +250,16 @@ export default function InvoiceDetailPage() {
         <p className={styles.cancelledNote}>
           This invoice was cancelled and no longer counts toward billing. The quotation it came from was
           released and can be invoiced again.
+        </p>
+      ) : null}
+
+      {/* A payment makes Cancel impossible (§11), and the action simply stops
+          being advertised. Without this the button would appear to vanish and the
+          page would look broken rather than explained. */}
+      {inv.status === 'issued' && payments.length > 0 ? (
+        <p className={styles.cancelNote}>
+          Cancel is unavailable because a payment has been recorded. Delete the payment below if it was
+          entered in error — the invoice status and outstanding will be recalculated.
         </p>
       ) : null}
 
@@ -270,8 +329,9 @@ export default function InvoiceDetailPage() {
           <h2 className={styles.cardTitle}>Payment history</h2>
           {payments.length === 0 ? (
             <p className={styles.emptyPayments}>
-              No payments recorded yet. Recording payments arrives with the next phase — until then this
-              invoice reads as unpaid.
+              {inv.status === 'issued'
+                ? `No payments recorded yet. This invoice is fully outstanding at ${formatPaise(inv.outstanding_paise)}.`
+                : 'No payments recorded yet. Payments can only be recorded once the invoice is issued.'}
             </p>
           ) : (
             <ul className={styles.paymentList}>
@@ -281,8 +341,18 @@ export default function InvoiceDetailPage() {
                   <span className={styles.paymentMeta}>
                     {PAYMENT_METHOD_LABELS[payment.method] || payment.method}
                     {payment.reference ? ` · ${payment.reference}` : ''}
+                    {payment.notes ? ` · ${payment.notes}` : ''}
                   </span>
                   <span className={styles.paymentDate}>{formatDate(payment.paid_on)}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="trash"
+                    aria-label={`Delete payment of ${formatPaise(payment.amount_paise)}`}
+                    onClick={() => setConfirmDeletePayment(payment)}
+                  >
+                    Delete
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -376,6 +446,16 @@ export default function InvoiceDetailPage() {
         document={inv}
         settings={settings}
         logoSrc={logoSrc}
+        qrSrc={qrSrc}
+      />
+
+      <PaymentSheet
+        open={paymentSheetOpen}
+        onClose={() => setPaymentSheetOpen(false)}
+        outstandingPaise={inv.outstanding_paise}
+        onSubmit={handleRecordPayment}
+        submitting={savingPayment}
+        error={paymentError}
       />
 
       <ConfirmDialog
@@ -389,6 +469,20 @@ export default function InvoiceDetailPage() {
           runAction('cancel')
         }}
         onClose={() => setConfirmCancel(false)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmDeletePayment)}
+        title="Delete this payment?"
+        message={
+          confirmDeletePayment
+            ? `Removing ${formatPaise(confirmDeletePayment.amount_paise)} is a correction, not a normal action. The invoice's amount paid, outstanding and payment status will all be recalculated, and the cancellation option becomes available again.`
+            : ''
+        }
+        confirmLabel="Delete payment"
+        danger
+        onConfirm={() => handleDeletePayment(confirmDeletePayment.id)}
+        onClose={() => setConfirmDeletePayment(null)}
       />
     </div>
   )

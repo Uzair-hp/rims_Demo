@@ -167,6 +167,18 @@
   font-size: var(--font-size-sm);
 }
 
+/* Explains why Cancel is absent. Muted rather than a warning: nothing is wrong,
+   the server simply does not permit cancelling a paid invoice (§11). */
+.cancelNote {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-sm);
+}
+
 /* §4.4 FR-I6: paid and outstanding are what the user opened the invoice for, so
    they get a dedicated strip rather than a line in the totals panel. */
 .moneyStrip {
@@ -254,6 +266,11 @@
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   color: var(--color-ink-subtle);
+}
+
+/* Delete sits at the end of the row and never wraps to its own line. */
+.paymentRow > button:last-child {
+  flex: none;
 }
 
 .emptyPayments {

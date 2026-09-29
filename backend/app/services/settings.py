@@ -215,32 +215,52 @@ def _promote_default(term: TermsConditions) -> None:
         other.is_default = False
 
 
-# ---------------------------------------------------------------------- logo
+# ------------------------------------------------------------- stored images
 
 
-def logo_absolute_path() -> Path | None:
-    """Where the stored logo lives on disk, or None when none was uploaded."""
-    row = get_settings()
-    if not row.logo_path:
+def _stored_image_absolute_path(relative_path: str | None) -> Path | None:
+    """
+    Resolve a stored relative path under `UPLOADS_DIR`, or None when unset or unsafe.
+
+    A stored path is always relative to UPLOADS_DIR; resolving + checking the
+    parent keeps a tampered column from reading any file on disk.
+    """
+    if not relative_path:
         return None
     uploads_root = Path(current_app.config["UPLOADS_DIR"])
-    candidate = (uploads_root / row.logo_path).resolve()
-    # A stored path is always relative to UPLOADS_DIR; resolving + checking the
-    # parent keeps a tampered `logo_path` from reading any file on disk.
+    candidate = (uploads_root / relative_path).resolve()
     if uploads_root.resolve() not in candidate.parents:
         return None
     return candidate
 
 
-def set_logo_path(relative_path: str) -> CompanySettings:
-    row = get_settings()
-    row.logo_path = relative_path
+def _set_image_path(column: str, relative_path: str | None) -> CompanySettings:
+    setattr(get_settings(), column, relative_path)
     db.session.commit()
-    return row
+    return get_settings()
+
+
+def logo_absolute_path() -> Path | None:
+    """Where the stored logo lives on disk, or None when none was uploaded."""
+    return _stored_image_absolute_path(get_settings().logo_path)
+
+
+def payment_qr_absolute_path() -> Path | None:
+    """Where the stored payment QR lives on disk, or None when none was uploaded."""
+    return _stored_image_absolute_path(get_settings().payment_qr_path)
+
+
+def set_logo_path(relative_path: str) -> CompanySettings:
+    return _set_image_path("logo_path", relative_path)
 
 
 def clear_logo() -> CompanySettings:
-    row = get_settings()
-    row.logo_path = None
-    db.session.commit()
-    return row
+    return _set_image_path("logo_path", None)
+
+
+def set_payment_qr_path(relative_path: str) -> CompanySettings:
+    return _set_image_path("payment_qr_path", relative_path)
+
+
+def clear_payment_qr() -> CompanySettings:
+    return _set_image_path("payment_qr_path", None)

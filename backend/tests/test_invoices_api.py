@@ -323,6 +323,35 @@ def test_conversion_snapshots_bank_and_signatory(authed_client):
     assert invoice["bank_snapshot"]["upi_id"] == "ruchita@hdfcbank"
 
 
+def test_payment_qr_is_not_snapshotted_onto_the_invoice(app, authed_client):
+    """
+    The UPI QR is deliberately EXCLUDED from the invoice snapshot.
+
+    §8.4 snapshots bank details and the signatory so an issued invoice can be
+    reproduced years later. The QR is the one exception: it is a live payment
+    instruction, not a frozen document fact, because a stale QR could point a
+    paying client at a closed or wrong account. It is read from Settings at render
+    time instead.
+
+    This test exists to make that a decision rather than an oversight. If someone
+    later adds the QR to `bank_snapshot` "for consistency", it fails here.
+    """
+    from app.models import CompanySettings
+
+    c = _make_client(authed_client)
+    with app.app_context():
+        row = CompanySettings.get_row()
+        row.payment_qr_path = "payments/qr.png"
+        db.session.commit()
+
+    q = _approved_quotation(authed_client, c["id"])
+    invoice = _convert(authed_client, q["id"]).get_json()["data"]["invoice"]
+
+    # The snapshot carries the bank *text* and no QR reference at all.
+    assert "payment_qr_path" not in invoice["bank_snapshot"]
+    assert not any("qr" in key.lower() for key in invoice["bank_snapshot"])
+
+
 def test_settings_change_after_conversion_does_not_alter_the_invoice(authed_client):
     """§8.4: Settings changes affect only future documents."""
     c = _make_client(authed_client)

@@ -178,6 +178,53 @@
   object-fit: contain;
 }
 
+/* ------------------------------------------------------- payment QR (§8.5) */
+
+/* Separates the live QR control from the snapshotted bank fields above it, so
+   the asymmetry in the copy below the control is visible in the layout. */
+.subsection {
+  margin-block-start: var(--space-6);
+  padding-block-start: var(--space-5);
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+.subsectionTitle {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.qrBox {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 100%;
+  min-block-size: var(--space-16);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .qrBox {
+    inline-size: 10rem;
+  }
+}
+
+.qrBoxImage {
+  max-inline-size: 100%;
+  max-block-size: var(--space-16);
+  object-fit: contain;
+}
+
+.qrBoxEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-subtle);
+}
+
 .logoPlaceholder {
   display: flex;
   flex-direction: column;
