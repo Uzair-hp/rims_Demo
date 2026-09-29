@@ -10,12 +10,47 @@
   padding: var(--space-5) var(--space-3) var(--space-4);
   background: var(--color-ink);
   color: var(--color-ink-inverse);
+  transition: inline-size var(--duration-slow) var(--ease-out);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .brand {
   display: flex;
+  flex: 1;
   justify-content: center;
+  min-inline-size: 0;
   padding-block: var(--space-1);
+}
+
+.collapseToggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-ink-muted-inverse);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.collapseToggle:hover {
+  background: var(--color-surface-translucent);
+  color: var(--color-ink-inverse);
+}
+
+.collapseToggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ink-inverse);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .nav {
@@ -43,6 +78,7 @@
   font-size: var(--font-size-base);
   font-weight: var(--weight-medium);
   text-decoration: none;
+  white-space: nowrap;
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
@@ -80,7 +116,11 @@
   color: var(--color-ink-muted-inverse);
   font: inherit;
   font-size: var(--font-size-sm);
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
 .footerButton:hover {
@@ -101,9 +141,18 @@
   inline-size: var(--size-avatar);
   block-size: var(--size-avatar);
   flex: none;
+  overflow: hidden;
   border-radius: var(--radius-pill);
   background: var(--color-surface-translucent);
   color: var(--color-ink-inverse);
+}
+
+/* The company mark is gold artwork on transparent; the sidebar is always the
+   ink plate in both themes, so it reads correctly inside the avatar circle. */
+.avatarImg {
+  inline-size: 70%;
+  block-size: 70%;
+  object-fit: contain;
 }
 
 .accountText {
@@ -116,6 +165,9 @@
   font-size: var(--font-size-sm);
   font-weight: var(--weight-semibold);
   color: var(--color-ink-inverse);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .accountMeta {
@@ -128,28 +180,27 @@
   white-space: nowrap;
 }
 
-.account {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-/* Sign out sits in the same row as the identity. On narrow desktops the label
-   drops to the icon alone, which is why the button keeps an aria-label. */
+/* Sign out is its own full-width control below the identity, styled like a
+   button so it reads as an action and stays comfortably tappable. */
 .signOut {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-inline-start: auto;
+  gap: var(--space-3);
   min-block-size: var(--touch-target-comfortable);
-  padding-inline: var(--space-2);
+  padding-inline: var(--space-3);
   font: inherit;
   font-size: var(--font-size-sm);
+  font-weight: var(--weight-medium);
   color: var(--color-ink-muted-inverse);
   background: none;
-  border: var(--border-width) solid transparent;
+  border: var(--border-width) solid var(--color-surface-translucent);
   border-radius: var(--radius-md);
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 /* The sidebar is always the ink plate, in both themes, so these use the inverse
@@ -157,11 +208,49 @@
 .signOut:hover {
   color: var(--color-ink-inverse);
   border-color: var(--color-ink-muted-inverse);
+  background: var(--color-surface-translucent);
 }
 
 .signOut:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-ink-inverse);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* ---------------------------------------------------------- collapsed rail */
+
+.collapsed {
+  inline-size: var(--size-sidebar-collapsed);
+  padding-inline: var(--space-2);
+}
+
+.collapsed .head {
+  flex-direction: column-reverse;
+  gap: var(--space-3);
+}
+
+.collapsed .brand {
+  flex: none;
+}
+
+.collapsed .link,
+.collapsed .footerButton,
+.collapsed .signOut {
+  justify-content: center;
+  padding-inline: 0;
+  gap: 0;
+}
+
+.collapsed .account {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* Icons stay, labels fold away so the rail is a clean icon column. */
+.collapsed .linkLabel,
+.collapsed .footerLabel,
+.collapsed .signOutLabel,
+.collapsed .accountText {
+  display: none;
 }
 
 @media (min-width: 1024px) {

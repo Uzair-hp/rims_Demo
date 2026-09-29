@@ -111,6 +111,11 @@
 @media (min-width: 1024px) {
   .content {
     margin-inline-start: var(--size-sidebar);
+    transition: margin-inline-start var(--duration-slow) var(--ease-out);
+  }
+
+  .contentCollapsed {
+    margin-inline-start: var(--size-sidebar-collapsed);
   }
 
   .main {

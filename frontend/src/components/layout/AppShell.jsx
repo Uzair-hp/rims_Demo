@@ -10,6 +10,7 @@ import SheetList from '../ui/SheetList.jsx'
 import Icon from '../ui/Icon.jsx'
 import { CREATE_ACTIONS, MORE_NAV_ITEMS } from '../../app/navigation.js'
 import { useTheme } from '../../app/useTheme.js'
+import { useSidebarCollapsed } from '../../app/useSidebarCollapsed.js'
 import { useAuth } from '../../features/auth/AuthProvider.jsx'
 import styles from './AppShell.module.css'
 
@@ -24,6 +25,7 @@ export default function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   const { resolvedTheme, toggleTheme } = useTheme()
+  const { collapsed, toggleCollapsed } = useSidebarCollapsed()
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
 
@@ -45,9 +47,9 @@ export default function AppShell() {
         Skip to main content
       </a>
 
-      <Sidebar />
+      <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
 
-      <div className={styles.content}>
+      <div className={`${styles.content} ${collapsed ? styles.contentCollapsed : ''}`.trim()}>
         <TopBar />
         <main id="main-content" className={styles.main} tabIndex={-1}>
           <ApiStatus />

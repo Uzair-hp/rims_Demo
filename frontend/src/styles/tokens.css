@@ -180,6 +180,7 @@
 
   /* --- Layout and touch targets (§5) --- */
   --size-sidebar: 248px;
+  --size-sidebar-collapsed: 76px;
   --size-topbar: 56px;
   --size-bottom-nav: 60px;
   --size-content-max: 1180px;
