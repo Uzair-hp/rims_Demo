@@ -155,13 +155,21 @@ class InvoiceSchema(Schema):
     updated_at = fields.DateTime(dump_only=True)
 
     items = fields.List(fields.Nested(InvoiceItemSchema), dump_only=True)
-    payments = fields.List(fields.Dict(), dump_only=True)
+    # A Method, not List(Dict()): the relationship holds Payment ORM rows, and
+    # List(Dict()) raises TypeError on them. Delegating to PaymentSchema keeps one
+    # definition of a payment's wire shape. Populated from Phase 7 onward;
+    # recording payments is Phase 8.
+    payments = fields.Method("dump_payments", dump_only=True)
 
     # Computed
     paid_paise = fields.Integer(dump_only=True)
     outstanding_paise = fields.Integer(dump_only=True)
     payment_status = fields.String(dump_only=True)
     allowed_actions = fields.List(fields.String(), dump_only=True)
+
+    def dump_payments(self, obj) -> list:
+        rows = getattr(obj, "payments", None) or []
+        return [payment_schema.dump(row) for row in rows]
 
 
 class InvoiceDraftSchema(Schema):

@@ -25,14 +25,17 @@ from sqlalchemy import func, or_, select
 from app.extensions.database import db
 from app.models import Client, Invoice, Payment, Quotation
 from app.models.user import utcnow
+from app.services.invoices import BILLED_STATUS, paid_paise_for, payment_status
 from app.utils.errors import conflict, not_found
 
 DEFAULT_PAGE_SIZE = 25
 MAX_PAGE_SIZE = 100
 
 # Only issued, non-cancelled invoices count toward money metrics (§11). A draft
-# has not been billed yet and a cancelled one never will be.
-_BILLED_STATUS = "issued"
+# has not been billed yet and a cancelled one never will be. Defined once, in the
+# invoice service, and re-exported here so this module and the invoice API can
+# never disagree about which invoices are billed.
+_BILLED_STATUS = BILLED_STATUS
 
 
 # ------------------------------------------------------------------- queries
@@ -248,26 +251,8 @@ def _payments_for(invoices: list[dict]) -> list[dict]:
 
 
 def _paid_for(invoice_id: int) -> int:
-    return db.session.scalar(
-        select(func.coalesce(func.sum(Payment.amount_paise), 0)).where(
-            Payment.invoice_id == invoice_id
-        )
-    ) or 0
-
-
-def payment_status(paid_paise: int, grand_total_paise: int) -> str:
-    """
-    The §11 payment status, computed from the ledger — never stored.
-
-    Phase 8 owns the payment endpoints; the definition lives here already because
-    the client summary must show the same answer, and a second implementation is
-    how two surfaces start disagreeing.
-    """
-    if paid_paise <= 0:
-        return "unpaid"
-    if paid_paise >= grand_total_paise:
-        return "paid"
-    return "partially_paid"
+    """Σ payments for an invoice. Lives in the invoice service (§11)."""
+    return paid_paise_for(invoice_id)
 
 
 # ------------------------------------------------------------------- helpers

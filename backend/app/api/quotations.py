@@ -35,6 +35,7 @@ from app.schemas.quotations import (
 )
 from app.services.calculations import calculate_totals, calculate_line_total, validate_document
 from app.services.numbering import allocate_number
+from app.services.invoices import convert_quotation, serialize_invoice
 from app.services.lifecycle import (
     get_quotation_allowed_actions,
     validate_quotation_transition,
@@ -46,7 +47,6 @@ from app.utils.errors import (
     validation_error,
     business_rule,
     not_found,
-    conflict,
 )
 from app.utils.guards import login_required
 from app.services.csrf import csrf_protect
@@ -372,86 +372,13 @@ def duplicate_quotation(quotation_id: int):
 @login_required
 @csrf_protect
 def create_invoice_from_quotation(quotation_id: int):
-    """POST /quotations/:id/invoice — convert an approved quotation to an invoice."""
-    from app.models.invoice import Invoice, InvoiceItem
-    from app.models.company_settings import CompanySettings
+    """
+    POST /quotations/:id/invoice — convert an approved quotation (FR-I1).
 
+    The business rule, the snapshot and the §11 safety assert all live in
+    `services/invoices.convert_quotation`; this route stays thin (§23) and returns
+    the full invoice so the client can navigate straight to it.
+    """
     quotation = _get_or_404(quotation_id)
-
-    if quotation.status != "approved":
-        raise business_rule("Only approved quotations can be converted to an invoice.")
-
-    # Partial unique index enforces one active invoice per quotation; check first so
-    # we can return a helpful 409 instead of an opaque integrity error.
-    existing = Invoice.query.filter(
-        Invoice.quotation_id == quotation.id,
-        Invoice.status != "cancelled",
-    ).first()
-    if existing:
-        raise conflict(
-            "An invoice already exists for this quotation.",
-            [{"invoice_id": existing.id, "invoice_number": existing.number}],
-        )
-
-    allocation = allocate_number("invoice")
-    settings = CompanySettings.get_or_create()
-
-    invoice = Invoice(
-        number=allocation.number,
-        year=allocation.year,
-        quotation_id=quotation.id,
-        client_id=quotation.client_id,
-        client_snapshot=quotation.client_snapshot,
-        issue_date=date.today(),
-        due_date=None,
-        status="draft",
-        discount_type=quotation.discount_type,
-        discount_bp=quotation.discount_bp,
-        discount_fixed_paise=quotation.discount_fixed_paise,
-        gst_bp=quotation.gst_bp,
-        other_charges_label=quotation.other_charges_label,
-        other_charges_paise=quotation.other_charges_paise,
-        subtotal_paise=quotation.subtotal_paise,
-        discount_paise=quotation.discount_paise,
-        gst_paise=quotation.gst_paise,
-        grand_total_paise=quotation.grand_total_paise,
-        terms_text=quotation.terms_text,
-        bank_snapshot={
-            "account_name": settings.bank_account_name,
-            "account_number": settings.bank_account_number,
-            "bank_name": settings.bank_name,
-            "ifsc": settings.bank_ifsc,
-            "branch": settings.bank_branch,
-            "upi_id": settings.upi_id,
-        },
-        signatory_name=settings.signatory_name,
-        notes=quotation.notes,
-        created_by=g.current_user.id,
-    )
-
-    for item in quotation.items:
-        invoice.items.append(
-            InvoiceItem(
-                category=item.category,
-                name=item.name,
-                description=item.description,
-                unit=item.unit,
-                qty_milli=item.qty_milli,
-                rate_paise=item.rate_paise,
-                line_total_paise=item.line_total_paise,
-                position=item.position,
-            )
-        )
-
-    quotation.status = "converted"
-
-    db.session.add(invoice)
-    db.session.commit()
-
-    return success({
-        "invoice": {
-            "id": invoice.id,
-            "number": invoice.number,
-            "status": invoice.status,
-        }
-    }, status=201)
+    invoice = convert_quotation(quotation, created_by=g.current_user.id)
+    return success({"invoice": serialize_invoice(invoice)}, status=201)

@@ -385,8 +385,21 @@ def test_convert_twice_conflicts(authed_client):
         f"/api/v1/quotations/{q['id']}/invoice", headers=_csrf(authed_client)
     )
     assert first.status_code == 201
-    # Quotation is now converted; a second attempt is a business-rule 422.
+    created = first.get_json()["data"]["invoice"]
+
+    # A second attempt is a 409, not a 422, and it must name the existing invoice
+    # so the UI can offer "View invoice" (§9.2, §25). The duplicate check runs
+    # ahead of the status check precisely so this branch stays reachable after
+    # the quotation has already moved to `converted`.
     second = authed_client.post(
         f"/api/v1/quotations/{q['id']}/invoice", headers=_csrf(authed_client)
     )
-    assert second.status_code == 422
+    assert second.status_code == 409, second.get_data(as_text=True)
+    body = second.get_json()["error"]
+    assert body["code"] == "CONFLICT"
+    detail = {d["invoice_id"]: d["invoice_number"] for d in body["details"]}
+    assert detail == {created["id"]: created["number"]}
+
+    # The failed attempt must not create a second invoice or a second number.
+    listing = authed_client.get("/api/v1/invoices?q=" + created["number"]).get_json()
+    assert listing["data"]["total"] == 1

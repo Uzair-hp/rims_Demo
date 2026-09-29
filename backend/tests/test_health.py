@@ -15,7 +15,7 @@ def test_health_returns_ok_envelope(client):
     payload = response.get_json()
     assert payload["data"]["status"] == "ok"
     assert payload["data"]["service"] == "ruchita-interiors-api"
-    assert payload["data"]["phase"] == 6
+    assert payload["data"]["phase"] == 7
     assert "version" in payload["data"]
     assert "error" not in payload
 

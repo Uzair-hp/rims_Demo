@@ -125,7 +125,7 @@ class Settings:
 
     API_PREFIX = "/api/v1"
     APP_VERSION = "1.0.0"
-    PHASE = 6
+    PHASE = 7
 
 
 settings = Settings()
