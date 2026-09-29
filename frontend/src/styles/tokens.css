@@ -86,6 +86,10 @@
   --font-sans: 'DM Sans', system-ui, 'Segoe UI', roboto, helvetica, arial, sans-serif;
   --font-body: var(--font-sans);
   --font-heading: 'Cormorant Garamond', Georgia, serif;
+  /* Display face for wordmarks, greetings and section titles. Maps to the
+     heading serif; kept as a distinct token so display type can diverge from
+     body headings later without touching every consumer (§18.9). */
+  --font-display: var(--font-heading);
   --font-wordmark: 'Cinzel', Georgia, serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', menlo, consolas, monospace;
 
