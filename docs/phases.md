@@ -39,6 +39,11 @@ Delivered:
   command to run both apps.
 - Brand asset pipeline from the official logo in `brand/logo.svg`: the shipped
   vector lockup plus generated PWA, favicon and iOS icons.
+- The shell sidebar is collapsible to an icon-only rail, with the state persisted
+  locally in `useSidebarCollapsed` (`ri.sidebar.collapsed`), mirroring the `useTheme`
+  pattern. Desktop-only: the sidebar is hidden below `lg`, where the bottom bar is
+  used instead. Collapsed labels stay in the DOM behind CSS so accessible names are
+  preserved, with `title` and `aria-label` fallbacks on every control.
 
 Exit criteria met:
 
@@ -242,6 +247,17 @@ Exit criteria met:
 - Browser smoke: `/quotations` lists and filters; New quotation creates a draft with
   live totals; `/quotations/:id` renders the detail with lifecycle actions; edit and
   duplicate flows work.
+
+Post-delivery correction:
+
+- A fixed discount larger than the subtotal reached `calculate_discount` during the
+  totals recompute, where it raises a bare `ValueError`. Nothing caught it, so the
+  generic handler returned `500 INTERNAL` for what §10.3 specifies as an ordinary
+  validation failure. `validate_document` now rejects it before the recompute runs,
+  using the same line math, so the API returns `422 VALIDATION_ERROR` with
+  "Discount cannot exceed subtotal". Covered by
+  `test_fixed_discount_exceeding_subtotal_is_422`, verified to fail on the pre-fix
+  service. `calculate_discount` keeps its guard as defence-in-depth.
 
 ## Phase 6 - Quotation document / PDF (done)
 
