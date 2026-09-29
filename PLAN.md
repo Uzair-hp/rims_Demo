@@ -467,7 +467,7 @@ Codes: `VALIDATION_ERROR` (422), `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NO
 
 **Payments** — `DELETE /payments/:id` (confirm on client; recalc invoice).
 
-**Dashboard** — `GET /dashboard/summary` → counts by quotation status; { draft_value, sent_value, approved_value, total_quotation_value }; { invoiced_value, received_total, outstanding_total }; monthly series (12 months: quotation_count, quotation_value, invoiced_value, received_value); recent 5 quotations/invoices/clients. **One request, one query set.**
+**Dashboard** — `GET /dashboard/summary` → counts by quotation status; { draft_value, sent_value, approved_value, total_quotation_value }; { invoiced_value, received_total, outstanding_total }; monthly series (12 months: quotation_count, quotation_value, invoiced_value, received_value); **day-level series (last 30 days, same fields keyed by `date`) supporting the Dashboard's 7/14/30-day view — additive, and still one request**; recent 5 quotations/invoices/clients. **One request, one query set.**
 
 **Settings** — `GET/PUT /settings/company`; `POST /settings/logo` (multipart); `DELETE /settings/logo`; `POST /settings/payment-qr` (multipart, field `payment_qr`); `DELETE /settings/payment-qr`; `GET /settings/terms`, `POST /settings/terms`, `PUT/DELETE /settings/terms/:id`; `PUT /auth/password` (also here conceptually). Settings PUT returns the normalized saved object. `logo_path` and `payment_qr_path` are readable through `GET /settings/company` but are **not** writable through `PUT` — they change only via their upload/delete routes.
 
@@ -748,7 +748,7 @@ Rules: always paired with icon + label; tint backgrounds for badges/banners with
 | Approved | Success: `--success` text on `--success-bg` + check icon |
 | Rejected | Danger: `--danger` text on `--danger-bg` + × icon |
 | Expired | Gray solid (time-expiry is nobody's fault — no red) |
-| Converted | Ink solid + gold left-border (brand moment: became money) |
+| Converted | Warning (amber): `--warning` text on `--warning-bg` — **changed from "ink solid + gold left-border"**. Amber makes the five statuses a readable neutral→committed scale and matches the status-breakdown chart. The cost: amber is also the Partially *Paid* invoice colour and §18.5 keeps warning deliberately "orange-leaning to stay clear of gold". The two never share a badge or a chart, but the family overlap is real — revisit in the Phase 11 contrast pass |
 | Unpaid | Gray outline (neutral until due) |
 | Partially Paid | Warning: `--warning` on `--warning-bg` |
 | Paid | Success: `--success` on `--success-bg` + check icon |

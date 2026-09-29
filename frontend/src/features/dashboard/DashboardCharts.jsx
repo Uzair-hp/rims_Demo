@@ -21,12 +21,18 @@ import styles from './DashboardSection.module.css'
  * test suite, and eventually a generated PDF — can draw the same charts at a
  * fixed size. The page itself does not pass them, so the charts are responsive.
  */
-export default function DashboardCharts({ data, width, height }) {
+export default function DashboardCharts({ data, range, onRangeChange, width, height }) {
   const chartSize = { width, height }
   return (
     <section className={styles.charts} aria-label="Trends">
       <Card padding="md" className={styles.chartCard}>
-        <TrendChart monthly={data.monthly} {...chartSize} />
+        <TrendChart
+          monthly={data.monthly}
+          daily={data.daily}
+          range={range}
+          onRangeChange={onRangeChange}
+          {...chartSize}
+        />
       </Card>
       <Card padding="md" className={styles.chartCard}>
         <StatusBreakdownChart counts={data.quotation_counts} {...chartSize} />

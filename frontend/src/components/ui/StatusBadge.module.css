@@ -39,3 +39,42 @@
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
 }
+
+/* ------------------------------------------------------------------
+   Quotation status (S18.6)
+
+   Same shape as the payment variants above: the strong token for the text and
+   border, its `-soft` partner for the fill. Every colour is a token, so light and
+   dark stay readable without a second set of rules (S18.11).
+   ------------------------------------------------------------------ */
+
+.qDraft {
+  color: var(--color-ink-muted);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+}
+
+.qSent {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+  border: 1px solid var(--color-info);
+}
+
+.qApproved {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+}
+
+.qRejected {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+}
+
+/* Converted. Amber, matching the S18.6 decision recorded in StatusBadge.jsx. */
+.qConverted {
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
+}

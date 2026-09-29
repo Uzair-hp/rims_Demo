@@ -1,0 +1,52 @@
+/**
+ * Themed checkbox (S18.11).
+ *
+ * Tokens only, so the dark theme is a swap. The control itself is native and
+ * themed through `accent-color`; the row is what carries the layout and the 44 px
+ * touch target (S19).
+ */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-block-size: var(--touch-target-min);
+}
+
+.input {
+  /* Explicit size keeps the box proportionate to the type beside it. */
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  /* The one line that themes it: the native control adopts the token in both
+     light and dark, with no second set of rules. */
+  accent-color: var(--color-ink);
+  cursor: pointer;
+  /* Not shrunk by a flex parent, which is what makes some themed checkboxes
+     collapse to a sliver. */
+  flex: none;
+  margin: 0;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Clicking the label toggles the input, so the text needs the pointer too. */
+.label:hover {
+  color: var(--color-ink);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs, 2px);
+}
+
+.hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+}

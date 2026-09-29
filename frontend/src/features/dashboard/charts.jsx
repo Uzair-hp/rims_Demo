@@ -67,6 +67,28 @@ function monthLabel(key) {
 }
 
 /**
+ * Range options for the trend chart.
+ *
+ * `null` is the 12-month view — the default, and the one the Dashboard opened on
+ * before this control existed. The numeric options slice the `daily` series the
+ * server already returned; no option triggers a refetch, so the page keeps its
+ * single request (§9.2).
+ */
+export const RANGE_OPTIONS = [
+  { value: null, label: '12 months' },
+  { value: 7, label: '7 days' },
+  { value: 14, label: '14 days' },
+  { value: 30, label: '30 days' },
+]
+
+/** `2026-04-18` -> `18 Apr`, dropping the year: every day shown is the last 30. */
+function dayLabel(key) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const month = Number(key?.slice(5, 7))
+  return `${Number(key?.slice(8, 10))} ${months[month - 1] || ''}`.trim()
+}
+
+/**
  * Wrap chart content responsively, or at an explicit size when one is given.
  *
  * Returns the element to render; the caller supplies the <svg>-producing chart.
@@ -81,22 +103,63 @@ function sized(content, { width, height }) {
 }
 
 /**
- * The 12-month invoiced-vs-received trend (FR-D3).
+ * Range selector for the trend chart.
+ *
+ * A radio group, not a set of toggle buttons: exactly one range is active, and
+ * native radios give arrow-key movement and a single tab stop for free. A plain
+ * button per option would need `aria-pressed` bookkeeping to say the same thing.
+ *
+ * It is labelled as a group so a screen reader announces "trend range" before
+ * the options, rather than three unlabelled radios.
+ */
+function RangeFilter({ value, onChange }) {
+  return (
+    <div className={styles.range} role="radiogroup" aria-label="Trend range">
+      {RANGE_OPTIONS.map((option) => {
+        const id = `range-${option.value ?? 'all'}`
+        return (
+          <label key={id} className={styles.rangeOption} htmlFor={id}>
+            <input
+              id={id}
+              type="radio"
+              name="dashboard-trend-range"
+              className={styles.rangeInput}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+            />
+            <span>{option.label}</span>
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * The invoiced-vs-received trend (FR-D3).
  *
  * Two series, not more (§18.8 caps a chart at three): invoiced is what was
  * billed, received is what actually came in, and the gap between them is the
  * whole point — so they share an axis and the difference is legible.
  *
+ * **Range.** The default is the 12-month `monthly` series. Choosing 7, 14 or 30
+ * days slices the `daily` series the same request already returned, so the chart
+ * is measured rather than approximated and nothing is refetched. Switching back
+ * to 12 months restores the original view exactly.
+ *
  * Values are converted from paise to rupees here, which is a unit change and not
  * a re-computation: no total is derived, and the paise figures on the tiles
  * remain the authority.
  */
-export function TrendChart({ monthly, width, height }) {
+export function TrendChart({ monthly, daily, range = null, onRangeChange, width, height }) {
   // Tokens are read per render so a theme switch repaints the charts (§18.8).
   const series = chartSeries()
   const grid = CHART_GRID()
-  const data = (monthly || []).map((row) => ({
-    month: monthLabel(row.month),
+
+  const isDaily = typeof range === 'number'
+  const source = isDaily ? (daily || []).slice(-range) : monthly || []
+  const data = source.map((row) => ({
+    label: isDaily ? dayLabel(row.date) : monthLabel(row.month),
     invoiced: (row.invoiced_value || 0) / 100,
     received: (row.received_value || 0) / 100,
   }))
@@ -104,14 +167,18 @@ export function TrendChart({ monthly, width, height }) {
   return (
     <figure className={styles.figure}>
       <figcaption className={styles.caption}>
-        Invoiced vs received <span className={styles.captionHint}>last 12 months</span>
+        Invoiced vs received
+        <span className={styles.captionHint}>{isDaily ? `last ${range} days` : 'last 12 months'}</span>
       </figcaption>
-      <div className={styles.plot} data-chart="trend">
+
+      {onRangeChange ? <RangeFilter value={range} onChange={onRangeChange} /> : null}
+
+      <div className={styles.plot} data-chart="trend" data-range={isDaily ? `${range}d` : '12m'}>
         {sized(
           (w, h) => (
             <LineChart width={w} height={h} data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={grid} vertical={false} />
-              <XAxis dataKey="month" {...chrome(false)} />
+              <XAxis dataKey="label" {...chrome(false)} interval="preserveStartEnd" />
               <YAxis {...chrome(true)} width={44} />
               <Tooltip
                 formatter={(value, name) => [formatPaise(Math.round(value * 100)), name]}

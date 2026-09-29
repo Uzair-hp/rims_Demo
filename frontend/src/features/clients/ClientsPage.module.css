@@ -11,16 +11,21 @@
 }
 
 .search {
-  max-width: 32ch;
+  /* Widened from 32ch. Long enough to be worth typing into, short enough that it
+     does not dominate the toolbar on a wide screen. */
+  max-width: 40ch;
 }
 
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-ink-muted);
-  cursor: pointer;
+/* ---- client row typography ----
+   The client name deliberately sets *no* font-family or font-size, so it inherits
+   `--font-body` at the base scale exactly as `QuotationsPage`'s `.number` does.
+   It used to force `var(--font-display)` — the brand serif — which made this the
+   only list row in the app rendered in a different face from the rest. Weight and
+   colour are the only things that set it apart now. */
+.rowTitle {
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+  text-decoration: none;
 }
 
 .list {
@@ -47,14 +52,6 @@
   flex: 1;
 }
 
-.rowTitle {
-  font-family: var(--font-display);
-  font-size: var(--font-size-lg);
-  font-weight: var(--weight-semibold);
-  color: var(--color-ink);
-  text-decoration: none;
-}
-
 .rowTitle:hover {
   color: var(--color-gold);
 }
@@ -65,10 +62,12 @@
   color: var(--color-ink-muted);
 }
 
+/* Labelled actions need a little more air than two bare icons did. */
 .actions {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-2);
   flex-shrink: 0;
+  align-items: center;
 }
 
 .badge {

@@ -51,8 +51,12 @@ export const CHART_SERIES = () => chartSeries()
  *
  * Reuses the §18.5 status colours already in the token sheet so "rejected" is
  * the same red here as it is on a quotation row, rather than a second opinion
- * invented for one chart. Falls back to the tertiary series colour for a status
- * with no token of its own.
+ * invented for one chart. `converted` is amber, matching the badge decision
+ * recorded in `StatusBadge.jsx`.
+ *
+ * Colour is never the only signal: the x-axis labels every status in full, so the
+ * chart is readable without relying on hue (which is also §18.5's rule for
+ * series that must not sit at equal brightness).
  */
 export function quotationChartColours() {
   return {
@@ -60,7 +64,7 @@ export function quotationChartColours() {
     sent: chartToken('--color-info'),
     approved: chartToken('--color-success'),
     rejected: chartToken('--color-danger'),
-    converted: chartToken('--color-ink-subtle'),
+    converted: chartToken('--color-warning'),
   }
 }
 

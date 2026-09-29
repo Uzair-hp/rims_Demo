@@ -26,7 +26,6 @@
   min-inline-size: 0;
   padding-block: var(--space-1);
 }
-
 .collapseToggle {
   display: grid;
   place-items: center;

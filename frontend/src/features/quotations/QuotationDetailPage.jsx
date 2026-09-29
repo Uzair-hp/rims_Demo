@@ -176,7 +176,7 @@ export default function QuotationDetailPage() {
       />
 
       <div className={styles.statusRow}>
-        <StatusBadge>{statusLabel(q.status)}</StatusBadge>
+        <StatusBadge status={q.status}>{statusLabel(q.status)}</StatusBadge>
         {q.is_expired ? (
           <span className={styles.expired}>Expired — validity period has passed</span>
         ) : q.valid_until ? (

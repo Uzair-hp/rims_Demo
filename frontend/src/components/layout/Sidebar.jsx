@@ -29,7 +29,19 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''} no-print`.trim()}>
       <div className={styles.head}>
         <div className={styles.brand}>
-          <BrandLockup variant="plate" height={30} logoSrc={logoSrc} />
+          {/*
+            The app's one primary brand placement: the mark with the company name
+            directly beneath it (§18.6). `alt=""` because the name is visible
+            right below the mark — repeating it in the alt text would make a
+            screen reader say it twice for one logo.
+
+            The wordmark folds away in the collapsed rail, where
+            `--size-sidebar-collapsed` (76px) has no width for it — the same
+            treatment the nav labels get, and a clipped "Ruchita Inte…" under the
+            mark would be worse than no name. The mark carries the identity on its
+            own, and the page heading still names the document.
+          */}
+          <BrandLockup variant="stack" height={30} logoSrc={logoSrc} alt="" showWordmark={!collapsed} />
         </div>
         <button
           type="button"

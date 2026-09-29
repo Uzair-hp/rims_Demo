@@ -232,7 +232,9 @@ export default function QuotationsPage() {
                     </div>
                     <div className={styles.meta}>
                       <span className={styles.total}>{formatPaise(q.grand_total_paise)}</span>
-                      <StatusBadge className={styles.badge}>{statusLabel(q.status)}</StatusBadge>
+                      <StatusBadge status={q.status} className={styles.badge}>
+                        {statusLabel(q.status)}
+                      </StatusBadge>
                     </div>
                   </Link>
                 </Card>

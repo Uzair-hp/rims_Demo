@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Button from '../../../components/ui/Button.jsx'
+import Checkbox from '../../../components/ui/Checkbox.jsx'
 import TextField from '../../../components/ui/TextField.jsx'
 import Section from '../Section.jsx'
 import { createTerm, deleteTerm, fetchTerms, updateTerm } from '../../../api/endpoints/settings.js'
@@ -242,14 +243,11 @@ export default function TermsSection({ notify }) {
             rows={6}
             required
           />
-          <label className={styles.checkRow}>
-            <input
-              type="checkbox"
-              checked={draft.is_default}
-              onChange={(event) => set('is_default')(event.target.checked)}
-            />
-            Use as the default for this scope
-          </label>
+          <Checkbox
+            label="Use as the default for this scope"
+            checked={draft.is_default}
+            onChange={(next) => set('is_default')(next)}
+          />
           <div className={styles.termFormActions}>
             <Button type="button" variant="secondary" onClick={cancel} disabled={saving}>
               Cancel

@@ -38,6 +38,69 @@
   min-inline-size: 0;
 }
 
+/* ------------------------------------------------------------------
+   Range filter (7 / 14 / 30 days, or 12 months)
+
+   `flex-wrap` is what keeps it inside a 360 px viewport: the four options are
+   allowed to fall onto a second line rather than forcing a horizontal scroll
+   (§19, and the Phase 10 360 px gate).
+   ------------------------------------------------------------------ */
+
+.range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.rangeOption {
+  display: inline-flex;
+  align-items: center;
+  /* 44 px touch target on a control that is otherwise a few pixels tall (§19). */
+  min-block-size: var(--touch-target-min);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.rangeOption:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-ink);
+}
+
+/* The selected range is marked by the pill, not by colour alone: it also gains
+   the ink text and a solid border, so it survives a greyscale reading. */
+.rangeOption:has(.rangeInput:checked) {
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: var(--color-surface);
+  font-weight: var(--weight-semibold);
+}
+
+.rangeOption:has(.rangeInput:focus-visible) {
+  outline: 2px solid var(--color-ring, var(--color-gold));
+  outline-offset: 2px;
+}
+
+/* Visually hidden but still focusable and announced: the real radio carries the
+   semantics, the pill is the styling. */
+.rangeInput {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
 /* On a 360 px screen the two series overlap visually at this size, and the
    legend below the plot needs room of its own rather than sitting on the axis. */
 @media (max-width: 480px) {

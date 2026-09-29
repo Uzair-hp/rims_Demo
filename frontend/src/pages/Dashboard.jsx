@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import Button from '../components/ui/Button.jsx'
 import Card from '../components/ui/Card.jsx'
 import EmptyState from '../components/ui/EmptyState.jsx'
@@ -111,11 +111,18 @@ function Recent({ data }) {
 
 export default function Dashboard() {
   const { data, loadState, error, retry } = useDashboard()
+  // `null` is the 12-month default. Changing it re-slices data the single
+  // summary request already returned, so the page never refetches (§9.2).
+  const [trendRange, setTrendRange] = useState(null)
 
   return (
     <>
+      {/*
+        No brand lockup here on purpose: the sidebar is the app's one brand
+        placement (§18.6), and a second copy under the heading stated the company
+        name twice in a single view. The page heading is the page's identity.
+      */}
       <PageHeader
-        eyebrow="Ruchita Interiors"
         title="Dashboard"
         description="Where the business stands right now: what is quoted, what is billed, and what is still owed."
         actions={
@@ -180,7 +187,7 @@ export default function Dashboard() {
           <>
             <Tiles data={data} />
             <Suspense fallback={<DashboardChartsSkeleton />}>
-              <DashboardCharts data={data} />
+              <DashboardCharts data={data} range={trendRange} onRangeChange={setTrendRange} />
             </Suspense>
             <Recent data={data} />
           </>

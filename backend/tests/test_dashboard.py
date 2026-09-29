@@ -28,6 +28,7 @@ import pytest
 from app.extensions.database import db
 from app.models import Client, Invoice, Payment, Quotation
 from app.services.dashboard import (
+    DAILY_BUCKETS,
     MONTH_BUCKETS,
     QUOTATION_STATUSES,
     RECENT_LIMIT,
@@ -480,6 +481,129 @@ def test_quotation_series_totals_reconcile_with_the_headline(scenario, app):
     assert sum(row["quotation_value"] for row in data["monthly"]) == data["quotation_values"]["total_quotation_value"]
 
 
+# ------------------------------------------------------------- daily series
+
+
+def test_daily_series_has_exactly_thirty_chronological_buckets(scenario, app):
+    """
+    30 day-level buckets, oldest first, ending today.
+
+    This is the data a 7/14/30-day view is sliced from, so a wrong length or
+    order would silently shift every point on the chart.
+    """
+    series = compute(scenario, app)["daily"]
+
+    assert len(series) == DAILY_BUCKETS == 30
+    days = [row["date"] for row in series]
+    assert days == sorted(days)
+    assert len(set(days)) == 30
+    assert days[-1] == scenario["today"].isoformat()
+    assert days[0] == (scenario["today"] - timedelta(days=29)).isoformat()
+
+
+def test_daily_series_is_zero_filled(scenario, app):
+    """A quiet day is present as zeros, not omitted."""
+    series = compute(scenario, app)["daily"]
+    quiet = next(row for row in series if row["date"] == (scenario["today"] - timedelta(days=3)).isoformat())
+
+    assert quiet == {
+        "date": (scenario["today"] - timedelta(days=3)).isoformat(),
+        "quotation_count": 0,
+        "quotation_value": 0,
+        "invoiced_value": 0,
+        "received_value": 0,
+    }
+
+
+def test_daily_series_uses_day_granularity_not_monthly_totals(scenario, app):
+    """
+    The point of the additive series: real per-day facts.
+
+    The fixture dates every quotation in a given month offset to the same day, so
+    the current month collapses to one populated bucket. A month-bucket slice
+    would instead have smeared that month's totals across all 30 days.
+    """
+    series = compute(scenario, app)["daily"]
+    by_date = {row["date"]: row for row in series}
+
+    # Which quotations fall inside the 30-day window, derived from the same table
+    # the fixture builds from, so this cannot drift from the data.
+    start = scenario["today"] - timedelta(days=29)
+    inside = [
+        (key, grand)
+        for key, _s, grand, month_offset, _mk, _i in QUOTATIONS
+        if month_start(scenario["today"], month_offset) + timedelta(days=4) >= start
+    ]
+    assert inside, "scenario should place some quotations inside 30 days"
+
+    dated = (month_start(scenario["today"], 0) + timedelta(days=4)).isoformat()
+    assert by_date[dated]["quotation_count"] == len(inside)
+    assert by_date[dated]["quotation_value"] == sum(grand for _k, grand in inside)
+
+    # Only that one day is populated: a slice that smeared the month would put
+    # this figure on all 30 buckets.
+    assert sum(row["quotation_count"] for row in series) == len(inside)
+    assert sum(1 for row in series if row["quotation_count"] > 0) == 1
+
+    # Today itself is empty; the fixture never dates a document on "today".
+    assert series[-1]["date"] == scenario["today"].isoformat()
+    assert series[-1]["quotation_count"] == 0
+
+
+def test_daily_invoiced_uses_issue_date_and_received_uses_paid_on(scenario, app):
+    """
+    Same three columns as the monthly series, at day granularity.
+
+    The two issued invoices were issued in month -1, but their payments land on
+    different days inside the 30-day window, so received has a bucket where
+    invoiced has none.
+    """
+    series = compute(scenario, app)["daily"]
+    by_date = {row["date"]: row for row in series}
+
+    # The current-month payment of 200000 against the invoice issued last month.
+    paid_on = (month_start(scenario["today"], 0) + timedelta(days=12)).isoformat()
+    assert by_date[paid_on]["received_value"] == 200000
+
+    # Nothing was invoiced on that day. Both invoices were issued in the previous
+    # month, which is outside a 30-day window, so the whole daily series carries
+    # no invoiced figure at all.
+    assert sum(row["invoiced_value"] for row in series) == 0
+    # The 600000 payment is dated in month -1 and is therefore also outside.
+    assert sum(row["received_value"] for row in series) == 200000
+
+
+def test_daily_null_issue_date_creates_no_bucket(scenario, app):
+    """A draft invoice with `issue_date = NULL` must not yield a stray day key."""
+    series = compute(scenario, app)["daily"]
+    assert all(row["date"] for row in series)
+    assert "" not in {row["date"] for row in series}
+
+
+def test_daily_series_is_empty_not_missing_on_a_fresh_install(authed_client):
+    """A new database still returns 30 zeroed days, so the chart has an axis."""
+    data = api_summary(authed_client)
+
+    assert len(data["daily"]) == 30
+    assert all(row["quotation_count"] == 0 for row in data["daily"])
+
+
+def test_daily_series_does_not_disturb_the_monthly_or_money_figures(scenario, app):
+    """
+    Additive means additive.
+
+    `monthly` keeps its 12 buckets and the money trio is identical whether or not
+    a client reads `daily` — the headline figures are computed independently of
+    the new series.
+    """
+    data = compute(scenario, app)
+
+    assert data["money"] == SCENARIO_TRUTH["money"]
+    assert len(data["monthly"]) == 12
+    # The daily window is a subset of reality, so it can never exceed the totals.
+    assert sum(row["received_value"] for row in data["daily"]) <= data["money"]["received_total"]
+
+
 # -------------------------------------------------------------- recent lists
 
 
@@ -547,7 +671,14 @@ def test_response_carries_every_9_2_field(authed_client):
     """
     data = api_summary(authed_client)
 
-    assert set(data) == {"quotation_counts", "quotation_values", "money", "monthly", "recent"}
+    assert set(data) == {
+        "quotation_counts",
+        "quotation_values",
+        "money",
+        "monthly",
+        "daily",
+        "recent",
+    }
     assert set(data["quotation_counts"]) == set(QUOTATION_STATUSES)
     assert set(data["quotation_values"]) == {f"{s}_value" for s in QUOTATION_STATUSES} | {
         "total_quotation_value"
@@ -558,6 +689,17 @@ def test_response_carries_every_9_2_field(authed_client):
     for row in data["monthly"]:
         assert set(row) == {
             "month",
+            "quotation_count",
+            "quotation_value",
+            "invoiced_value",
+            "received_value",
+        }
+    # The day-level series is additive: `monthly` keeps its exact §9.2 shape, and
+    # `daily` mirrors it with a `date` key.
+    assert len(data["daily"]) == 30
+    for row in data["daily"]:
+        assert set(row) == {
+            "date",
             "quotation_count",
             "quotation_value",
             "invoiced_value",

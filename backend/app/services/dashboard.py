@@ -49,11 +49,18 @@ Metric definitions, resolved once here so the test can assert them:
   group by `quotation_date`, invoiced by `issue_date`, received by `paid_on`.
   These are three different columns on three different tables and conflating any
   pair silently shifts a month.
+- `daily` — the last 30 days at day granularity, same shape and same three
+  columns, also zero-filled. **Additive**: `monthly` and every money total are
+  unchanged, and the 12-month view stays the default. It exists because a
+  7/14/30-day view cannot honestly be carved out of monthly buckets — a month is
+  not a day — so the short ranges are measured rather than approximated. Being
+  additive, it does not disturb §9.2's "one request, one query set": the client
+  slices `daily` and never re-aggregates.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import func, select
 
@@ -71,6 +78,10 @@ RECENT_LIMIT = 5
 
 #: §9.2 asks for 12 months: the current month plus the eleven before it.
 MONTH_BUCKETS = 12
+
+#: Day-level buckets for the Dashboard's 7/14/30-day view. Additive: `monthly` is
+#: unchanged and remains the 12-month default.
+DAILY_BUCKETS = 30
 
 
 def _month_keys(today: date | None = None) -> list[str]:
@@ -97,6 +108,24 @@ def _month_keys(today: date | None = None) -> list[str]:
 def _month_expression(column):
     """`YYYY-MM` for a DATE column, in SQL. Matches `_month_keys()`' format."""
     return func.strftime("%Y-%m", column)
+
+
+def _day_expression(column):
+    """`YYYY-MM-DD` for a DATE column, in SQL. Matches `_day_keys()`' format."""
+    return func.strftime("%Y-%m-%d", column)
+
+
+def _day_keys(today: date | None = None) -> list[str]:
+    """
+    The last `DAILY_BUCKETS` `YYYY-MM-DD` keys, oldest first.
+
+    Built in Python for the same reason as `_month_keys()`: the bucket list is
+    fixed regardless of what data exists, so a sparse or empty period still
+    yields exactly the requested number of points. A `GROUP BY` over days would
+    return nothing for a quiet week and the chart would silently collapse.
+    """
+    today = today or date.today()
+    return [(today - timedelta(days=offset)).isoformat() for offset in range(DAILY_BUCKETS - 1, -1, -1)]
 
 
 def _quotation_counts() -> dict[str, int]:
@@ -242,6 +271,82 @@ def _monthly_series(today: date | None = None) -> list[dict]:
     return series
 
 
+def _daily_series(today: date | None = None) -> list[dict]:
+    """
+    The last 30 days, one bucket per day, zero-filled, oldest first.
+
+    This is **additive**: `monthly` and every money total are untouched, and the
+    12-month view remains the Dashboard's default. It exists because a 7/14/30-day
+    view cannot be derived from monthly buckets — a month is not a day, and
+    slicing a 30-day figure out of a month total would be an approximation, not a
+    measurement. Each bucket is a real `GROUP BY` on a real column, so the
+    short-range figures reconcile with the monthly ones instead of contradicting
+    them.
+
+    Same three date columns as the monthly series, at day granularity:
+    `quotation_date` for quotations, `issue_date` for invoiced, `paid_on` for
+    received. `issue_date` is nullable, so invoices with no issue date are
+    skipped and cannot create a bucket keyed on the empty string.
+    """
+    keys = _day_keys(today)
+    start = date.fromisoformat(keys[0])
+
+    quotation_rows = {
+        day: (count, value)
+        for day, count, value in db.session.execute(
+            select(
+                _day_expression(Quotation.quotation_date),
+                func.count(Quotation.id),
+                func.coalesce(func.sum(Quotation.grand_total_paise), 0),
+            )
+            .where(Quotation.quotation_date >= start)
+            .group_by(_day_expression(Quotation.quotation_date))
+        ).all()
+    }
+
+    invoiced_rows = dict(
+        db.session.execute(
+            select(
+                _day_expression(Invoice.issue_date),
+                func.coalesce(func.sum(Invoice.grand_total_paise), 0),
+            )
+            .where(
+                Invoice.status == BILLED_STATUS,
+                Invoice.issue_date.isnot(None),
+                Invoice.issue_date >= start,
+            )
+            .group_by(_day_expression(Invoice.issue_date))
+        ).all()
+    )
+
+    received_rows = dict(
+        db.session.execute(
+            select(
+                _day_expression(Payment.paid_on),
+                func.coalesce(func.sum(Payment.amount_paise), 0),
+            )
+            .select_from(Payment)
+            .join(Invoice, Invoice.id == Payment.invoice_id)
+            .where(Invoice.status == BILLED_STATUS, Payment.paid_on >= start)
+            .group_by(_day_expression(Payment.paid_on))
+        ).all()
+    )
+
+    series = []
+    for key in keys:
+        count, quotation_value = quotation_rows.get(key, (0, 0))
+        series.append(
+            {
+                "date": key,
+                "quotation_count": int(count),
+                "quotation_value": int(quotation_value or 0),
+                "invoiced_value": int(invoiced_rows.get(key, 0) or 0),
+                "received_value": int(received_rows.get(key, 0) or 0),
+            }
+        )
+    return series
+
+
 def _recent_quotations() -> list[dict]:
     """
     Columns are selected explicitly rather than loading whole ORM entities.
@@ -350,15 +455,16 @@ def dashboard_summary(today: date | None = None) -> dict:
     """
     The whole Dashboard, in one dict — §9.2's "one request, one query set".
 
-    Grouped into the four shapes the page renders: quotation counts, quotation
-    values, the money trio, and everything else (series + recent lists). Every
-    figure is paise except counts and the month keys.
+    Grouped into the shapes the page renders: quotation counts, quotation values,
+    the money trio, the two time series, and the recent lists. Every figure is
+    paise except counts and the date keys.
     """
     return {
         "quotation_counts": _quotation_counts(),
         "quotation_values": _quotation_values(),
         "money": _money_figures(),
         "monthly": _monthly_series(today),
+        "daily": _daily_series(today),
         "recent": {
             "quotations": _recent_quotations(),
             "invoices": _recent_invoices(),
@@ -368,6 +474,7 @@ def dashboard_summary(today: date | None = None) -> dict:
 
 
 __all__ = [
+    "DAILY_BUCKETS",
     "MONTH_BUCKETS",
     "QUOTATION_STATUSES",
     "RECENT_LIMIT",

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Button from '../../components/ui/Button.jsx'
 import Card from '../../components/ui/Card.jsx'
+import Checkbox from '../../components/ui/Checkbox.jsx'
 import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx'
 import EmptyState from '../../components/ui/EmptyState.jsx'
 import PageHeader from '../../components/ui/PageHeader.jsx'
@@ -108,17 +109,14 @@ export default function ClientsPage() {
           onChange={setSearchTerm}
           className={styles.search}
         />
-        <label className={styles.checkbox}>
-          <input
-            type="checkbox"
-            checked={includeArchived}
-            onChange={(e) => {
-              setIncludeArchived(e.target.checked)
-              setPage(1)
-            }}
-          />
-          <span>Show archived</span>
-        </label>
+        <Checkbox
+          label="Show archived"
+          checked={includeArchived}
+          onChange={(next) => {
+            setIncludeArchived(next)
+            setPage(1)
+          }}
+        />
       </div>
 
       {isError ? (
@@ -166,21 +164,31 @@ export default function ClientsPage() {
                       {client.email ? <p className={styles.meta}>{client.email}</p> : null}
                     </div>
                     <div className={styles.actions}>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon="edit"
-                        aria-label={`Edit ${client.name}`}
-                        onClick={() => openEdit(client)}
-                      />
+                      {/*
+                        Visible text alongside each icon.
+
+                        These were icon-only ghost buttons, which at `sm` size
+                        render as a small bordered square — a shape users read as
+                        a tick box rather than a button. The label removes the
+                        ambiguity.
+
+                        The `aria-label`s that used to supply the accessible name
+                        are gone: with visible text present, a duplicate
+                        `aria-label` would override it and make voice control
+                        match on the hidden string instead of what is on screen.
+                      */}
+                      <Button size="sm" variant="ghost" icon="edit" onClick={() => openEdit(client)}>
+                        Edit
+                      </Button>
                       {!client.is_archived ? (
                         <Button
                           size="sm"
-                          variant="ghost"
+                          variant="secondary"
                           icon="archive"
-                          aria-label={`Archive ${client.name}`}
                           onClick={() => setArchiveTarget(client)}
-                        />
+                        >
+                          Archive
+                        </Button>
                       ) : null}
                     </div>
                   </div>

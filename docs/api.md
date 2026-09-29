@@ -133,6 +133,9 @@ paise. No `@csrf_protect` — there is no mutation.
     "monthly": [
       { "month": "2025-10", "quotation_count": 0, "quotation_value": 0, "invoiced_value": 0, "received_value": 0 }
     ],
+    "daily": [
+      { "date": "2026-09-01", "quotation_count": 0, "quotation_value": 0, "invoiced_value": 0, "received_value": 0 }
+    ],
     "recent": {
       "quotations": [{ "id": 12, "number": "QTN-2026-0012", "client_name": "Alpha Interiors", "status": "approved", "grand_total_paise": 300000, "date": "2026-09-20" }],
       "invoices": [{ "id": 5, "number": "INV-2026-0005", "client_name": "Beta Builders", "status": "issued", "grand_total_paise": 500000, "paid_paise": 200000, "outstanding_paise": 300000, "payment_status": "partially_paid", "date": "2026-08-07" }],
@@ -162,6 +165,19 @@ Definitions, so the numbers are not a matter of opinion:
   three different columns: `quotation_date` for the quotation series,
   `issue_date` for invoiced, `paid_on` for received. A payment in month *N*
   against an invoice issued in *N−1* lands in *N*.
+- `daily` — the **last 30 days** at day granularity, same five fields with `date`
+  (`YYYY-MM-DD`) in place of `month`, also zero-filled. **Additive**: `monthly`,
+  the money trio and every count are unchanged, and the 12-month view remains the
+  default.
+
+  It exists so the Dashboard's 7 / 14 / 30-day view is a *measurement* rather than
+  an approximation. A month is not a day, so a 7-day figure cannot be carved out
+  of a month bucket; these are independent `GROUP BY` queries on the same three
+  columns. Because it is additive and always present, the client simply slices it
+  (`daily.slice(-7)`) and the page still makes exactly one request.
+
+  It is a superset of the windows the UI offers: 30 buckets serve the largest
+  option, and the 7- and 14-day views are slices of the same array.
 - `recent` — 5 of each, newest first. Archived clients are excluded (FR-C4). An
   archived client still owns its history, so the quotation and invoice lists keep
   showing them; only the "who is active" list drops them.

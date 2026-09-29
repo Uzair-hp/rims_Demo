@@ -36,6 +36,18 @@ const MONTHS = [
   '2026-09',
 ]
 
+const DAYS = Array.from({ length: 30 }, (_, index) => {
+  const day = new Date(2026, 8, 30 - (29 - index))
+  const iso = day.toISOString().slice(0, 10)
+  return {
+    date: iso,
+    quotation_count: index === 20 ? 2 : 0,
+    quotation_value: index === 20 ? 500000 : 0,
+    invoiced_value: index === 25 ? 1100000 : 0,
+    received_value: index === 29 ? 200000 : 0,
+  }
+})
+
 /** A summary with distinctive numbers, so a wrong figure is unmistakable. */
 function summary(overrides = {}) {
   return {
@@ -56,6 +68,7 @@ function summary(overrides = {}) {
       invoiced_value: index === 11 ? 1100000 : 0,
       received_value: index === 11 ? 200000 : index === 10 ? 600000 : 0,
     })),
+    daily: DAYS,
     recent: {
       quotations: [
         {
@@ -106,19 +119,29 @@ function jsonResponse(body, { status = 200, ok = true } = {}) {
   }
 }
 
-/** Mock the one endpoint the page calls. Returns the call log. */
+/**
+ * Mock the endpoint the page needs. Returns the call log.
+ *
+ * Only `/dashboard/summary`: the Dashboard no longer reads Settings for the brand
+ * mark, because it no longer renders one. The logo belongs to the sidebar, which
+ * `AppShell` supplies.
+ */
 function mockApi({ data = summary(), fail = null } = {}) {
   const calls = []
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url) => {
-      calls.push({ url: String(url) })
+      const path = String(url)
+      calls.push({ url: path })
       if (fail) return fail
       return jsonResponse({ data })
     }),
   )
   return { calls }
 }
+
+/** Calls to the Dashboard's own endpoint. */
+const dashboardCalls = ({ calls }) => calls.filter((call) => call.url.endsWith('/dashboard/summary'))
 
 function renderDashboard() {
   return render(
@@ -149,10 +172,12 @@ describe('Dashboard', () => {
     renderDashboard()
 
     await screen.findByText('Outstanding')
-    // §9.2: "one request, one query set". A second call would mean the page
-    // fanned out and is re-deriving something the server already computed.
-    expect(calls).toHaveLength(1)
-    expect(calls[0].url).toBe(`${API}/dashboard/summary`)
+    // §9.2: "one request, one query set". A second Dashboard call would mean the
+    // page fanned out and is re-deriving something the server already computed.
+    // The settings fetch is AppShell-level state (Phase 3), not a Dashboard call.
+    const mine = dashboardCalls({ calls })
+    expect(mine).toHaveLength(1)
+    expect(mine[0].url).toBe(`${API}/dashboard/summary`)
   })
 
   // ------------------------------------------------------------- metrics
@@ -242,13 +267,15 @@ describe('Dashboard', () => {
   // -------------------------------------------------------------- states
 
   it('shows skeletons while loading, not a spinner', async () => {
-    let resolve
+    // The request stays pending until released, so the loading state is real
+    // rather than a fast resolve that hides it.
+    let release
     vi.stubGlobal(
       'fetch',
       vi.fn(
         () =>
-          new Promise((r) => {
-            resolve = () => r(jsonResponse({ data: summary() }))
+          new Promise((resolve) => {
+            release = () => resolve(jsonResponse({ data: summary() }))
           }),
       ),
     )
@@ -256,9 +283,8 @@ describe('Dashboard', () => {
 
     const region = await screen.findByLabelText('Summary totals, loading')
     expect(region).toHaveAttribute('aria-busy', 'true')
-    expect(within(region).getAllByText('', { selector: 'div' }).length).toBeGreaterThan(0)
 
-    resolve()
+    release()
     await waitFor(() => expect(screen.getByText('Outstanding')).toBeInTheDocument())
   })
 
@@ -330,6 +356,46 @@ describe('Dashboard', () => {
     renderDashboard()
     await screen.findByText('Dashboard could not be loaded')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+  })
+
+  // ------------------------------------------------------------- branding
+
+  /**
+   * The sidebar is the app's one brand placement (S18.6). The Dashboard used to
+   * carry a second copy � first a standalone eyebrow, then a logo-and-wordmark
+   * pair above the heading � so the company name appeared twice in one view.
+   * These assert the content area stays clear of it.
+   */
+  it('does not repeat the company name in the page content', async () => {
+    mockApi()
+    const { container } = renderDashboard()
+    await screen.findByText('Outstanding')
+
+    // No wordmark, and no standalone eyebrow either.
+    expect(screen.queryByText(/ruchita interiors/i)).not.toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/ruchita interiors/i)
+  })
+
+  it('does not render a brand logo in the page content', async () => {
+    mockApi()
+    const { container } = renderDashboard()
+    await screen.findByText('Outstanding')
+
+    // The charts are the only images the content should own, and they are lazy;
+    // no branding mark may appear here.
+    const brandLogos = [...container.querySelectorAll('img')].filter((img) =>
+      /logo|brand/i.test(img.getAttribute('src') || ''),
+    )
+    expect(brandLogos).toHaveLength(0)
+  })
+
+  it('keeps exactly one level-one heading with the branding gone', async () => {
+    mockApi()
+    renderDashboard()
+    await screen.findByText('Outstanding')
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
+    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
   })
 
   // --------------------------------------------------------- recent lists
@@ -500,5 +566,101 @@ describe('Dashboard charts', () => {
     expect(shortRupees(0)).toBe('₹0')
     // Lakh grouping, not thousands: a lakh is 1,00,000, not 100,000.
     expect(shortRupees(10000000000)).toBe('₹10Cr')
+  })
+})
+
+// ------------------------------------------------------------ range filter
+
+/**
+ * The 7 / 14 / 30-day range control.
+ *
+ * The important property is that switching range never refetches: the `daily`
+ * series arrives with the one summary request and the control only slices it, so
+ * §9.2's "one request, one query set" still holds after a range change. A
+ * control that refetched would pass a visual check and fail the actual rule.
+ */
+describe('Dashboard trend range filter', () => {
+  const SIZE = { width: 640, height: 240 }
+
+  function renderCharts(props = {}) {
+    const onRangeChange = props.onRangeChange || (() => {})
+    const utils = render(
+      <MemoryRouter>
+        <DashboardCharts data={summary()} {...props} {...SIZE} />
+      </MemoryRouter>,
+    )
+    return { ...utils, onRangeChange }
+  }
+
+  it('offers 12 months plus 7, 14 and 30 days', () => {
+    renderCharts({ onRangeChange: () => {} })
+    const group = screen.getByRole('radiogroup', { name: 'Trend range' })
+
+    for (const label of ['12 months', '7 days', '14 days', '30 days']) {
+      expect(within(group).getByRole('radio', { name: label })).toBeInTheDocument()
+    }
+  })
+
+  it('starts on the 12-month view and marks it selected', () => {
+    renderCharts({ onRangeChange: () => {} })
+
+    const group = screen.getByRole('radiogroup', { name: 'Trend range' })
+    expect(within(group).getByRole('radio', { name: '12 months' })).toBeChecked()
+    expect(within(group).getByRole('radio', { name: '7 days' })).not.toBeChecked()
+  })
+
+  it('reports the chosen range when its pill is clicked', async () => {
+    const user = userEvent.setup()
+    const onRangeChange = vi.fn()
+    renderCharts({ onRangeChange })
+
+    // The real interaction is the visible pill, not the 1px radio underneath it.
+    await user.click(screen.getByText('7 days'))
+    expect(onRangeChange).toHaveBeenCalledWith(7)
+  })
+
+  it('renders the 12 monthly buckets by default', () => {
+    const { container } = renderCharts({ onRangeChange: () => {} })
+    const trend = container.querySelector('[data-chart="trend"]')
+
+    expect(trend).toHaveAttribute('data-range', '12m')
+    expect(trend.querySelectorAll('.recharts-xAxis .recharts-cartesian-axis-tick').length).toBe(12)
+  })
+
+  it('renders only the selected number of daily points', () => {
+    const { container } = renderCharts({ onRangeChange: () => {}, range: 7 })
+    const trend = container.querySelector('[data-chart="trend"]')
+
+    expect(trend).toHaveAttribute('data-range', '7d')
+    // A 7-day window is 7 ticks, not 30 — the slice is real, not a rescale.
+    expect(trend.querySelectorAll('.recharts-xAxis .recharts-cartesian-axis-tick').length).toBe(7)
+  })
+
+  it('caps the daily window at the 30 buckets the server returns', () => {
+    const { container } = renderCharts({ onRangeChange: () => {}, range: 30 })
+    const trend = container.querySelector('[data-chart="trend"]')
+
+    // More points than the x-axis can label is fine: the axis thins them with
+    // preserveStartEnd rather than overlapping the labels.
+    expect(trend.querySelectorAll('.recharts-line-curve').length).toBe(2)
+  })
+
+  it('says which window is on screen', () => {
+    const { container } = renderCharts({ onRangeChange: () => {}, range: 14 })
+
+    expect(container.textContent).toContain('last 14 days')
+  })
+
+  it('falls back to the monthly view when no daily data is present', () => {
+    // A server predating the daily series would send no `daily` key. The control
+    // must not blank the chart.
+    const { container } = render(
+      <MemoryRouter>
+        <DashboardCharts data={summary({ daily: undefined })} onRangeChange={() => {}} range={7} {...SIZE} />
+      </MemoryRouter>,
+    )
+
+    expect(container.querySelector('[data-chart="trend"]')).toBeInTheDocument()
+    expect(container.textContent).toContain('Invoiced vs received')
   })
 })

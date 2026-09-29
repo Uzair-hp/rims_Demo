@@ -44,6 +44,35 @@
   border-radius: var(--radius-pill);
 }
 
+/* Stack variant: the plate with the company name directly beneath it.
+   The sidebar's one primary brand placement. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.stackWordmark {
+  /* Typography is the `text` variant's, unchanged: same family, size, weight and
+     line height as the branding type used elsewhere. Only the colour differs,
+     because the sidebar is on `--color-ink` where ink text would vanish. */
+  font-family: var(--font-display);
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  /* `--gold` is defined per theme, so this reads on the dark rail in both. */
+  color: var(--gold);
+  text-align: center;
+  white-space: nowrap;
+  /* The rail is `--size-sidebar` wide; the name must never push it wider. */
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Login variant: logo + wordmark + gold line */
 .login {
   display: flex;
