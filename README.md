@@ -94,8 +94,24 @@ Run from the repository root:
 
 ## Deploying to Render
 
-The repository root contains a [`render.yaml`](render.yaml) blueprint, so the
-whole deployment is a dashboard operation with no command-line steps.
+The repository root contains a [`render.yaml`](render.yaml) blueprint, so the whole
+deployment is a dashboard operation with no command-line steps.
+
+> ### Before you use this for anything real
+>
+> **On the Render Free tier the database and every uploaded image are temporary.**
+>
+> Free web services have an ephemeral filesystem, and persistent disks are a
+> paid-only feature, so there is no way to keep them. The SQLite database and the
+> logo and payment QR are lost whenever the service **redeploys** (every push to
+> `main`), **restarts**, or **spins down** - and a Free service spins down after
+> **15 minutes with no traffic**. A demo left alone overnight returns to an empty
+> database with no branding.
+>
+> This is fine for showing the app to someone. It is not fine for real invoices.
+> Before this holds live business data, either switch the instance to a paid plan
+> and attach a persistent disk, or move the database off the service. SQLite itself
+> is not the problem and is not being replaced.
 
 ### Architecture: one Web Service
 
@@ -116,11 +132,11 @@ In the Render dashboard: **New → Blueprint**, then select this repository. Ren
 reads `render.yaml` and creates the service. On the first apply it prompts for the
 three `sync: false` values:
 
-| Variable         | Value                                            |
-| ---------------- | ------------------------------------------------ |
-| `ADMIN_EMAIL`    | the owner login email                            |
-| `ADMIN_PASSWORD` | at least 10 characters, per the §16 policy        |
-| `ADMIN_NAME`     | optional display name, defaults to the business   |
+| Variable         | Value                                           |
+| ---------------- | ----------------------------------------------- |
+| `ADMIN_EMAIL`    | the owner login email                           |
+| `ADMIN_PASSWORD` | at least 10 characters, per the §16 policy      |
+| `ADMIN_NAME`     | optional display name, defaults to the business |
 
 `SECRET_KEY` and `JWT_SECRET_KEY` are generated per environment, so there is no
 secret in the repository. Both are mandatory in production: the app falls back to
@@ -129,74 +145,70 @@ restart.
 
 Creating the service manually instead gives the same result:
 
-| Setting            | Value                                                             |
-| ------------------ | ----------------------------------------------------------------- |
-| Root directory     | `backend`                                                          |
-| Build command      | `pip install --upgrade pip && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build` |
-| Start command      | `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --access-logfile - --error-logfile - run:app` |
-| Health check path  | `/api/v1/health`                                                   |
-| Pre-deploy command | `flask --app "app:create_app" db upgrade && flask --app "app:create_app" seed-defaults` |
-| Instance type      | **paid** — see storage below                                        |
-| Python version     | 3.13                                                               |
+| Setting           | Value                                                             |
+| ----------------- | ----------------------------------------------------------------- |
+| Root directory    | `backend`                                                          |
+| Build command     | `pip install --upgrade pip && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build` |
+| Start command     | `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --access-logfile - --error-logfile - run:app` |
+| Health check path | `/api/v1/health`                                                   |
+| Instance type     | **Free** (0.1 CPU, 512 MB)                                         |
+| Python version    | 3.13                                                               |
 
-### 2. Storage: a persistent disk is required
+`rootDir` is `backend` for a second reason beyond `requirements.txt`: Alembic
+resolves its `migrations` directory relative to the working directory, so the
+bootstrap below only finds the migrations because the working directory is
+`backend`.
 
-**Render's filesystem is ephemeral.** Without a disk, every deploy and every
-restart destroys the SQLite database and every uploaded logo and payment QR. The
-blueprint declares a 1 GB disk at `/var/data` and points both at it:
+### 2. Migrations and the owner account run at start-up
 
-| Setting        | Value                                          |
-| -------------- | ---------------------------------------------- |
-| `DATABASE_URL` | `sqlite:////var/data/ruchita_interiors.db`     |
-| `UPLOADS_DIR`  | `/var/data/uploads`                            |
+Free services have **no shell access** and **no pre-deploy command** (both are
+paid-only), so `flask db upgrade` and `flask seed-admin` cannot be run against a
+fresh instance. Instead, with `AUTO_SEED_ADMIN=true` in the blueprint, the app
+prepares itself on start-up:
 
-Render does not attach persistent disks to the free tier, so the instance must be
-paid. SQLite itself is unchanged — it remains the database, on a disk that
-outlives the container.
+1. If the schema is missing, run the Alembic migrations to head. Necessary because
+   `create_all()` is deliberately never called, so an unmigrated database would 500
+   on the first real request.
+2. Seed the settings row, starter terms and catalogue lists (already idempotent).
+3. Create the single owner account from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-`preDeployCommand` runs `flask db upgrade` because Alembic owns every DDL change
-and `create_all()` is deliberately never called: an unmigrated database would 500
-on the first real request. `seed-defaults` is idempotent, so it is safe on every
-deploy.
+This is **not** a signup path, and it is worth being precise about why:
 
-### 3. Create the owner account, once
+- No HTTP route reaches it. It is called from the application factory only.
+- It creates an account **only when the database has no users at all**, so a
+  restart can never add a second one.
+- There is **no default password anywhere**. With no `ADMIN_PASSWORD`, or one under
+  10 characters, it creates nothing and writes the reason to the logs; the app
+  still boots and serves, so a misconfiguration is visible in the logs rather than
+  a crash loop.
 
-There is no signup, so the account is created by a CLI command. Open
-**Shell** on the service and run:
+If the logs report that no account was created, set `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` in the dashboard and trigger a redeploy.
 
-```bash
-flask --app "app:create_app" seed-admin
-```
-
-This is deliberately **not** a pre-deploy command: run against an existing
-account it prompts to reset the password, and that prompt cannot be answered in a
-non-interactive shell.
-
-### 4. First deploy
+### 3. First deploy
 
 After the first successful deploy, sign in at `https://<service>.onrender.com/login`
-with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` above.
+with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` above. The first request to a spun-down
+service takes roughly 30 seconds while Render wakes it.
 
-### Bringing existing local data across
+### Moving to real data later
 
-The local database is never migrated automatically. To start production with the
-records already in `backend/instance/`, do this once, from the Render shell,
-**before** the first real use:
+When the demo needs to hold real records, the two options are a paid instance with a
+persistent disk attached (set `DATABASE_URL` and `UPLOADS_DIR` to the mount), or a
+managed Postgres. The second is a real change rather than configuration: the app
+applies SQLite pragmas, and the overpayment check documented in `docs/phases.md`
+relies on SQLite's single-writer model.
 
-SQLite runs in WAL mode, so a live database is really three files — the `.db` plus
-its `-wal` and `-shm` sidecars. Close the dev servers first, then checkpoint so the
-`.db` file is self-contained and safe to copy:
+To bring existing local records across, checkpoint the WAL first so the `.db` file is
+self-contained, then copy it to the target:
 
 ```bash
 # Locally, with the dev servers stopped, from backend/:
-venv\Scripts\python -c "import sqlite3; c=sqlite3.connect('instance/ruchita_interiors.db'); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.close()"
+venv/Scripts/python -c "import sqlite3; c=sqlite3.connect('instance/ruchita_interiors.db'); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.close()"
 ```
 
-Then copy `backend/instance/ruchita_interiors.db` and the `backend/uploads/`
-directory into `/var/data/uploads/` on the disk — Render's shell, an SSH session,
-or any transfer tool that writes to the mounted path works. The file's schema must
-match a migrated database, so run the copy against a database created by the same
-Alembic revisions (`flask db upgrade`) the service uses.
+The file's schema must match a migrated database, so copy one created by the same
+Alembic revisions the service uses.
 
 ## Project Structure
 

@@ -600,7 +600,7 @@ Truthful business overview.
 
 Exit criteria met:
 
-- `npm run verify` green: lint, format, 214 frontend tests, 276 backend tests,
+- `npm run verify` green: lint, format, 256 frontend tests, 310 backend tests,
   production build.
 - All §24 boxes satisfied and individually tested: every §9.2 field present and
   correct on the seeded scenario; drafts excluded from money metrics and cancelled

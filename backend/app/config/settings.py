@@ -136,7 +136,7 @@ class Settings:
 
     API_PREFIX = "/api/v1"
     APP_VERSION = "1.0.0"
-    PHASE = 8
+    PHASE = 9
 
     # Deployment: where the built frontend lives, so one origin can serve both the
     # API and the SPA.
@@ -150,6 +150,19 @@ class Settings:
     # stays API-only, so tests and a bare `flask run` are unaffected. Overridable
     # only for unusual layouts, e.g. a build served from a different stage.
     SPA_DIST_DIR = os.getenv("SPA_DIST_DIR", str(BACKEND_ROOT.parent / "frontend" / "dist"))
+
+    # Deployment: bring the database up to date and create the owner account on
+    # first boot. See app/bootstrap.py.
+    #
+    # Off by default and off in tests, because it is a deployment convenience, not
+    # application behaviour: the documented local path stays Alembic plus
+    # `flask db upgrade` and `flask seed-admin`.
+    #
+    # It exists because Render's Free web services have no shell access and no
+    # pre-deploy command (both are paid-only), so there is no way to run those two
+    # commands against a fresh instance. On a Free instance the filesystem is
+    # ephemeral, so every cold start is a first boot and every start needs this.
+    AUTO_SEED_ADMIN = _as_bool("AUTO_SEED_ADMIN", False)
 
 
 settings = Settings()

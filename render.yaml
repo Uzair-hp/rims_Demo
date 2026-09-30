@@ -1,19 +1,31 @@
-# Ruchita Interiors - Render deployment blueprint.
+# Ruchita Interiors - Render deployment blueprint (Free tier).
 #
 # One Web Service, not a Static Site plus an API. The frontend is built during the
 # same deploy and served by Flask from `frontend/dist` (see backend/app/spa.py), so
 # the app is single-origin:
 #
 #   - `VITE_API_BASE_URL` stays the relative `/api/v1` it already is, so every call
-#     is same-origin and CORS_ORIGINS can stay empty.
+#     is same-origin and no CORS entry is needed.
 #   - The `SameSite=Lax` auth cookies work unchanged. Splitting the frontend onto
 #     a different origin is the one change most likely to break login, because a
 #     withheld cookie and a CORS failure look identical in the UI.
 #   - The SPA shell and the API version are always deployed together.
 #
-# The database and the uploaded images both live on one persistent disk. Without
-# it Render's filesystem is ephemeral and every deploy would silently destroy the
-# ledger, the clients and the branding.
+# ---------------------------------------------------------------------------
+# EPHEMERAL STORAGE - read this before using this for anything real
+# ---------------------------------------------------------------------------
+# Free web services have an ephemeral filesystem, and there is no disk option to
+# avoid it (persistent disks are paid-only). The SQLite database and every uploaded
+# logo and payment QR are therefore LOST whenever the service:
+#
+#   - redeploys (every push to main),
+#   - restarts (any Render-side restart or crash), or
+#   - SPINS DOWN, which happens after 15 minutes with no inbound traffic. A demo
+#     left alone overnight comes back to an empty database and no branding.
+#
+# This is suitable for a demo. It is not suitable for real invoices. Before this
+# app holds real business data, move to a paid instance and attach a persistent
+# disk, or move the database off the service entirely.
 #
 # Apply from the Render dashboard: New -> Blueprint -> select this repository.
 # Values marked `sync: false` are prompts: set them in the dashboard on first
@@ -23,10 +35,14 @@ services:
   - type: web
     name: ruchita-interiors
     runtime: python
-    plan: starter
+    plan: free
     # `backend` holds requirements.txt, so Render's build and the WSGI process both
     # start from the app root and `run:app` resolves without a path prefix. The
     # frontend is built from the sibling directory, one level up.
+    #
+    # This is also load-bearing for migrations: Alembic resolves its `migrations`
+    # directory relative to the working directory, so the bootstrap in
+    # app/bootstrap.py only finds it because the working directory is `backend`.
     rootDir: backend
     buildCommand: >-
       pip install --upgrade pip
@@ -40,26 +56,24 @@ services:
     #     intended attempt budget;
     #   - one worker keeps SQLite on its documented single-writer footing, instead
     #     of adding cross-process lock contention the app was not designed for.
-    # Threads cover the concurrency this workload actually has: one business user.
-    # Raise this only together with a real concurrency review of the ledger.
+    # Two threads rather than four: a Free instance has 0.1 CPU and 512 MB, and the
+    # real concurrency here is one business user.
     startCommand: >-
       gunicorn
       --bind 0.0.0.0:$PORT
       --workers 1
-      --threads 4
+      --threads 2
       --timeout 120
       --access-logfile -
       --error-logfile -
       run:app
     # Serves no database, so it stays a true liveness probe: it cannot fail
-    # because of an unmigrated database on a fresh disk.
+    # because of an unmigrated database, which matters on Free where every cold
+    # start is a first boot.
     healthCheckPath: /api/v1/health
-    # Alembic owns every DDL change, and `create_all()` is deliberately never
-    # called (app/extensions/database.py), so an unmigrated database means a
-    # 500 on the first real request. Runs after the build, with the disk mounted.
-    preDeployCommand: >-
-      flask --app "app:create_app" db upgrade
-      && flask --app "app:create_app" seed-defaults
+    # There is deliberately NO preDeployCommand: it is a paid-only feature, so on
+    # Free it would be ignored at best. Migrations and first-boot seeding run from
+    # app/bootstrap.py at start-up instead, gated on AUTO_SEED_ADMIN below.
     autoDeploy: true
     envVars:
       # Pinned to the 3.13 line to match the local interpreter (3.13.14). 3.13 is
@@ -83,13 +97,27 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
 
-      # Both live on the persistent disk. Without a disk these paths are
-      # ephemeral and every deploy loses the database and the uploaded images.
-      # The four slashes are a SQLite absolute path, not a typo.
+      # Ephemeral, container-local paths. `_ensure_sqlite_parent` resolves a
+      # relative SQLite path against the backend directory and creates the parent,
+      # so this is `backend/instance/ruchita_interiors.db`. Both are wiped on every
+      # spin-down - see the warning at the top of this file.
       - key: DATABASE_URL
-        value: sqlite:////var/data/ruchita_interiors.db
+        value: sqlite:///instance/ruchita_interiors.db
       - key: UPLOADS_DIR
-        value: /var/data/uploads
+        value: uploads
+
+      # Free services have no shell access and no pre-deploy command, so there is
+      # no way to run `flask db upgrade` or `flask seed-admin` against a fresh
+      # instance. This setting makes the app do both at start-up: migrate the
+      # schema, seed the default rows, and create the single owner account from
+      # ADMIN_EMAIL / ADMIN_PASSWORD below.
+      #
+      # It is not a signup path. No HTTP route reaches it, it only ever runs when
+      # the users table is missing, and it creates exactly one owner and then never
+      # again. With no ADMIN_PASSWORD, or one under 10 characters, it creates
+      # nothing and logs an error - there is no default password anywhere.
+      - key: AUTO_SEED_ADMIN
+        value: "true"
 
       # Render sits in front of the app and sets X-Forwarded-For, so the rate
       # limiter must trust it. Exactly one proxy hop: Render's edge.
@@ -98,26 +126,27 @@ services:
       - key: TRUSTED_PROXY_COUNT
         value: "1"
 
-      # Empty on purpose. The frontend is same-origin, so it needs no CORS entry.
+      # Set to the empty string: the frontend is same-origin, so it needs no CORS
+      # entry, and the CSRF guard compares the cookie against the header rather than
+      # checking Origin.
+      #
+      # Note this does NOT produce an empty allow-list. `settings.py` reads it as
+      # `os.getenv(...) or FRONTEND_URL or "<localhost defaults>"`, and "" is
+      # falsy, so the app falls back to the two localhost dev origins. That is
+      # harmless here - no request Render serves is cross-origin, so no browser
+      # needs those headers - and it is left that way rather than special-casing
+      # the read, because a same-origin deployment has no use for the list.
       # Set this only if the frontend is ever moved to another origin, and then
       # list that origin exactly.
       - key: CORS_ORIGINS
         value: ""
 
-      # Consumed only by `flask seed-admin`, which is a one-off manual step (see
-      # the README) rather than a pre-deploy command, because re-running it on an
-      # existing account prompts for a password reset.
+      # Read only by the first-boot bootstrap. ADMIN_PASSWORD must be at least 10
+      # characters (§16) or no account is created and the reason is in the logs.
+      # These are prompts, so no credential is ever committed to this repository.
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: ADMIN_NAME
         value: Ruchita Interiors
-
-    disks:
-      # A persistent disk requires a paid instance; Render does not attach disks to
-      # the free tier. Both the SQLite file and the uploads are written under this
-      # mount so a deploy cannot separate them.
-      - name: ruchita-data
-        mountPath: /var/data
-        sizeGB: 1
