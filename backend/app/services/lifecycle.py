@@ -381,5 +381,11 @@ def validate_invoice_transition(invoice: Invoice, action: InvoiceAction) -> tupl
     elif action == InvoiceAction.DUPLICATE:
         return True, None
     elif action == InvoiceAction.DELETE:
-        return invoice.status == "draft", "Only draft invoices can be deleted"
+        # Only ever legal for a draft, mirroring the quotation DELETE branch
+        # above: the reason is a refusal message, so returning it alongside
+        # `True` would hand a caller a complaint about an action it just
+        # permitted.
+        if invoice.status != "draft":
+            return False, "Only draft invoices can be deleted"
+        return True, None
     return False, f"Unknown action: {action}"

@@ -318,6 +318,48 @@ def test_zero_amount_is_rejected(authed_client):
     assert resp.status_code == 422
 
 
+def test_fractional_amount_is_rejected_not_truncated(authed_client):
+    """`100.9` must be a 422, never a 100 recorded against the invoice (D2)."""
+    c = _make_client(authed_client)
+    invoice = _issued_invoice(authed_client, c["id"], grand_total_paise=1000000)
+
+    resp = authed_client.post(
+        f"/api/v1/invoices/{invoice['id']}/payments",
+        json={
+            "amount_paise": 100.9,
+            "paid_on": date.today().isoformat(),
+            "method": "cash",
+        },
+        headers=_csrf(authed_client),
+    )
+    assert resp.status_code == 422
+
+    # Nothing was written, and the invoice still reports a zero ledger.
+    refreshed = _invoice(authed_client, invoice["id"])
+    assert refreshed["paid_paise"] == 0
+    assert refreshed["payments"] == []
+
+
+def test_whole_float_and_string_amounts_are_accepted(authed_client):
+    """JSON has one number type, so 100.0 and "100" are not lies about the amount."""
+    c = _make_client(authed_client)
+    invoice = _issued_invoice(authed_client, c["id"], grand_total_paise=1000000)
+
+    for amount in (100.0, "100"):
+        resp = authed_client.post(
+            f"/api/v1/invoices/{invoice['id']}/payments",
+            json={
+                "amount_paise": amount,
+                "paid_on": date.today().isoformat(),
+                "method": "cash",
+            },
+            headers=_csrf(authed_client),
+        )
+        assert resp.status_code == 201, resp.get_data(as_text=True)
+
+    assert _invoice(authed_client, invoice["id"])["paid_paise"] == 200
+
+
 def test_unknown_method_is_rejected(authed_client):
     c = _make_client(authed_client)
     invoice = _issued_invoice(authed_client, c["id"])

@@ -16,14 +16,28 @@ The rules that matter:
   delegating to the lifecycle service rather than re-testing `status == "issued"`
   here, so the rule has one definition.
 - **Overpayment is a 422 with a number in it** (§11), not a silent clamp.
-- **The overpayment check runs twice**, and the second run is the one that makes
-  it safe. The pre-check reads the ledger, then we insert, then we read the ledger
-  again: between those two reads another request can commit a payment, because
-  this is a read-then-write across a gap. Without the post-insert re-read, two
-  requests that were each individually valid when they started would both land and
-  the invoice would be over-collected. §8.5's single-writer discipline is what
-  makes the second read authoritative, so the guard is a rollback rather than a
-  best-effort check.
+- **The overpayment check runs twice.** The pre-check reads the ledger, we insert,
+  then we read the ledger again. What that second read is and is not worth is
+  worth being precise about, because the difference only shows up if the database
+  ever changes:
+
+  - The two reads run inside **one transaction**, so the re-read cannot see a
+    payment that another transaction committed *after* this one began. It is not,
+    on its own, a defence against a concurrent writer.
+  - What actually prevents two concurrent payments from both landing is
+    **SQLite's single-writer model**: the second writer blocks on the first's
+    commit, so by the time its pre-check runs the first payment is already in the
+    ledger. The guarantee is a property of the storage engine, not of this code.
+  - On an MVCC engine (Postgres, MySQL) that reasoning breaks: the pre-check would
+    read a snapshot taken before the competing commit, and both payments would
+    pass. A port would need `SELECT ... FOR UPDATE` on the invoice row (or a
+    conditional `UPDATE ... WHERE paid + ? <= grand_total`), because neither
+    `with_for_update` nor the re-read is emitted meaningfully by SQLite today.
+
+  The re-read stays: it is cheap, it is the authoritative statement of the
+  total the server is about to commit, and it is the hook a real row lock would
+  attach to. But it is defence-in-depth here, not the guarantee, and a rollback
+  rather than a best-effort check once it fails.
 """
 
 from __future__ import annotations
@@ -121,11 +135,16 @@ def record_payment(
     # Flush so the re-read below includes this row; nothing is committed yet.
     db.session.flush()
 
-    # Second read of the ledger, after the insert. If a concurrent request
-    # committed a payment between the first read and this insert, both were
-    # individually valid and together they over-collect — so the post-insert
-    # total is what decides, and a failure rolls the whole thing back rather
-    # than leaving a half-written payment behind.
+    # Second read of the ledger, after the insert. It is the authoritative total
+    # for this commit: if the insert pushed the invoice over its grand total, the
+    # whole thing rolls back rather than leaving a half-written payment behind.
+    #
+    # Note what this is not: the read is inside the same transaction as the
+    # insert, so it cannot observe a payment another transaction committed after
+    # this one started. It therefore does not, by itself, stop two concurrent
+    # requests from both passing their pre-checks — SQLite's single-writer lock
+    # does, by making the second writer's pre-check run after the first commit.
+    # See the module docstring.
     total_after = paid_paise_for(invoice.id)
     if total_after > grand_total:
         db.session.rollback()

@@ -7,7 +7,7 @@ are integers (paise), quantities are milli-units, percentages are basis points.
 
 from __future__ import annotations
 
-from marshmallow import Schema, fields, validate, validates, validates_schema, ValidationError
+from marshmallow import Schema, fields, pre_load, validate, validates, validates_schema, ValidationError
 
 from app.models.quotation import Quotation
 from app.models.invoice import Invoice
@@ -206,6 +206,42 @@ class PaymentSchema(Schema):
     reference = fields.String(allow_none=True, load_default=None, validate=validate.Length(max=120))
     notes = fields.String(allow_none=True, load_default=None)
     created_at = fields.DateTime(dump_only=True)
+
+    @pre_load
+    def _reject_fractional_amount(self, data, **kwargs):
+        """
+        Reject a non-whole paise amount before `fields.Integer` rounds it away.
+
+        Money is integer paise (§11) and this is a write, so a fractional amount is
+        a client bug worth surfacing rather than something to absorb. Left to
+        itself, `fields.Integer` deserializes `100.9` to `100`: the request would
+        succeed and the ledger would record a figure the client never sent, which
+        is exactly the kind of quiet disagreement between the sheet and the server
+        that D2 exists to prevent.
+
+        Runs as `pre_load` because the check has to see the raw JSON — by the time
+        a `validate=` callback runs, the float has already become the integer it
+        was truncated to and there is nothing left to catch.
+
+        A whole float (`100.0`) and a numeric string are still accepted: JSON has
+        one number type, so a client that cannot help itself may send a float, and
+        `100.0` is not a lie about the amount. `True` is rejected because Python
+        treats `bool` as an `int`, so it would otherwise become 1 paise.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        amount = data.get("amount_paise")
+        if isinstance(amount, bool):
+            raise ValidationError(
+                "Enter the amount as a whole number of paise.", field_name="amount_paise"
+            )
+        if isinstance(amount, float) and not amount.is_integer():
+            raise ValidationError(
+                "Enter the amount as a whole number of paise — paise cannot have a fraction.",
+                field_name="amount_paise",
+            )
+        return data
 
 
 # Instantiate schemas for reuse

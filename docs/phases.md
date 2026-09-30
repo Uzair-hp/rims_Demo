@@ -426,6 +426,15 @@ Decisions taken, and why:
   already uses, so a button can never appear for something the API would reject.
 - **Payment history renders an explicit empty state** saying payments are not
   recorded yet, rather than an empty list that looks like a bug.
+- **The invoices list still serializes row by row (known, not urgent).**
+  `serialize_invoice` issues one `SUM` per invoice and, for an issued invoice, a
+  lazy load of `invoice.payments` behind `allowed_actions` — roughly two extra
+  queries per row, so the list costs O(page_size) queries rather than O(1). The
+  `payment_status` *filter* is unaffected: it already runs in SQL as a correlated
+  subquery, so this is a serialization cost and not a filtering one. Bounded by
+  `page_size <= 100` on local SQLite. The fix, when the list needs it, is one
+  grouped `SUM` over the page's invoice ids plus an eager load of `payments` for
+  the rows whose `allowed_actions` touch it.
 
 Bug found and fixed in the pre-existing scaffolding:
 
@@ -496,8 +505,13 @@ so there is no second copy to fall out of date.
   the bank layout does not change for anyone who has not set a QR.
 - **Overpayment is rejected, not clamped** (422), in the service and again in the
   UI. The sheet blocks the submit and explains why, but the server is the
-  authority: the outstanding is re-read inside the write, so two concurrent
-  payments cannot both pass a stale pre-check.
+  authority: the outstanding is re-read inside the write, and the post-insert
+  total is what the server commits against. The two reads share one transaction,
+  so that re-read is defence-in-depth rather than the concurrency guarantee —
+  what stops two concurrent payments from both landing today is SQLite's
+  single-writer model, since the second writer's pre-check runs after the first
+  commits. An MVCC port (Postgres, MySQL) would need a row lock on the invoice
+  instead.
 - **The QR reuses the logo's upload policy** rather than a second copy: same
   formats, same 2 MB cap, same extension + MIME + magic-byte + decode gauntlet,
   in its own `payment-qr/` subdirectory so clearing a logo can never unlink a QR.
