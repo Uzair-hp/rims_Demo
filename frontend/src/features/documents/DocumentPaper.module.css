@@ -98,10 +98,36 @@
 .companyMeta {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  gap: 0.8mm;
   font-style: normal;
   font-size: 8pt;
   line-height: 1.35;
   color: var(--color-ink-muted);
+}
+
+.metaLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5mm;
+}
+
+.metaIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+}
+
+.labelIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+  margin-inline-end: 1mm;
+}
+
+.inlineIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+  margin-inline-end: 1.5mm;
+  vertical-align: middle;
 }
 
 .gstin {
@@ -129,8 +155,8 @@
 
 .dateLine {
   display: flex;
-  align-items: baseline;
-  gap: 2mm;
+  align-items: center;
+  gap: 1.5mm;
   margin: 0;
 }
 
@@ -156,10 +182,7 @@
 .docTitle {
   margin: 0;
   font-family: var(--font-display);
-  /* Reduced from 20pt: the company name in the header is now the largest type on
-     the sheet, so the document kind reads as a clear second and the header has a
-     proper hierarchy instead of the title out-shouting the business. */
-  font-size: 16pt;
+  font-size: 18pt;
   font-weight: var(--weight-semibold);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-wide);
@@ -193,6 +216,9 @@
 }
 
 .blockLabel {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
   margin: 0 0 1.5mm;
   font-size: 7.5pt;
   font-weight: var(--weight-semibold);
@@ -209,10 +235,12 @@
 }
 
 .clientLine {
-  margin: 0;
-  font-size: 9pt;
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  margin: 0 0 0.5mm;
+  font-size: 8.5pt;
   color: var(--color-ink-muted);
-  /* A long address wraps; it never overflows the page box. */
   overflow-wrap: anywhere;
 }
 
@@ -418,63 +446,75 @@
  * ------------------------------------------------------------------ */
 
 .bank {
-  margin-block-start: 5mm;
-  padding: 3mm 4mm;
+  margin-block-start: 4mm;
+  padding: 3.5mm 4.5mm;
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-alt, #f4f3ef);
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
-/*
- * Bank details on the left, QR on the right.
- *
- * The QR is a *sibling of the definition list inside the bank block*, not a
- * third grid child: keeping it in a two-column flex row means the list keeps its
- * own `1fr 1fr` pair layout no matter whether a QR is present, so adding a QR
- * can never reflow or re-wrap the account rows above it.
- *
- * Every length is in mm because this is the printed stylesheet — the whole point
- * is that the block occupies the same physical space on A4 as it does on screen.
- */
-.bankBody {
+.bankHeader {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 3mm 5mm;
-}
-
-.bankQr {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1mm;
+  justify-content: space-between;
+  margin-block-end: 2mm;
 }
 
-.bankQrLabel {
+.bankHeader .blockLabel {
   margin: 0;
-  font-size: 7pt;
+}
+
+.bankQrHeader {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  font-size: 7.5pt;
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   color: var(--color-ink-subtle);
 }
 
-/*
- * 32mm ≈ 1.26in, the size a phone camera reads reliably at a printed A4 — the
- * same range payment apps expect. It is capped rather than allowed to grow with
- * an uploaded source image, because a 4000px QR printed at its natural size
- * would push the bank block onto a second page.
- */
+.bankBody {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4mm;
+}
+
+.bankPlaceholder {
+  flex: 1;
+}
+
+.bankQr {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+}
+
+.bankQrLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .bankQrImage {
-  inline-size: 32mm;
-  block-size: 32mm;
+  inline-size: 30mm;
+  block-size: 30mm;
   object-fit: contain;
-  /* Square codes need a quiet zone to scan; a hairline keeps it off the block edge. */
-  border: 0.25mm solid var(--color-surface);
-  background: #fff;
+  padding: 2mm;
+  border: 0.25mm solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  background: #ffffff;
+  box-sizing: border-box;
+  display: block;
 }
 
 .bankRows {
@@ -482,6 +522,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 1mm 6mm;
   margin: 0;
+  flex: 1;
 }
 
 .bankRow {
@@ -505,7 +546,6 @@
   font-size: 8.5pt;
   font-variant-numeric: tabular-nums;
   color: var(--color-ink);
-  /* A long account number wraps rather than pushing the card wider. */
   overflow-wrap: anywhere;
 }
 

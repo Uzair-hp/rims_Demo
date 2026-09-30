@@ -35,13 +35,12 @@ import { useState } from 'react'
 import { calcLineTotal, milliToInput } from '../../lib/calc.js'
 import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
+import Icon from '../../components/ui/Icon.jsx'
 import styles from './DocumentPaper.module.css'
 
 /**
  * The official brand lockup shipped in `public/brand/`, used when Settings has no
- * uploaded logo. It is the same source the sidebar and login page fall back to,
- * and being a static asset it is precached by vite-plugin-pwa — so it is present
- * for the print/PDF renderer, which does not share the app's JS lifecycle.
+ * uploaded logo.
  */
 const BUNDLED_LOGO = '/brand/logo.svg'
 
@@ -53,16 +52,6 @@ function joinAddress(...parts) {
     .join(', ')
 }
 
-/**
- * Group consecutive items by category, preserving order.
- *
- * A category subheader is only emitted for runs that actually have a category
- * (§14.3: "grouping subheader row when present"), so uncategorised quotes stay
- * a single clean table instead of a stack of empty header rows.
- *
- * @param {Array<object>} items
- * @returns {Array<{ category: string, items: Array<object>, startIndex: number }>}
- */
 export function groupItemsByCategory(items) {
   const groups = []
   let index = 0
@@ -89,30 +78,13 @@ export default function DocumentPaper({
   isUnsaved = false,
   docKind = 'quotation',
 }) {
-  // §21.23: the brand mark degrades through three steps rather than disappearing.
-  // A configured upload wins; failing that we fall back to the bundled official
-  // vector, which is a static public asset and therefore always available to the
-  // browser's print/PDF renderer (an authenticated API route is a worse bet when
-  // the print pipeline fetches images). Only if that also fails do we fall back
-  // to a typographic wordmark.
   const [logoFailed, setLogoFailed] = useState(false)
   const logoSrcResolved = logoSrc || BUNDLED_LOGO
   const showLogo = !logoFailed
 
-  // The payment QR degrades the same way but only has two steps. It has no bundled
-  // equivalent, and unlike the logo it is served from the authenticated API route
-  // like every other image on an authenticated page, so the browser's print/PDF
-  // renderer fetches it with the same cookies the page already has.
-  //
-  // If the image is missing or fails, the whole subsection is dropped rather than
-  // left blank: a broken-image icon in a bank block reads as a defect, and an
-  // omitted QR still leaves the UPI ID above it as a way to pay.
   const [qrFailed, setQrFailed] = useState(false)
   const showQr = Boolean(qrSrc) && !qrFailed
 
-  // Phase 7: one sheet, two document kinds. The shared spine — header, client
-  // block, items, tax breakdown, terms, signatory, footer — is identical; only
-  // the title, the date pair and the money rows below the grand total differ.
   const isInvoice = docKind === 'invoice'
   const title = isInvoice ? 'Tax Invoice' : 'Quotation'
   const documentLabel = isInvoice ? 'Invoice document' : 'Quotation document'
@@ -127,25 +99,11 @@ export default function DocumentPaper({
   const gst = doc.gst_paise || 0
   const otherCharges = doc.other_charges_paise || 0
   const grandTotal = doc.grand_total_paise || 0
-  // Printed label only — see the §11 note below. The stored subtotal and discount
-  // are both the server's, so this cannot drift from the document it prints.
   const taxable = subtotal - discount
   const isPercentDiscount = (doc.discount_type || 'percent') === 'percent'
   const discountLabel = isPercentDiscount ? `Discount (${(doc.discount_bp || 0) / 100}%)` : 'Discount'
   const gstLabel = `GST ${(doc.gst_bp || 0) / 100}%`
 
-  // §11 figures. The invoice's paid and outstanding amounts are computed by the
-  // server and passed through untouched (D2): the sheet prints what the ledger
-  // says, never a running total of its own. The `??` is the quotation fallback
-  // only — a quotation has no ledger, so it has no `outstanding_paise` to print,
-  // and the derived value is a placeholder that is never rendered (see the
-  // invoice-only money rows below).
-  //
-  // `taxable` is the one subtraction on this sheet, and it is a display
-  // convenience rather than a re-derivation: both operands are server-computed
-  // columns of this document, and the value is a printed label, never a write.
-  // The document's own money — what is owed and what remains — comes from the
-  // server only.
   const paid = doc.paid_paise || 0
   const outstanding = doc.outstanding_paise ?? Math.max(0, grandTotal - paid)
 
@@ -153,22 +111,10 @@ export default function DocumentPaper({
     s.address_line1,
     s.address_line2,
     joinAddress(s.city, s.state, s.pincode),
-  )
+  ) || 'local adderss, no adderss, mumbai, maharashtra, 402822'
+
   const clientAddress = joinAddress(client.address, client.city, client.state, client.pincode)
 
-  // §8.4: an invoice prints the bank details and signatory it snapshotted at
-  // conversion. A quotation has no snapshot, so it falls back to live Settings.
-  //
-  // One deliberate exception to §8.4's immutability: the payment QR is NOT
-  // snapshotted, and is read live from Settings on every render. Everything else
-  // here is frozen because it states the terms the invoice was issued under, so
-  // reprinting it must keep saying the same thing. A QR is not a statement of
-  // terms — it is an instruction to send money somewhere. Owners change bank
-  // accounts and close UPI handles, and a frozen QR would keep directing
-  // customers to an account that no longer exists, which is worse than the
-  // document not matching the Settings page byte for byte. The `payment_qr_path`
-  // column is consequently absent from `bank_snapshot` by design, and
-  // `backend/tests/test_invoices_api.py` pins that.
   const bank = doc.bank_snapshot || null
   const signatory = doc.signatory_name || s.signatory_name || 'Authorised Signatory'
   const bankLines = bank
@@ -184,7 +130,7 @@ export default function DocumentPaper({
 
   return (
     <article className={styles.paper} data-document-paper aria-label={documentLabel}>
-      {/* 1. Header band: brand left, company contact right, gold rule beneath (§14.3). */}
+      {/* 1. Header band */}
       <header className={styles.header}>
         <div className={styles.brand}>
           {showLogo ? (
@@ -195,39 +141,60 @@ export default function DocumentPaper({
               onError={() => setLogoFailed(true)}
             />
           ) : (
-            // Wordmark fallback (§21.23): the brand serif, never a bare gold fill
-            // on a light surface — that is the contrast case §18.4 forbids.
             <span className={styles.wordmark}>{s.company_name || 'Ruchita Interiors'}</span>
           )}
-          {/* The company name is printed whether or not a logo loaded. It used to
-              be an either/or with the mark, which meant uploading a logo silently
-              removed the business name from every issued document (§14.3 asks for
-              both). */}
           {showLogo ? <p className={styles.companyName}>{s.company_name || 'Ruchita Interiors'}</p> : null}
+          <p className={styles.tagline}>{s.tagline || 'all time greate'}</p>
         </div>
 
         <div className={styles.company}>
-          {s.tagline ? <p className={styles.tagline}>{s.tagline}</p> : null}
           <address className={styles.companyMeta}>
-            {companyAddress ? <span>{companyAddress}</span> : null}
-            {s.phone ? <span>{s.phone}</span> : null}
-            {s.email ? <span>{s.email}</span> : null}
-            {s.website ? <span>{s.website}</span> : null}
-            {s.gstin ? <span className={styles.gstin}>GSTIN: {s.gstin}</span> : null}
+            {companyAddress ? (
+              <span className={styles.metaLine}>
+                <Icon name="mapPin" size={13} className={styles.metaIcon} />
+                <span>{companyAddress}</span>
+              </span>
+            ) : null}
+            {s.phone ? (
+              <span className={styles.metaLine}>
+                <Icon name="phone" size={13} className={styles.metaIcon} />
+                <span>{s.phone}</span>
+              </span>
+            ) : null}
+            {s.email ? (
+              <span className={styles.metaLine}>
+                <Icon name="mail" size={13} className={styles.metaIcon} />
+                <span>{s.email}</span>
+              </span>
+            ) : null}
+            {s.website ? (
+              <span className={styles.metaLine}>
+                <Icon name="globe" size={13} className={styles.metaIcon} />
+                <span>{s.website}</span>
+              </span>
+            ) : null}
+            {s.gstin ? (
+              <span className={`${styles.metaLine} ${styles.gstin}`}>
+                <Icon name="building" size={13} className={styles.metaIcon} />
+                <span>GSTIN: {s.gstin}</span>
+              </span>
+            ) : null}
           </address>
         </div>
       </header>
 
-      {/* 2. Title strip: document kind + number right, dates left. */}
+      {/* 2. Title strip */}
       <div className={styles.titleStrip}>
         <div className={styles.dates}>
           <p className={styles.dateLine}>
+            <Icon name="calendar" size={13} className={styles.labelIcon} />
             <span className={styles.microLabel}>{isInvoice ? 'Issue date' : 'Date'}</span>
             <span className={styles.dateValue}>
               {formatDate(isInvoice ? doc.issue_date : doc.quotation_date) || '—'}
             </span>
           </p>
           <p className={styles.dateLine}>
+            <Icon name="calendar" size={13} className={styles.labelIcon} />
             <span className={styles.microLabel}>{isInvoice ? 'Due date' : 'Valid until'}</span>
             <span className={styles.dateValue}>
               {formatDate(isInvoice ? doc.due_date : doc.valid_until) || '—'}
@@ -240,27 +207,56 @@ export default function DocumentPaper({
         </div>
       </div>
 
-      {/* 3. Client block: bill-to beside the project/site address (§14.3). */}
+      {/* 3. Client block */}
       <section className={styles.clientBlock}>
         <div className={styles.clientCell}>
-          <h2 className={styles.blockLabel}>Bill To</h2>
+          <h2 className={styles.blockLabel}>
+            <Icon name="user" size={13} className={styles.labelIcon} />
+            <span>Bill To</span>
+          </h2>
           <p className={styles.clientName}>{client.name || '—'}</p>
-          {clientAddress ? <p className={styles.clientLine}>{clientAddress}</p> : null}
-          {client.phone ? <p className={styles.clientLine}>{client.phone}</p> : null}
-          {client.email ? <p className={styles.clientLine}>{client.email}</p> : null}
-          {client.gstin ? <p className={styles.clientLine}>GSTIN: {client.gstin}</p> : null}
+          {clientAddress ? (
+            <p className={styles.clientLine}>
+              <Icon name="mapPin" size={12} className={styles.inlineIcon} />
+              <span>{clientAddress}</span>
+            </p>
+          ) : null}
+          {client.phone ? (
+            <p className={styles.clientLine}>
+              <Icon name="phone" size={12} className={styles.inlineIcon} />
+              <span>{client.phone}</span>
+            </p>
+          ) : null}
+          {client.email ? (
+            <p className={styles.clientLine}>
+              <Icon name="mail" size={12} className={styles.inlineIcon} />
+              <span>{client.email}</span>
+            </p>
+          ) : null}
+          {client.gstin ? (
+            <p className={styles.clientLine}>
+              <Icon name="building" size={12} className={styles.inlineIcon} />
+              <span>GSTIN: {client.gstin}</span>
+            </p>
+          ) : null}
         </div>
         <div className={styles.clientCell}>
-          <h2 className={styles.blockLabel}>Project / Site Address</h2>
+          <h2 className={styles.blockLabel}>
+            <Icon name="mapPin" size={13} className={styles.labelIcon} />
+            <span>Project / Site Address</span>
+          </h2>
           {client.project_address ? (
-            <p className={styles.clientLine}>{client.project_address}</p>
+            <p className={styles.clientLine}>
+              <Icon name="mapPin" size={12} className={styles.inlineIcon} />
+              <span>{client.project_address}</span>
+            </p>
           ) : (
             <p className={styles.clientLine}>—</p>
           )}
         </div>
       </section>
 
-      {/* 4. Items table. `thead` repeats per page; rows never break (§14.4). */}
+      {/* 4. Items table */}
       <table className={styles.items} data-document-items>
         <thead>
           <tr>
@@ -306,7 +302,7 @@ export default function DocumentPaper({
         </tbody>
       </table>
 
-      {/* 5. Totals block. Kept whole so it is never orphaned on a page (§14.4). */}
+      {/* 5. Totals block */}
       <section className={styles.totalsBlock} data-document-totals>
         <dl className={styles.totals}>
           <div className={styles.totalRow}>
@@ -337,8 +333,6 @@ export default function DocumentPaper({
             <dt>Grand Total</dt>
             <dd>{formatPaise(grandTotal)}</dd>
           </div>
-          {/* §11: Amount Paid and Balance Due appear only on an invoice, and only
-              once the money has actually been recorded. */}
           {isInvoice && paid > 0 ? (
             <div className={styles.totalRow}>
               <dt>Amount Paid</dt>
@@ -354,10 +348,21 @@ export default function DocumentPaper({
         </dl>
       </section>
 
-      {/* Bank / UPI details, from the snapshot taken at conversion (§8.4). */}
+      {/* 6. Payment details & QR code */}
       {isInvoice && (bankLines.length > 0 || showQr) ? (
         <section className={styles.bank} data-document-bank>
-          <h2 className={styles.blockLabel}>Payment Details</h2>
+          <div className={styles.bankHeader}>
+            <h2 className={styles.blockLabel}>
+              <Icon name="wallet" size={13} className={styles.labelIcon} />
+              <span>Payment Details</span>
+            </h2>
+            {showQr ? (
+              <div className={styles.bankQrHeader}>
+                <Icon name="qrCode" size={13} className={styles.labelIcon} />
+                <span>Scan to Pay</span>
+              </div>
+            ) : null}
+          </div>
           <div className={styles.bankBody}>
             {bankLines.length > 0 ? (
               <dl className={styles.bankRows}>
@@ -368,14 +373,10 @@ export default function DocumentPaper({
                   </div>
                 ))}
               </dl>
-            ) : null}
+            ) : (
+              <div className={styles.bankPlaceholder} />
+            )}
 
-            {/* §8.5 "UPI QR code" — a subsection of the payment block, not a
-                sibling of it. Read from live Settings and deliberately *not*
-                from `bank_snapshot`: the QR is a payment instruction rather
-                than a term of the invoice, so a stale snapshot could send money
-                to an account that has since been closed. Invoices only — a
-                quotation is not payable, so it never shows one. */}
             {showQr ? (
               <div className={styles.bankQr} data-document-qr>
                 <h3 className={styles.bankQrLabel}>UPI QR code</h3>
@@ -391,16 +392,18 @@ export default function DocumentPaper({
         </section>
       ) : null}
 
-      {/* 6. Terms — the document's own snapshot, not the current default (§8.4). */}
+      {/* 7. Terms & Conditions */}
       {doc.terms_text ? (
         <section className={styles.terms} data-document-terms>
-          <h2 className={styles.blockLabel}>Terms &amp; Conditions</h2>
+          <h2 className={styles.blockLabel}>
+            <Icon name="fileText" size={13} className={styles.labelIcon} />
+            <span>Terms &amp; Conditions</span>
+          </h2>
           <TermsList text={doc.terms_text} />
         </section>
       ) : null}
 
-      {/* 7. Signatory + 8. Footer. An invoice prints the signatory it snapshotted
-          at conversion; a quotation has no snapshot and reads live Settings. */}
+      {/* 8. Signatory */}
       <section className={styles.signatory} data-document-signatory>
         <p className={styles.signatoryLabel}>For {s.company_name || 'Ruchita Interiors'}</p>
         <p className={styles.signatoryName}>{signatory}</p>
