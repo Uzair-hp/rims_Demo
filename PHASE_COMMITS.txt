@@ -1,0 +1,460 @@
+========================================
+RUCHITA INTERIORS - PHASE COMMITS
+========================================
+
+IMPORTANT:
+Run these sections IN ORDER.
+Verify each commit before moving to the next phase.
+Do not combine phases.
+
+All commands below are plain git commands, safe to copy/paste into PowerShell.
+Run them from the repository root. Nothing was committed or pushed while this
+file was being prepared.
+
+----------------------------------------
+REPOSITORY FACTS (inspected, not guessed)
+----------------------------------------
+branch:           main
+remote origin:    https://github.com/brightlant223/rims.git
+history:          1 commit only - 3affbd6 "Initialize Ruchita Interiors project
+                  foundation"; origin/main points at the same commit, so each
+                  push below fast-forwards.
+working tree:     206 changed paths, all developed in ONE uncommitted tree
+                  (26 modified, 33 deleted, 147 new files).
+assignment:       Phase 1: 129 files | Phase 2: 28 files | Phase 3: 49 files
+                  (206 total; every changed path assigned exactly once)
+unclassified:     0 project files. PHASE_COMMITS.txt itself (this file) is meta
+                  and is deliberately in no phase - see DO NOT COMMIT at the end.
+
+----------------------------------------
+HOW FILES WERE ASSIGNED (read first)
+----------------------------------------
+Evidence used: PLAN.md, docs/phases.md per-phase deliverables and exit criteria,
+the single existing commit's contents, the actual diffs of every modified file,
+and the work-session file timestamps of 2026-09-28 (Phase 1 foundation/brand
+work ~10:57-15:10, Phase 2 auth work ~12:24-14:06, Phase 3 settings work
+~16:07-17:40 - the batches interleave, so timestamps were cross-checked against
+phase documentation and file content, never used alone).
+
+Rules applied:
+
+1. STATUS DOCUMENTS go to Phase 3, committed once: PLAN.md, README.md,
+   backend/README.md, frontend/README.md, docs/*. Their current text describes
+   all three phases ("Phases 1, 2 and 3 are complete"). Committing them in
+   Phase 1 or 2 would make those commits claim work that had not happened.
+   Their earlier-phase edits cannot be separated with plain `git add`.
+
+2. SUBSTANTIALLY REWRITTEN files go to the rewriting phase, because that is the
+   content git will actually store:
+   - frontend/src/features/auth/LoginPage.jsx and Login.module.css
+     (created Phase 2, fully rewritten by the Phase 3 login polish)
+   - frontend/src/pages/Settings.jsx (Phase 1 placeholder replaced entirely)
+   - backend/app/models/__init__.py (Phase 2 registered User only)
+   - backend/app/schemas/__init__.py (also exports Phase 2's LoginSchema)
+   The earlier versions were never committed and exist nowhere in git; they
+   cannot be staged in any way.
+
+3. FILES WITH MINOR LATER EDITS stay in their creating phase, marked "~ MIXED",
+   with the later edits named in the FILES list.
+
+4. FILES WHOSE CONTENT MIXES PHASES CANNOT be split by `git add`.
+   - For TRACKED files you may use interactive `git add -p` to stage selected
+     hunks (note A lists the candidates). This is optional.
+   - For NEW (untracked) files no split is possible at all: the intermediate
+     versions were never committed, so they exist nowhere to stage.
+
+----------------------------------------
+MIXED-FILE NOTES
+----------------------------------------
+NOTE A - tracked mixed files, candidates for optional `git add -p` hunk splits:
+    .gitignore                              Phase 1 base (+ Phase 2 WAL ignores)
+    .env.example                            Phase 2 auth keys (+ Phase 1 base)
+    backend/.env.example                    Phase 2 auth keys (+ Phase 1 base)
+    frontend/.env.example                   Phase 2 cookie/CORS notes (+ base)
+    backend/app/__init__.py                 Phase 1 factory (+ Phase 2 CORS/
+                                            security/error hooks, Phase 3 seed CLIs)
+    backend/app/api/__init__.py             Phase 1 health registry (+ Phase 2
+                                            auth + Phase 3 settings/uploads blueprints)
+    backend/app/config/settings.py          Phase 1 config (+ Phase 2 auth
+                                            settings, Phase 3 UPLOADS/LOGO/PHASE=3)
+    backend/app/extensions/database.py      Phase 2 (SQLite pragmas; base extension
+                                            was skeleton, P1 factory imports it)
+    backend/requirements.txt                Phase 1 deps (+ Phase 2 Flask-Migrate/
+                                            marshmallow/PyJWT, Phase 3 Pillow)
+    backend/app/models/__init__.py          Phase 3 registrations (+ User)
+    backend/app/schemas/__init__.py         Phase 3 (+ Phase 2 LoginSchema export)
+    frontend/src/main.jsx                   Phase 1 entry (+ later crash fixes)
+    PLAN.md, README.md, backend/README.md,
+    frontend/README.md, docs/*              edited in every phase (Phase 3 rule 1)
+  `git add -p` still cannot recreate file versions that were never written to
+  git. Skip it unless you want strict per-hunk separation of these files.
+
+NOTE B - Phase 2's package-level model import:
+    backend/app/api/auth.py, backend/app/seed/seed_admin.py and
+    backend/tests/test_auth.py do `from app.models import User`, but
+    models/__init__.py in its final form imports every Phase 3 model, so it is
+    staged in Phase 3 (rule 2). A Phase-2-only version was never committed.
+    OPTIONAL: if you need the Phase 2 snapshot to be runnable, before the
+    Phase 2 commit temporarily replace backend/app/models/__init__.py with a
+    version importing only User (+ verify_dummy), commit, then restore the
+    full file before the Phase 3 commit. Otherwise accept that the Phase 2
+    snapshot does not run standalone.
+
+NOTE C - no intermediate snapshot is independently runnable:
+    All three phases were built in one working tree without intermediate
+    commits, so cross-phase files (app/__init__.py, api/__init__.py,
+    routes.jsx, client.js, health.js ...) exist only in final form. The commits
+    below are FEATURE-GROUPED, not runnable checkpoints. The VERIFY steps
+    therefore check `git status` / `git log` only, exactly as specified.
+
+NOTE D - honest judgment calls you may want to move (each is flagged):
+    - LoginPage.jsx / Login.module.css -> Phase 3 (rule 2). Move them to
+      Phase 2 if you prefer introduction-based grouping; you then lose the
+      login polish from the Phase 3 diff instead.
+    - pages/Settings.jsx -> Phase 3 (rule 2; Phase 1 placeholder never committed).
+    - api/client.js -> Phase 1 (Phase 1's health.js imports it; its Phase 2
+      CSRF/refresh logic rides along, flagged).
+    - app/main.test.jsx, app/routes.test.jsx -> Phase 2 (final content asserts
+      auth guard behavior; they also cover Phase 1 shell/routing).
+
+========================================
+PHASE 1
+=======
+
+FILES (129): foundation - app shell, design tokens, PWA + brand pipeline,
+tooling, dev runners, Flask factory, health API, placeholder pages.
+
+# --- root / brand / scripts (11) ---
+#   .gitignore                                ~ MIXED: Phase 2 *.db-shm/wal entries ride
+#   package.json
+#   package-lock.json
+#   brand/logo.svg
+#   scripts/dev.ps1
+#   scripts/generate_brand_icons.py
+#   scripts/optimize_logo.mjs
+#   scripts/python.mjs
+#   scripts/rasterise_logo.mjs
+#   scripts/run-backend.mjs
+#   scripts/run-tests.mjs
+
+# --- backend (11) ---
+#   backend/app/__init__.py                   ~ MIXED: Phase 2 CORS/security/error hooks + Phase 3 seed CLI registration ride
+#   backend/app/api/__init__.py               ~ MIXED: Phase 2 auth + Phase 3 settings/uploads blueprint registrations ride
+#   backend/app/api/health.py
+#   backend/app/config/settings.py            ~ MIXED: Phase 2 auth settings + Phase 3 UPLOADS/LOGO/PHASE=3 ride
+#   backend/requirements.txt                  ~ MIXED: Phase 2 Flask-Migrate/marshmallow/PyJWT + Phase 3 Pillow ride
+#   backend/requirements-dev.txt
+#   backend/conftest.py
+#   backend/run.py
+#   backend/tests/test_config.py
+#   backend/tests/test_health.py              ~ MIXED: Phase 3 assertion `phase == 3` rides
+#   backend/app/routes/__init__.py            (deletion - unused skeleton package)
+
+# --- frontend config / PWA / brand (16) ---
+#   frontend/.prettierignore
+#   frontend/.prettierrc.json
+#   frontend/eslint.config.js
+#   frontend/index.html
+#   frontend/package.json
+#   frontend/package-lock.json
+#   frontend/vite.config.js
+#   frontend/public/manifest.webmanifest
+#   frontend/public/brand/logo.svg
+#   frontend/public/icons/apple-touch-icon-180.png
+#   frontend/public/icons/favicon-32.png
+#   frontend/public/icons/favicon.ico
+#   frontend/public/icons/icon-192.png
+#   frontend/public/icons/icon-512.png
+#   frontend/public/icons/icon-maskable-192.png
+#   frontend/public/icons/icon-maskable-512.png
+
+# --- frontend entry / routing / styles (24) ---
+#   frontend/src/main.jsx                     ~ MIXED: later entry crash fixes ride
+#   frontend/src/api/client.js                ~ MIXED: Phase 2 CSRF + refresh logic rides (needed by health.js)
+#   frontend/src/api/health.js
+#   frontend/src/lib/breakpoints.js
+#   frontend/src/test/setup.js
+#   frontend/src/styles/base.css
+#   frontend/src/styles/index.css
+#   frontend/src/styles/print.css
+#   frontend/src/styles/tokens.css
+#   frontend/src/hooks/useMediaQuery.js
+#   frontend/src/hooks/usePwaInstall.js
+#   frontend/src/app/App.jsx                  ~ MIXED: AuthProvider wrapper added Phase 2
+#   frontend/src/app/DocumentTitle.jsx
+#   frontend/src/app/ErrorBoundary.jsx
+#   frontend/src/app/ErrorBoundary.module.css
+#   frontend/src/app/RootLayout.jsx
+#   frontend/src/app/router.jsx
+#   frontend/src/app/routes.jsx               ~ MIXED: Phase 2 guards + Phase 3 SettingsProvider ride
+#   frontend/src/app/navigation.js            ~ MIXED: Phase 3 phase-hint wording ride
+#   frontend/src/app/useTheme.js
+#   (none)
+
+# --- frontend app chrome: components/layout (12) ---
+#   frontend/src/components/layout/ApiStatus.jsx
+#   frontend/src/components/layout/ApiStatus.module.css
+#   frontend/src/components/layout/AppShell.jsx          ~ MIXED: minor Phase 2 edits ride
+#   frontend/src/components/layout/AppShell.module.css
+#   frontend/src/components/layout/BottomNav.jsx
+#   frontend/src/components/layout/BottomNav.module.css
+#   frontend/src/components/layout/BrandLockup.jsx       ~ MIXED: Phase 3 logoSrc + SVG fallback ride
+#   frontend/src/components/layout/BrandLockup.module.css
+#   frontend/src/components/layout/Sidebar.jsx           ~ MIXED: Phase 2 sign-out + Phase 3 logoSrc ride
+#   frontend/src/components/layout/Sidebar.module.css    ~ MIXED: Phase 2 sign-out styles ride
+#   frontend/src/components/layout/TopBar.jsx
+#   frontend/src/components/layout/TopBar.module.css
+
+# --- frontend primitives: components/ui (17) ---
+#   frontend/src/components/ui/Button.jsx
+#   frontend/src/components/ui/Button.module.css
+#   frontend/src/components/ui/Card.jsx
+#   frontend/src/components/ui/Card.module.css
+#   frontend/src/components/ui/EmptyState.jsx            ~ MIXED: Phase 3 onAction ride
+#   frontend/src/components/ui/EmptyState.module.css
+#   frontend/src/components/ui/Icon.jsx                  ~ MIXED: Phase 3 eye/eyeOff icons ride
+#   frontend/src/components/ui/PageHeader.jsx
+#   frontend/src/components/ui/PageHeader.module.css
+#   frontend/src/components/ui/Sheet.jsx
+#   frontend/src/components/ui/Sheet.module.css
+#   frontend/src/components/ui/SheetList.jsx
+#   frontend/src/components/ui/SheetList.module.css
+#   frontend/src/components/ui/Skeleton.jsx
+#   frontend/src/components/ui/Skeleton.module.css
+#   frontend/src/components/ui/index.test.jsx
+#   frontend/src/components/ui/Sheet.test.jsx
+
+# --- frontend placeholder pages (11) ---
+#   frontend/src/pages/Clients.jsx
+#   frontend/src/pages/Dashboard.jsx
+#   frontend/src/pages/Dashboard.module.css
+#   frontend/src/pages/Invoices.jsx                     ~ MIXED: Phase 3 placeholder wording ride
+#   frontend/src/pages/NotFound.jsx
+#   frontend/src/pages/NotFound.module.css
+#   frontend/src/pages/PagePlaceholder.jsx
+#   frontend/src/pages/PagePlaceholder.module.css
+#   frontend/src/pages/QuotationDetail.jsx
+#   frontend/src/pages/QuotationDetail.module.css
+#   frontend/src/pages/Quotations.jsx
+
+# --- frontend deletions: skeleton replaced by the structure above (31) ---
+#   frontend/src/App.jsx                    (deletion - replaced by src/app/)
+#   frontend/src/index.css                  (deletion - replaced by src/styles/)
+#   frontend/public/assets/.gitkeep          (deletion)
+#   frontend/src/assets/branding/.gitkeep    (deletion)
+#   frontend/src/assets/icons/.gitkeep       (deletion)
+#   frontend/src/assets/images/.gitkeep      (deletion)
+#   frontend/src/components/common/.gitkeep          (deletion)
+#   frontend/src/components/feedback/.gitkeep        (deletion)
+#   frontend/src/components/forms/.gitkeep           (deletion)
+#   frontend/src/components/modals/.gitkeep          (deletion)
+#   frontend/src/components/navigation/.gitkeep      (deletion)
+#   frontend/src/components/tables/.gitkeep          (deletion)
+#   frontend/src/config/.gitkeep             (deletion)
+#   frontend/src/constants/.gitkeep          (deletion)
+#   frontend/src/context/.gitkeep            (deletion)
+#   frontend/src/hooks/.gitkeep              (deletion)
+#   frontend/src/layouts/.gitkeep            (deletion)
+#   frontend/src/pages/Clients/.gitkeep      (deletion)
+#   frontend/src/pages/Dashboard/.gitkeep    (deletion)
+#   frontend/src/pages/Invoices/.gitkeep     (deletion)
+#   frontend/src/pages/Login/.gitkeep        (deletion)
+#   frontend/src/pages/NotFound/.gitkeep     (deletion)
+#   frontend/src/pages/Quotations/.gitkeep   (deletion)
+#   frontend/src/pages/Settings/.gitkeep     (deletion)
+#   frontend/src/routes/.gitkeep             (deletion)
+#   frontend/src/services/api/.gitkeep       (deletion)
+#   frontend/src/services/auth/.gitkeep      (deletion)
+#   frontend/src/styles/components/.gitkeep  (deletion)
+#   frontend/src/styles/globals/.gitkeep     (deletion)
+#   frontend/src/styles/tokens/.gitkeep      (deletion)
+#   frontend/src/utils/.gitkeep              (deletion)
+
+COMMANDS:
+
+git status
+git add -- .gitignore package.json package-lock.json brand/logo.svg scripts/dev.ps1 scripts/generate_brand_icons.py scripts/optimize_logo.mjs scripts/python.mjs scripts/rasterise_logo.mjs scripts/run-backend.mjs scripts/run-tests.mjs
+git add -- backend/app/__init__.py backend/app/api/__init__.py backend/app/api/health.py backend/app/config/settings.py backend/requirements.txt backend/requirements-dev.txt backend/conftest.py backend/run.py backend/tests/test_config.py backend/tests/test_health.py backend/app/routes/__init__.py
+git add -- frontend/.prettierignore frontend/.prettierrc.json frontend/eslint.config.js frontend/index.html frontend/package.json frontend/package-lock.json frontend/vite.config.js
+git add -- frontend/public/manifest.webmanifest frontend/public/brand/logo.svg frontend/public/icons/apple-touch-icon-180.png frontend/public/icons/favicon-32.png frontend/public/icons/favicon.ico frontend/public/icons/icon-192.png frontend/public/icons/icon-512.png frontend/public/icons/icon-maskable-192.png frontend/public/icons/icon-maskable-512.png
+git add -- frontend/src/main.jsx frontend/src/api/client.js frontend/src/api/health.js frontend/src/lib/breakpoints.js frontend/src/test/setup.js frontend/src/styles/base.css frontend/src/styles/index.css frontend/src/styles/print.css frontend/src/styles/tokens.css frontend/src/hooks/useMediaQuery.js frontend/src/hooks/usePwaInstall.js
+git add -- frontend/src/app/App.jsx frontend/src/app/DocumentTitle.jsx frontend/src/app/ErrorBoundary.jsx frontend/src/app/ErrorBoundary.module.css frontend/src/app/RootLayout.jsx frontend/src/app/router.jsx frontend/src/app/routes.jsx frontend/src/app/navigation.js frontend/src/app/useTheme.js
+git add -- frontend/src/components/layout/ApiStatus.jsx frontend/src/components/layout/ApiStatus.module.css frontend/src/components/layout/AppShell.jsx frontend/src/components/layout/AppShell.module.css frontend/src/components/layout/BottomNav.jsx frontend/src/components/layout/BottomNav.module.css frontend/src/components/layout/BrandLockup.jsx frontend/src/components/layout/BrandLockup.module.css frontend/src/components/layout/Sidebar.jsx frontend/src/components/layout/Sidebar.module.css frontend/src/components/layout/TopBar.jsx frontend/src/components/layout/TopBar.module.css
+git add -- frontend/src/components/ui/Button.jsx frontend/src/components/ui/Button.module.css frontend/src/components/ui/Card.jsx frontend/src/components/ui/Card.module.css frontend/src/components/ui/EmptyState.jsx frontend/src/components/ui/EmptyState.module.css frontend/src/components/ui/Icon.jsx frontend/src/components/ui/PageHeader.jsx frontend/src/components/ui/PageHeader.module.css frontend/src/components/ui/Sheet.jsx frontend/src/components/ui/Sheet.module.css frontend/src/components/ui/SheetList.jsx frontend/src/components/ui/SheetList.module.css frontend/src/components/ui/Skeleton.jsx frontend/src/components/ui/Skeleton.module.css frontend/src/components/ui/index.test.jsx frontend/src/components/ui/Sheet.test.jsx
+git add -- frontend/src/pages/Clients.jsx frontend/src/pages/Dashboard.jsx frontend/src/pages/Dashboard.module.css frontend/src/pages/Invoices.jsx frontend/src/pages/NotFound.jsx frontend/src/pages/NotFound.module.css frontend/src/pages/PagePlaceholder.jsx frontend/src/pages/PagePlaceholder.module.css frontend/src/pages/QuotationDetail.jsx frontend/src/pages/QuotationDetail.module.css frontend/src/pages/Quotations.jsx
+git add -- frontend/src/App.jsx frontend/src/index.css frontend/public/assets/.gitkeep frontend/src/assets/branding/.gitkeep frontend/src/assets/icons/.gitkeep frontend/src/assets/images/.gitkeep frontend/src/components/common/.gitkeep frontend/src/components/feedback/.gitkeep frontend/src/components/forms/.gitkeep frontend/src/components/modals/.gitkeep frontend/src/components/navigation/.gitkeep frontend/src/components/tables/.gitkeep frontend/src/config/.gitkeep frontend/src/constants/.gitkeep frontend/src/context/.gitkeep frontend/src/hooks/.gitkeep frontend/src/layouts/.gitkeep frontend/src/pages/Clients/.gitkeep frontend/src/pages/Dashboard/.gitkeep frontend/src/pages/Invoices/.gitkeep frontend/src/pages/Login/.gitkeep frontend/src/pages/NotFound/.gitkeep frontend/src/pages/Quotations/.gitkeep frontend/src/pages/Settings/.gitkeep frontend/src/routes/.gitkeep frontend/src/services/api/.gitkeep frontend/src/services/auth/.gitkeep frontend/src/styles/components/.gitkeep frontend/src/styles/globals/.gitkeep frontend/src/styles/tokens/.gitkeep frontend/src/utils/.gitkeep
+git diff --cached --stat
+git diff --cached
+git commit -m "feat(phase-1): project foundation - React app shell with tokens and PWA, brand asset pipeline, Flask factory with /api/v1/health, lint/format/test tooling, one-command dev runners"
+git push origin main
+
+VERIFY:
+git status
+git log -1 --oneline
+
+========================================
+PHASE 2
+=======
+
+FILES (28): authentication - user model and migration, JWT cookie sessions,
+CSRF double-submit, login rate limiting, seed-admin, guards, session client.
+
+# --- environment templates (3) ---
+#   .env.example                              ~ MIXED: Phase 1 base keys ride
+#   backend/.env.example                      ~ MIXED: Phase 1 base keys ride
+#   frontend/.env.example                     ~ MIXED: Phase 1 base URL note rides
+
+# --- backend (19) ---
+#   backend/app/extensions/database.py        ~ MIXED: base extension work rides (Phase 2 enables the SQLite pragmas)
+#   backend/app/api/auth.py
+#   backend/app/services/auth.py
+#   backend/app/services/csrf.py
+#   backend/app/services/rate_limit.py
+#   backend/app/utils/errors.py               (error envelope; the Phase 1 factory's handlers import it - see NOTE C)
+#   backend/app/utils/guards.py
+#   backend/app/models/user.py
+#   backend/app/schemas/auth.py
+#   backend/app/seed/__init__.py              ~ MIXED: Phase 3 docstring mention of seed_defaults rides
+#   backend/app/seed/seed_admin.py
+#   backend/migrations/alembic.ini
+#   backend/migrations/env.py
+#   backend/migrations/README
+#   backend/migrations/script.py.mako
+#   backend/migrations/versions/000d90328da3_create_users_table.py
+#   backend/migrations/.gitkeep               (deletion - replaced by real migrations/)
+#   backend/tests/conftest.py
+#   backend/tests/test_auth.py
+
+# --- frontend (6) ---
+#   frontend/src/api/client.test.js           (covers the CSRF/refresh logic that rides in Phase 1's client.js)
+#   frontend/src/api/endpoints/auth.js
+#   frontend/src/features/auth/AuthProvider.jsx
+#   frontend/src/features/auth/guards.jsx
+#   frontend/src/app/main.test.jsx            ~ MIXED: also exercises the Phase 1 entry/shell
+#   frontend/src/app/routes.test.jsx          ~ MIXED: also exercises the Phase 1 routing/shell
+#
+#   NOTE: LoginPage.jsx and Login.module.css were created in Phase 2 but fully
+#   rewritten by Phase 3 polish, so they are committed in Phase 3 (rule 2,
+#   NOTE D). The Phase 2 snapshot has no login page file.
+
+COMMANDS:
+
+git status
+git add -- .env.example backend/.env.example frontend/.env.example backend/app/extensions/database.py
+git add -- backend/app/api/auth.py backend/app/services/auth.py backend/app/services/csrf.py backend/app/services/rate_limit.py backend/app/utils/errors.py backend/app/utils/guards.py backend/app/models/user.py backend/app/schemas/auth.py backend/app/seed/__init__.py backend/app/seed/seed_admin.py
+git add -- backend/migrations/alembic.ini backend/migrations/env.py backend/migrations/README backend/migrations/script.py.mako backend/migrations/versions/000d90328da3_create_users_table.py backend/migrations/.gitkeep
+git add -- backend/tests/conftest.py backend/tests/test_auth.py
+git add -- frontend/src/api/client.test.js frontend/src/api/endpoints/auth.js frontend/src/features/auth/AuthProvider.jsx frontend/src/features/auth/guards.jsx frontend/src/app/main.test.jsx frontend/src/app/routes.test.jsx
+git diff --cached --stat
+git diff --cached
+git commit -m "feat(phase-2): authentication - JWT cookie sessions with CSRF double-submit, login rate limiting, user model and migration, seed-admin CLI, route guards and single-flight token refresh"
+git push origin main
+
+VERIFY:
+git status
+git log -1 --oneline
+
+========================================
+PHASE 3
+=======
+
+FILES (49): database and company settings - full section 8.3 schema
+migration, settings/logo API, complete Settings UI, seed-defaults, login
+polish, and the cumulative status documentation.
+
+# --- backend: schema (17) ---
+#   backend/app/api/settings.py
+#   backend/app/api/uploads.py
+#   backend/app/models/client.py
+#   backend/app/models/company_settings.py
+#   backend/app/models/counter.py
+#   backend/app/models/invoice.py
+#   backend/app/models/quotation.py
+#   backend/app/models/terms.py
+#   backend/app/models/__init__.py            ~ MIXED: full registrations; Phase 2 registered User only - see NOTE B
+#   backend/app/schemas/settings.py
+#   backend/app/schemas/__init__.py           ~ MIXED: also exports Phase 2's LoginSchema
+#   backend/app/services/settings.py
+#   backend/app/seed/seed_defaults.py
+#   backend/migrations/versions/4cb5324d6e1e_phase_3_schema.py
+#   backend/tests/test_settings.py
+#   backend/tests/test_uploads.py
+#   backend/tests/test_seed_and_migrations.py
+
+# --- frontend: settings feature (23) ---
+#   frontend/src/api/endpoints/settings.js
+#   frontend/src/components/ui/TextField.jsx
+#   frontend/src/components/ui/TextField.module.css
+#   frontend/src/pages/Settings.jsx           ~ MIXED: Phase 1 placeholder version never committed (rule 2)
+#   frontend/src/features/settings/Section.jsx
+#   frontend/src/features/settings/SettingsPage.jsx
+#   frontend/src/features/settings/SettingsProvider.jsx
+#   frontend/src/features/settings/settings.module.css
+#   frontend/src/features/settings/settings.test.jsx
+#   frontend/src/features/settings/useSettingsForm.js
+#   frontend/src/features/settings/sections/AccountSection.jsx
+#   frontend/src/features/settings/sections/BankSection.jsx
+#   frontend/src/features/settings/sections/BrandingSection.jsx
+#   frontend/src/features/settings/sections/BusinessSection.jsx
+#   frontend/src/features/settings/sections/CatalogueSection.jsx
+#   frontend/src/features/settings/sections/DocumentFooterSection.jsx
+#   frontend/src/features/settings/sections/InvoiceDefaultsSection.jsx
+#   frontend/src/features/settings/sections/QuotationDefaultsSection.jsx
+#   frontend/src/features/settings/sections/TaxSection.jsx
+#   frontend/src/features/settings/sections/TermsSection.jsx
+#   frontend/src/features/auth/LoginPage.jsx           ~ MIXED: created Phase 2, fully rewritten by Phase 3 polish (rule 2, NOTE D)
+#   frontend/src/features/auth/Login.module.css        ~ MIXED: same rewrite
+#   frontend/src/features/auth/auth.test.jsx           ~ MIXED: Phase 2 suite + 4 Phase 3 login polish tests
+
+# --- documentation: cumulative, committed once here (9) ---
+#   PLAN.md                        ~ MIXED: edited in every phase (rule 1)
+#   README.md                      ~ MIXED: edited in every phase (rule 1)
+#   backend/README.md              ~ MIXED: edited in every phase (rule 1)
+#   frontend/README.md             ~ MIXED: edited in every phase (rule 1)
+#   docs/api.md                    ~ MIXED: edited in every phase (rule 1)
+#   docs/architecture.md           ~ MIXED: edited in every phase (rule 1)
+#   docs/database.md               ~ MIXED: edited in every phase (rule 1)
+#   docs/development.md            ~ MIXED: edited in every phase (rule 1)
+#   docs/phases.md                 ~ MIXED: edited in every phase (rule 1)
+
+COMMANDS:
+
+git status
+git add -- backend/app/api/settings.py backend/app/api/uploads.py
+git add -- backend/app/models/client.py backend/app/models/company_settings.py backend/app/models/counter.py backend/app/models/invoice.py backend/app/models/quotation.py backend/app/models/terms.py backend/app/models/__init__.py
+git add -- backend/app/schemas/settings.py backend/app/schemas/__init__.py backend/app/services/settings.py backend/app/seed/seed_defaults.py
+git add -- backend/migrations/versions/4cb5324d6e1e_phase_3_schema.py backend/tests/test_settings.py backend/tests/test_uploads.py backend/tests/test_seed_and_migrations.py
+git add -- frontend/src/api/endpoints/settings.js frontend/src/components/ui/TextField.jsx frontend/src/components/ui/TextField.module.css frontend/src/pages/Settings.jsx
+git add -- frontend/src/features/settings/Section.jsx frontend/src/features/settings/SettingsPage.jsx frontend/src/features/settings/SettingsProvider.jsx frontend/src/features/settings/settings.module.css frontend/src/features/settings/settings.test.jsx frontend/src/features/settings/useSettingsForm.js
+git add -- frontend/src/features/settings/sections/AccountSection.jsx frontend/src/features/settings/sections/BankSection.jsx frontend/src/features/settings/sections/BrandingSection.jsx frontend/src/features/settings/sections/BusinessSection.jsx frontend/src/features/settings/sections/CatalogueSection.jsx frontend/src/features/settings/sections/DocumentFooterSection.jsx frontend/src/features/settings/sections/InvoiceDefaultsSection.jsx frontend/src/features/settings/sections/QuotationDefaultsSection.jsx frontend/src/features/settings/sections/TaxSection.jsx frontend/src/features/settings/sections/TermsSection.jsx
+git add -- frontend/src/features/auth/LoginPage.jsx frontend/src/features/auth/Login.module.css frontend/src/features/auth/auth.test.jsx
+git add -- PLAN.md README.md backend/README.md frontend/README.md docs/api.md docs/architecture.md docs/database.md docs/development.md docs/phases.md
+git diff --cached --stat
+git diff --cached
+git commit -m "feat(phase-3): database and company settings - full section 8.3 schema migration, settings and logo upload API, complete Settings UI, seed-defaults CLI, polished login page, phase docs"
+git push origin main
+
+VERIFY:
+git status
+git log -1 --oneline
+
+========================================
+FINAL VERIFICATION
+==================
+
+git status
+git log --oneline -5
+git remote -v
+
+Expected result: three new commits on main (phase 1, phase 2, phase 3) on top
+of 3affbd6, working tree clean except PHASE_COMMITS.txt, and origin/main moved
+forward to the phase 3 commit.
+
+========================================
+DO NOT COMMIT
+=============
+
+# PHASE_COMMITS.txt            this meta file - not part of any phase. Delete
+#                              it after running, or keep it uncommitted.
+#
+# No other changed file is unassigned. 0 project files are unclassified.
