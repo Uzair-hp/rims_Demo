@@ -18,6 +18,7 @@ from flask_migrate import Migrate
 from werkzeug.exceptions import HTTPException
 
 from app.api import api_bp
+from app.bootstrap import ensure_database_ready
 from app.config.settings import BACKEND_ROOT, settings
 from app.extensions.database import db, init_database
 from app.spa import register_spa
@@ -41,6 +42,13 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     init_database(app)
     Migrate(app, db)
+
+    # After `Migrate(app, db)`: Alembic's runner reads the `migrate` extension off
+    # the current app, so calling this earlier would fail on exactly the first boot
+    # it exists to handle. A no-op unless AUTO_SEED_ADMIN is set, so the local
+    # workflow and the test suite are unchanged.
+    ensure_database_ready(app)
+
     app.register_blueprint(api_bp)
     _register_error_handlers(app)
     _register_request_hooks(app)
