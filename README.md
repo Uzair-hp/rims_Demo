@@ -25,8 +25,8 @@ No TypeScript, no CSS framework, no component library.
 
 ```bash
 npm install
-python -m venv backend/venv
-backend/venv/Scripts/pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+python -m venv venv
+venv/Scripts/pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 ```
 
 Then create the environment files and seed the owner account:
@@ -42,9 +42,9 @@ with `python -c "import secrets; print(secrets.token_hex(32))"`; `SECRET_KEY` an
 characters.
 
 ```bash
-backend/venv/Scripts/flask --app "app:create_app" db upgrade --directory backend/migrations
-backend/venv/Scripts/flask --app "app:create_app" seed-admin
-backend/venv/Scripts/flask --app "app:create_app" seed-defaults
+venv/Scripts/flask --app "app:create_app" db upgrade --directory backend/migrations
+venv/Scripts/flask --app "app:create_app" seed-admin
+venv/Scripts/flask --app "app:create_app" seed-defaults
 ```
 
 Run these from `backend/`, or `cd backend` first. `seed-defaults` inserts the
@@ -67,9 +67,13 @@ Sign in at http://localhost:5173/login with the `ADMIN_EMAIL` and
 `ADMIN_PASSWORD` you set.
 
 The root `npm install` also installs the frontend packages, and `npm run dev`
-finds the Python interpreter on its own (`backend/venv`, then `python3`/`python`,
-or whatever `Ruchita_PYTHON` points at). On POSIX, the pip line above is
-`backend/venv/bin/pip`.
+finds the Python interpreter on its own (the root `venv/`, then `backend/venv`,
+then `python3`/`python`, or whatever `Ruchita_PYTHON` points at). On POSIX, the pip
+line above is `venv/bin/pip`.
+
+`.\run.ps1` does all of the above in one step: it checks the prerequisites,
+installs only what is missing, initialises the database on first run, and starts
+both servers.
 
 ## Commands
 
@@ -88,6 +92,112 @@ Run from the repository root:
 
 `npm run verify` is the command to run before considering a phase finished.
 
+## Deploying to Render
+
+The repository root contains a [`render.yaml`](render.yaml) blueprint, so the
+whole deployment is a dashboard operation with no command-line steps.
+
+### Architecture: one Web Service
+
+The frontend is built during the deploy and served by Flask from `frontend/dist`
+(see `backend/app/spa.py`), so the app is **single-origin**. This is deliberate:
+
+- `VITE_API_BASE_URL` stays the relative `/api/v1` it already is, so every request
+  is same-origin and `CORS_ORIGINS` can stay empty.
+- The auth cookies are `SameSite=Lax` and become `Secure` in production. Splitting
+  the frontend onto a different origin is the change most likely to break login,
+  and it fails in a way that is hard to diagnose — a withheld cookie and a CORS
+  failure both surface as "Cannot reach the server".
+- The SPA shell and the API that serves it are always deployed together.
+
+### 1. Create the service
+
+In the Render dashboard: **New → Blueprint**, then select this repository. Render
+reads `render.yaml` and creates the service. On the first apply it prompts for the
+three `sync: false` values:
+
+| Variable         | Value                                            |
+| ---------------- | ------------------------------------------------ |
+| `ADMIN_EMAIL`    | the owner login email                            |
+| `ADMIN_PASSWORD` | at least 10 characters, per the §16 policy        |
+| `ADMIN_NAME`     | optional display name, defaults to the business   |
+
+`SECRET_KEY` and `JWT_SECRET_KEY` are generated per environment, so there is no
+secret in the repository. Both are mandatory in production: the app falls back to
+a random per-process value when they are unset, which logs everyone out on every
+restart.
+
+Creating the service manually instead gives the same result:
+
+| Setting            | Value                                                             |
+| ------------------ | ----------------------------------------------------------------- |
+| Root directory     | `backend`                                                          |
+| Build command      | `pip install --upgrade pip && pip install -r requirements.txt && cd ../frontend && npm ci && npm run build` |
+| Start command      | `gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --access-logfile - --error-logfile - run:app` |
+| Health check path  | `/api/v1/health`                                                   |
+| Pre-deploy command | `flask --app "app:create_app" db upgrade && flask --app "app:create_app" seed-defaults` |
+| Instance type      | **paid** — see storage below                                        |
+| Python version     | 3.13                                                               |
+
+### 2. Storage: a persistent disk is required
+
+**Render's filesystem is ephemeral.** Without a disk, every deploy and every
+restart destroys the SQLite database and every uploaded logo and payment QR. The
+blueprint declares a 1 GB disk at `/var/data` and points both at it:
+
+| Setting        | Value                                          |
+| -------------- | ---------------------------------------------- |
+| `DATABASE_URL` | `sqlite:////var/data/ruchita_interiors.db`     |
+| `UPLOADS_DIR`  | `/var/data/uploads`                            |
+
+Render does not attach persistent disks to the free tier, so the instance must be
+paid. SQLite itself is unchanged — it remains the database, on a disk that
+outlives the container.
+
+`preDeployCommand` runs `flask db upgrade` because Alembic owns every DDL change
+and `create_all()` is deliberately never called: an unmigrated database would 500
+on the first real request. `seed-defaults` is idempotent, so it is safe on every
+deploy.
+
+### 3. Create the owner account, once
+
+There is no signup, so the account is created by a CLI command. Open
+**Shell** on the service and run:
+
+```bash
+flask --app "app:create_app" seed-admin
+```
+
+This is deliberately **not** a pre-deploy command: run against an existing
+account it prompts to reset the password, and that prompt cannot be answered in a
+non-interactive shell.
+
+### 4. First deploy
+
+After the first successful deploy, sign in at `https://<service>.onrender.com/login`
+with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` above.
+
+### Bringing existing local data across
+
+The local database is never migrated automatically. To start production with the
+records already in `backend/instance/`, do this once, from the Render shell,
+**before** the first real use:
+
+SQLite runs in WAL mode, so a live database is really three files — the `.db` plus
+its `-wal` and `-shm` sidecars. Close the dev servers first, then checkpoint so the
+`.db` file is self-contained and safe to copy:
+
+```bash
+# Locally, with the dev servers stopped, from backend/:
+venv\Scripts\python -c "import sqlite3; c=sqlite3.connect('instance/ruchita_interiors.db'); c.execute('PRAGMA wal_checkpoint(TRUNCATE)'); c.close()"
+```
+
+Then copy `backend/instance/ruchita_interiors.db` and the `backend/uploads/`
+directory into `/var/data/uploads/` on the disk — Render's shell, an SSH session,
+or any transfer tool that writes to the mounted path works. The file's schema must
+match a migrated database, so run the copy against a database created by the same
+Alembic revisions (`flask db upgrade`) the service uses.
+
 ## Project Structure
 
 ```
@@ -97,6 +207,7 @@ ruchita_interiors/
 ├── backend/           Flask REST API
 ├── docs/              architecture, development and API notes
 ├── scripts/           one-command runners and the brand asset pipeline
+├── render.yaml        Render deployment blueprint
 ├── PLAN.md            scope, architecture and phase order
 └── package.json       root commands
 ```

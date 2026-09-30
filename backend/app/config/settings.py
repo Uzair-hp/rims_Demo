@@ -138,5 +138,18 @@ class Settings:
     APP_VERSION = "1.0.0"
     PHASE = 8
 
+    # Deployment: where the built frontend lives, so one origin can serve both the
+    # API and the SPA.
+    #
+    # Render builds `frontend/dist` and serves the whole app from this single Web
+    # Service, which is why the frontend's relative `VITE_API_BASE_URL` stays
+    # same-origin in production exactly as the dev proxy makes it in development -
+    # no CORS entry needed, and the SameSite=Lax auth cookies keep working.
+    #
+    # The check is existence-based (`app/spa.py`): with no build present the app
+    # stays API-only, so tests and a bare `flask run` are unaffected. Overridable
+    # only for unusual layouts, e.g. a build served from a different stage.
+    SPA_DIST_DIR = os.getenv("SPA_DIST_DIR", str(BACKEND_ROOT.parent / "frontend" / "dist"))
+
 
 settings = Settings()
