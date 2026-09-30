@@ -5,8 +5,9 @@
  * runs the backend. Order:
  *
  *   1. Ruchita_PYTHON   explicit override
- *   2. backend/venv     per-project virtual environment
- *   3. python3 / python on PATH
+ *   2. venv              root project virtual environment
+ *   3. backend/venv      legacy per-backend virtual environment
+ *   4. python3 / python on PATH
  *
  * @returns {{ command: string, label: string } | null}
  */
@@ -16,14 +17,17 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const venvPython =
-  process.platform === 'win32'
-    ? join(here, '..', 'backend', 'venv', 'Scripts', 'python.exe')
-    : join(here, '..', 'backend', 'venv', 'bin', 'python')
+
+/** @param {string[]} segments */
+function venvPython(...segments) {
+  const root = join(here, '..', ...segments)
+  return process.platform === 'win32' ? join(root, 'Scripts', 'python.exe') : join(root, 'bin', 'python')
+}
 
 const CANDIDATES = [
   { command: process.env.Ruchita_PYTHON, label: 'Ruchita_PYTHON' },
-  { command: venvPython, label: 'backend/venv' },
+  { command: venvPython('venv'), label: 'venv' },
+  { command: venvPython('backend', 'venv'), label: 'backend/venv' },
   { command: process.platform === 'win32' ? 'python' : 'python3', label: 'PATH' },
 ].filter((candidate) => candidate.command)
 
@@ -33,7 +37,7 @@ export function resolvePython() {
 
 export const SETUP_HINT = [
   'No Python interpreter found. Create one with:',
-  '  python -m venv backend/venv',
-  '  backend/venv/Scripts/pip install -r backend/requirements.txt   (Windows)',
-  '  backend/venv/bin/pip install -r backend/requirements.txt       (macOS/Linux)',
+  '  python -m venv venv',
+  '  venv/Scripts/pip install -r backend/requirements.txt -r backend/requirements-dev.txt   (Windows)',
+  '  venv/bin/pip install -r backend/requirements.txt -r backend/requirements-dev.txt       (macOS/Linux)',
 ].join('\n')
