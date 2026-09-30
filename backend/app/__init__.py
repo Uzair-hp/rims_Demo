@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 from app.api import api_bp
 from app.config.settings import BACKEND_ROOT, settings
 from app.extensions.database import db, init_database
+from app.spa import register_spa
 from app.utils.errors import ApiError
 
 
@@ -45,18 +46,26 @@ def create_app(test_config: dict | None = None) -> Flask:
     _register_request_hooks(app)
     _register_cli(app)
 
-    @app.get("/")
-    def index():
-        """Friendly root: point at the API instead of a bare 404."""
-        return jsonify(
-            {
-                "data": {
-                    "service": "ruchita-interiors-api",
-                    "api": f"{app.config['API_PREFIX']}/health",
-                    "frontend": app.config["CORS_ORIGINS"],
+    # A built frontend, if one exists, takes over `/` and the client-side routes so
+    # a single origin serves the whole app. It is a no-op without a build, which
+    # is why the friendly API root below stays the behaviour in development and in
+    # the test suite.
+    spa_registered = register_spa(app)
+
+    if not spa_registered:
+
+        @app.get("/")
+        def index():
+            """Friendly root: point at the API instead of a bare 404."""
+            return jsonify(
+                {
+                    "data": {
+                        "service": "ruchita-interiors-api",
+                        "api": f"{app.config['API_PREFIX']}/health",
+                        "frontend": app.config["CORS_ORIGINS"],
+                    }
                 }
-            }
-        )
+            )
 
     return app
 

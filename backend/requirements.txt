@@ -8,3 +8,6 @@ marshmallow
 PyJWT
 python-dotenv
 Pillow
+# WSGI server for production. `run.py` still uses Flask's development server
+# locally; Render's start command runs gunicorn against the same `run:app`.
+gunicorn
