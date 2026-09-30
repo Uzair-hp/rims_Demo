@@ -145,6 +145,35 @@ def test_serving_without_logo_is_404(authed_client):
     assert response.status_code == 404
 
 
+def test_logo_upload_requires_a_csrf_token(authed_client):
+    """The logo routes are `@csrf_protect` too (§16: every non-GET mutation)."""
+    response = authed_client.post(
+        "/api/v1/settings/logo",
+        data={"logo": (io.BytesIO(_png_bytes()), "logo.png", "image/png")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 403
+    assert CompanySettings.get_row().logo_path is None
+
+
+def test_logo_delete_requires_a_csrf_token(authed_client):
+    """A forged DELETE must not be able to strip the branding off a signed-in owner."""
+    uploaded = _upload(authed_client, _png_bytes(), "logo.png", "image/png")
+    logo_path = uploaded.get_json()["data"]["logo_path"]
+
+    forged = authed_client.delete("/api/v1/settings/logo")
+    assert forged.status_code == 403
+
+    # The file and the reference both survive the refused request.
+    assert CompanySettings.get_row().logo_path == logo_path
+    from pathlib import Path
+
+    from flask import current_app
+
+    with authed_client.application.app_context():
+        assert (Path(current_app.config["UPLOADS_DIR"]) / logo_path).exists()
+
+
 def test_logo_endpoints_require_authentication(client):
     assert client.get("/api/v1/uploads/logo").status_code == 401
 

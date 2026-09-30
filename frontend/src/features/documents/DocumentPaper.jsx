@@ -127,14 +127,25 @@ export default function DocumentPaper({
   const gst = doc.gst_paise || 0
   const otherCharges = doc.other_charges_paise || 0
   const grandTotal = doc.grand_total_paise || 0
+  // Printed label only — see the §11 note below. The stored subtotal and discount
+  // are both the server's, so this cannot drift from the document it prints.
   const taxable = subtotal - discount
   const isPercentDiscount = (doc.discount_type || 'percent') === 'percent'
   const discountLabel = isPercentDiscount ? `Discount (${(doc.discount_bp || 0) / 100}%)` : 'Discount'
   const gstLabel = `GST ${(doc.gst_bp || 0) / 100}%`
 
-  // §11 figures. Computed server-side and passed through untouched — the sheet
-  // never re-derives money (D2). Defaulted so a quotation, which has neither,
-  // renders exactly as it did in Phase 6.
+  // §11 figures. The invoice's paid and outstanding amounts are computed by the
+  // server and passed through untouched (D2): the sheet prints what the ledger
+  // says, never a running total of its own. The `??` is the quotation fallback
+  // only — a quotation has no ledger, so it has no `outstanding_paise` to print,
+  // and the derived value is a placeholder that is never rendered (see the
+  // invoice-only money rows below).
+  //
+  // `taxable` is the one subtraction on this sheet, and it is a display
+  // convenience rather than a re-derivation: both operands are server-computed
+  // columns of this document, and the value is a printed label, never a write.
+  // The document's own money — what is owed and what remains — comes from the
+  // server only.
   const paid = doc.paid_paise || 0
   const outstanding = doc.outstanding_paise ?? Math.max(0, grandTotal - paid)
 

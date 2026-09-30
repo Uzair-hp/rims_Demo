@@ -57,6 +57,7 @@ _MAGIC = {
 
 @uploads_bp.post("/settings/logo")
 @login_required
+@csrf_protect
 def upload_logo():
     return _store_image("logo")
 
@@ -69,6 +70,7 @@ def serve_logo():
 
 @uploads_bp.delete("/settings/logo")
 @login_required
+@csrf_protect
 def delete_logo():
     return _remove_image("logo", clear_logo, logo_absolute_path)
 

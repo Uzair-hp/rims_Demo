@@ -79,10 +79,20 @@
     display: table-header-group;
   }
 
-  /* A row is never split across two pages. */
+  /* A row is never split across two pages. The totals block and the bank/QR
+     block are unbreakable for the same reason: a grand total orphaned above a
+     page break, or an account number separated from the QR that pays it, reads
+     as a defect on a document a customer receives.
+
+     This is the whole guarantee for those blocks, and it is deliberately not a
+     `break-before: page`. Forcing the totals onto a fresh sheet would push a
+     short block wholesale onto a third page of a two-page invoice, leaving a
+     large gap above it. `break-inside: avoid` keeps the block intact; whether it
+     moves as a unit or flows after the table is the renderer's call. */
   [data-document-items] tr,
   [data-document-totals],
-  [data-document-signatory] {
+  [data-document-signatory],
+  [data-document-bank] {
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -105,12 +115,5 @@
     widows: 2;
     break-inside: avoid;
     page-break-inside: avoid;
-  }
-
-  /* Keep the totals block off the end of a page: it starts fresh rather than
-     being separated from the table above it. */
-  [data-document-totals] {
-    break-before: auto;
-    page-break-before: auto;
   }
 }
