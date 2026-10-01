@@ -121,27 +121,21 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Clients' })).toBeInTheDocument()
   })
 
-  it('exposes both navigations, since only one is on screen at a time', () => {
+  it('keeps the desktop navigation and mobile menu control available', () => {
     renderAt('/')
 
     const navs = screen.getAllByRole('navigation', { name: 'Primary', hidden: true })
-    expect(navs).toHaveLength(2)
+    expect(navs).toHaveLength(1)
 
-    const [desktop, mobile] = navs
-    expect(within(desktop).getByRole('link', { name: 'Settings', hidden: true })).toBeInTheDocument()
-    expect(within(mobile).getByRole('button', { name: 'More', hidden: true })).toBeInTheDocument()
-    expect(within(mobile).getByRole('button', { name: 'New', hidden: true })).toBeInTheDocument()
+    expect(within(navs[0]).getByRole('link', { name: 'Settings', hidden: true })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument()
   })
 
-  it('keeps the mobile slots free of the destinations the bottom bar cannot hold', () => {
+  it('does not render the removed mobile bottom navigation', () => {
     renderAt('/')
 
-    const [, mobile] = screen.getAllByRole('navigation', { name: 'Primary', hidden: true })
-    const labels = within(mobile)
-      .getAllByRole('link', { hidden: true })
-      .map((link) => link.textContent)
-
-    expect(labels).toEqual(['Dashboard', 'Quotations', 'Invoices'])
+    expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New' })).not.toBeInTheDocument()
   })
 
   it('shows the signed-in identity in the sidebar footer', () => {

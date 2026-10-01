@@ -3,7 +3,7 @@
   inset-block-end: 0;
   inset-inline: 0;
   z-index: var(--z-bottom-nav);
-  display: grid;
+  display: none;
   grid-template-columns: repeat(5, 1fr);
   align-items: stretch;
   padding-block-end: env(safe-area-inset-bottom);

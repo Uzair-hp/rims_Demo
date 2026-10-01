@@ -35,7 +35,7 @@
   max-inline-size: var(--size-content-max);
   margin-inline: auto;
   padding: var(--space-4) var(--space-4)
-    calc(var(--size-bottom-nav) + var(--space-8) + env(safe-area-inset-bottom));
+    calc(var(--size-fab) + var(--space-6) + env(safe-area-inset-bottom));
 }
 
 .main:focus {
@@ -137,6 +137,14 @@
 }
 
 @media (max-width: 1023px) {
+  .desktopNew {
+    position: fixed;
+    inset-block-end: calc(var(--space-4) + env(safe-area-inset-bottom));
+    inset-inline-end: var(--space-4);
+    z-index: var(--z-fab);
+    display: block;
+  }
+
   .mobileBackdrop {
     position: fixed;
     inset: 0;
