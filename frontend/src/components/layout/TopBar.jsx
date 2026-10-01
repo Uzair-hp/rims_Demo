@@ -18,7 +18,6 @@ import styles from './TopBar.module.css'
 export default function TopBar({ actions, mobileMenuOpen = false, onToggleMobileMenu }) {
   const { pathname } = useLocation()
   const isRoot = pathname === '/'
-  const isSettings = pathname === '/settings'
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -43,8 +42,8 @@ export default function TopBar({ actions, mobileMenuOpen = false, onToggleMobile
         {isRoot ? (
           <span className={styles.placeholder} aria-hidden="true" />
         ) : (
-          <Link to="/" className={styles.iconButton} aria-label={isSettings ? 'Go to dashboard' : 'Back to dashboard'}>
-            <Icon name={isSettings ? 'home' : 'chevronLeft'} size={22} />
+          <Link to="/" className={styles.iconButton} aria-label="Go to dashboard">
+            <Icon name="home" size={22} />
           </Link>
         )}
       </div>
