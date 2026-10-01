@@ -26,8 +26,50 @@ export function newItem(overrides = {}) {
     category: '',
     qty_milli: 0,
     rate_paise: 0,
+    // Catalog provenance (SERVICES_PLAN S2/S7). `service_id` says which catalogue
+    // row the line came from; `catalog_rate_paise` is the *snapshot* of that row's
+    // standard rate at add time. Informational only — neither field ever reaches a
+    // calculation, they exist so the editor can show "Standard ₹X" after the user
+    // edits the rate. Hand-typed lines carry explicit nulls, which the API accepts.
+    service_id: null,
+    catalog_rate_paise: null,
     ...overrides,
   }
+}
+
+/**
+ * Build an editable line from a catalogue service (SERVICES_PLAN FR-SV5).
+ *
+ * This is a copy, not a link: name, description, unit, category, quantity and rate
+ * are all snapshotted onto the line, so later catalogue edits never silently move
+ * a quotation that was already priced. `catalog_rate_paise` records what "standard"
+ * meant at the moment of the copy, which is what the editor's hint compares
+ * against (S2).
+ *
+ * Exported so the mapping is unit-tested on its own — the same rationale as the
+ * exported `pickDefaultTerms`: this is where a silent data bug would hide.
+ *
+ * @param {{
+ *   id: number,
+ *   name: string,
+ *   description?: string | null,
+ *   unit?: string | null,
+ *   category?: string | null,
+ *   default_qty_milli?: number | null,
+ *   rate_paise: number,
+ * }} service
+ */
+export function itemFromService(service) {
+  return newItem({
+    name: service.name,
+    description: service.description || '',
+    unit: service.unit || '',
+    category: service.category || '',
+    qty_milli: service.default_qty_milli ?? 1000,
+    rate_paise: service.rate_paise,
+    service_id: service.id,
+    catalog_rate_paise: service.rate_paise,
+  })
 }
 
 /**
@@ -38,6 +80,7 @@ export function newItem(overrides = {}) {
  *   units?: string[],
  *   categories?: string[],
  *   disabled?: boolean,
+ *   onAddFromServices?: () => void,
  * }} props
  */
 export default function ItemsEditor({
@@ -47,6 +90,7 @@ export default function ItemsEditor({
   units = [],
   categories = [],
   disabled = false,
+  onAddFromServices,
 }) {
   const update = (index, patch) => {
     onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)))
@@ -112,6 +156,16 @@ export default function ItemsEditor({
                   disabled={disabled}
                   onChange={(e) => update(index, { category: e.target.value })}
                 />
+                {item.service_id ? (
+                  <span className={styles.provenance}>
+                    <span className={styles.catalogBadge}>Catalog</span>
+                    {item.catalog_rate_paise != null && item.catalog_rate_paise !== item.rate_paise ? (
+                      <span className={styles.standardHint}>
+                        Standard {formatPaise(item.catalog_rate_paise)}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
                 {rowErrors.name ? (
                   <p className={styles.error} role="alert">
                     {rowErrors.name}
@@ -214,9 +268,16 @@ export default function ItemsEditor({
         </datalist>
       ) : null}
 
-      <Button variant="ghost" size="sm" icon="plus" onClick={add} disabled={disabled}>
-        Add item
-      </Button>
+      <div className={styles.actions}>
+        <Button variant="ghost" size="sm" icon="plus" onClick={add} disabled={disabled}>
+          Add item
+        </Button>
+        {onAddFromServices ? (
+          <Button variant="ghost" size="sm" icon="spark" onClick={onAddFromServices} disabled={disabled}>
+            Add from services
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
 }

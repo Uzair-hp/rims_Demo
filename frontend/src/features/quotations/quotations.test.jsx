@@ -6,7 +6,7 @@
  * authority, but the editor's live preview and inline errors rely on these.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { useState } from 'react'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -23,8 +23,8 @@ import { paiseToInput, rupeesToPaise } from '../../lib/money.js'
 import { statusLabel, STATUS_OPTIONS, ACTION_META } from './status.js'
 import { PAGE_SIZE } from './useQuotations.js'
 import { buildQuotationListQuery } from '../../api/endpoints/quotations.js'
-import ItemsEditor, { newItem } from './ItemsEditor.jsx'
-import { pickDefaultTerms } from './QuotationEditor.jsx'
+import ItemsEditor, { itemFromService, newItem } from './ItemsEditor.jsx'
+import { buildPayload, fromQuotation, pickDefaultTerms } from './QuotationEditor.jsx'
 
 describe('calcLineTotal', () => {
   it('computes qty × rate / 1000 with half-up rounding', () => {
@@ -329,5 +329,214 @@ describe('pickDefaultTerms', () => {
     expect(pickDefaultTerms([], 'quotation')).toBe('')
     expect(pickDefaultTerms(null, 'quotation')).toBe('')
     expect(pickDefaultTerms(undefined, 'quotation')).toBe('')
+  })
+})
+
+/**
+ * SERVICES_PLAN S2 — a catalogue service becomes a *copy*, not a live link.
+ *
+ * These assertions pin that copy: everything is snapshotted onto the line at add
+ * time, and the provenance fields are recorded so the editor can tell the user
+ * what "standard" meant before they edited the rate.
+ */
+describe('itemFromService', () => {
+  const service = {
+    id: 7,
+    name: 'Modular kitchen',
+    description: 'Full modular kitchen',
+    unit: 'job',
+    category: 'Kitchen',
+    default_qty_milli: 2000,
+    rate_paise: 500000,
+  }
+
+  it('copies every field onto an ordinary editable line', () => {
+    const item = itemFromService(service)
+    expect(item).toMatchObject({
+      name: 'Modular kitchen',
+      description: 'Full modular kitchen',
+      unit: 'job',
+      category: 'Kitchen',
+      qty_milli: 2000,
+      rate_paise: 500000,
+    })
+  })
+
+  it('records the catalogue row and the rate snapshot', () => {
+    expect(itemFromService(service)).toMatchObject({
+      service_id: 7,
+      catalog_rate_paise: 500000,
+    })
+  })
+
+  it('falls back to one unit when the service has no default quantity', () => {
+    expect(itemFromService({ ...service, default_qty_milli: null }).qty_milli).toBe(1000)
+    expect(itemFromService({ ...service, default_qty_milli: 0 }).qty_milli).toBe(0)
+  })
+
+  it('normalises absent text to empty strings, not null', () => {
+    const item = itemFromService({
+      ...service,
+      description: null,
+      unit: null,
+      category: null,
+    })
+    expect(item.description).toBe('')
+    expect(item.unit).toBe('')
+    expect(item.category).toBe('')
+  })
+
+  it('gives every added line its own key, so React can track the reorder', () => {
+    expect(itemFromService(service).key).not.toBe(itemFromService(service).key)
+  })
+
+  it('leaves a hand-typed line without provenance', () => {
+    expect(newItem({ name: 'Sofa' })).toMatchObject({ service_id: null, catalog_rate_paise: null })
+  })
+})
+
+describe('ItemsEditor — catalogue provenance (S7/S8)', () => {
+  const catalogItem = (overrides = {}) =>
+    itemFromService({
+      id: 7,
+      name: 'Modular kitchen',
+      description: 'Full modular kitchen',
+      unit: 'job',
+      category: 'Kitchen',
+      default_qty_milli: 1000,
+      rate_paise: 500000,
+      ...overrides,
+    })
+
+  it('marks a catalogue-sourced line', () => {
+    render(<ItemsHarness initial={[catalogItem()]} />)
+    expect(screen.getByText('Catalog')).toBeInTheDocument()
+  })
+
+  it('does not mark a hand-typed line', () => {
+    render(<ItemsHarness initial={[newItem({ name: 'Sofa', qty_milli: 1000, rate_paise: 100000 })]} />)
+    expect(screen.queryByText('Catalog')).toBeNull()
+  })
+
+  it('leaves the line alone while the rate still matches the snapshot', () => {
+    render(<ItemsHarness initial={[catalogItem()]} />)
+    // Same rate as the catalogue: nothing to flag.
+    expect(screen.queryByText(/standard/i)).toBeNull()
+  })
+
+  it('offers the snapshot once the rate is edited, and keeps the marker', async () => {
+    const user = userEvent.setup()
+    render(<ItemsHarness initial={[catalogItem()]} />)
+
+    const rate = screen.getByLabelText('Item 1 rate in rupees')
+    await user.clear(rate)
+    await user.type(rate, '600')
+    // The rate input commits on blur, so the hint can only appear after it.
+    await user.tab()
+
+    expect(screen.getByText('Standard ₹5,000.00')).toBeInTheDocument()
+    expect(screen.getByText('Catalog')).toBeInTheDocument()
+  })
+})
+
+describe('ItemsEditor — add from services', () => {
+  it('offers the catalogue control only when a picker is wired up', () => {
+    render(<ItemsHarness initial={[newItem({ name: 'Sofa' })]} />)
+    expect(screen.queryByRole('button', { name: /add from services/i })).toBeNull()
+  })
+
+  it('opens the picker', async () => {
+    const user = userEvent.setup()
+    const onAddFromServices = vi.fn()
+    render(
+      <ItemsEditor
+        items={[newItem({ name: 'Sofa' })]}
+        onChange={vi.fn()}
+        onAddFromServices={onAddFromServices}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /add from services/i }))
+    expect(onAddFromServices).toHaveBeenCalled()
+  })
+
+  it('disables the control with the rest of the editor', () => {
+    render(
+      <ItemsEditor
+        items={[newItem({ name: 'Sofa' })]}
+        onChange={vi.fn()}
+        onAddFromServices={vi.fn()}
+        disabled
+      />,
+    )
+    expect(screen.getByRole('button', { name: /add from services/i })).toBeDisabled()
+  })
+})
+
+/**
+ * The provenance round trip (SERVICES_PLAN 9A.3).
+ *
+ * `fromQuotation` and `buildPayload` used to ignore `service_id` and
+ * `catalog_rate_paise` entirely, so merely opening a saved catalog-derived
+ * quotation — or letting it autosave — destroyed the link to the catalogue and the
+ * rate snapshot for good. The pair is the fix, so it is asserted directly.
+ */
+describe('fromQuotation / buildPayload provenance', () => {
+  const saved = {
+    client_id: 3,
+    quotation_date: '2026-10-01',
+    items: [
+      {
+        name: 'Modular kitchen',
+        description: null,
+        unit: 'job',
+        category: 'Kitchen',
+        qty_milli: 1000,
+        rate_paise: 600000,
+        service_id: 7,
+        catalog_rate_paise: 500000,
+      },
+      {
+        name: 'Sofa',
+        description: null,
+        unit: 'ea',
+        category: null,
+        qty_milli: 1000,
+        rate_paise: 100000,
+        service_id: null,
+        catalog_rate_paise: null,
+      },
+    ],
+  }
+
+  it('reads both fields back off a saved quotation', () => {
+    const form = fromQuotation(saved)
+    expect(form.items[0]).toMatchObject({ service_id: 7, catalog_rate_paise: 500000 })
+    expect(form.items[1]).toMatchObject({ service_id: null, catalog_rate_paise: null })
+  })
+
+  it('sends both fields back on save, preserving an edited rate against its snapshot', () => {
+    const payload = buildPayload(fromQuotation(saved))
+    expect(payload.items[0]).toMatchObject({
+      rate_paise: 600000,
+      service_id: 7,
+      catalog_rate_paise: 500000,
+    })
+  })
+
+  it('declares hand-typed lines as having no provenance rather than omitting it', () => {
+    const payload = buildPayload(fromQuotation(saved))
+    expect(payload.items[1]).toHaveProperty('service_id', null)
+    expect(payload.items[1]).toHaveProperty('catalog_rate_paise', null)
+  })
+
+  it('treats absent fields as null, so an older saved quotation loads cleanly', () => {
+    const form = fromQuotation({ items: [{ name: 'Sofa', qty_milli: 1000, rate_paise: 100000 }] })
+    expect(form.items[0]).toMatchObject({ service_id: null, catalog_rate_paise: null })
+  })
+
+  it('keeps position derived from the array index', () => {
+    const payload = buildPayload(fromQuotation(saved))
+    expect(payload.items.map((it) => it.position)).toEqual([0, 1])
   })
 })

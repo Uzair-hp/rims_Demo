@@ -84,5 +84,11 @@ class QuotationItem(db.Model):
     qty_milli = db.Column(db.Integer, server_default="0")
     rate_paise = db.Column(db.Integer, server_default="0")
     line_total_paise = db.Column(db.Integer)
+    # SERVICES_PLAN §4.2 (Phase 9A): catalog provenance, informational only (S7).
+    # The FK is RESTRICT, which is safe because services are never hard-deleted
+    # (S5); the catalog rate is the standard rate at the moment the line was added
+    # and is display metadata only — nothing in calculations.py reads either field.
+    service_id = db.Column(db.Integer, db.ForeignKey("services.id", ondelete="RESTRICT"))
+    catalog_rate_paise = db.Column(db.Integer)
 
     quotation = db.relationship("Quotation", back_populates="items")

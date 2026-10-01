@@ -25,6 +25,14 @@ class QuotationItemSchema(Schema):
     qty_milli = fields.Integer(required=True, validate=validate.Range(min=0, max=10**12))
     rate_paise = fields.Integer(required=True, validate=validate.Range(min=0, max=10**12))
     line_total_paise = fields.Integer(dump_only=True)
+    # SERVICES_PLAN §4.3: catalog provenance, informational only (S7). The line
+    # copies them at add time and they never influence any total. `service_id`
+    # must exist if present — *archived allowed*, so a draft that already contains
+    # a since-archived service can still be saved (§7 case 2).
+    service_id = fields.Integer(allow_none=True, load_default=None)
+    catalog_rate_paise = fields.Integer(
+        allow_none=True, load_default=None, validate=validate.Range(min=0, max=10**12)
+    )
 
 
 class QuotationSchema(Schema):
@@ -121,6 +129,10 @@ class InvoiceItemSchema(Schema):
     qty_milli = fields.Integer(required=True, validate=validate.Range(min=0, max=10**12))
     rate_paise = fields.Integer(required=True, validate=validate.Range(min=0, max=10**12))
     line_total_paise = fields.Integer(dump_only=True)
+    # SERVICES_PLAN §5: read-only on invoices — they arrive by conversion, never
+    # by client write.
+    service_id = fields.Integer(dump_only=True)
+    catalog_rate_paise = fields.Integer(dump_only=True)
 
 
 class InvoiceSchema(Schema):

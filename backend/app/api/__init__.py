@@ -19,6 +19,7 @@ from app.api.invoices import invoices_bp
 from app.api.payments import payments_bp
 from app.api.quotations import quotations_bp
 from app.api.settings import settings_bp
+from app.api.services import services_bp
 from app.api.uploads import uploads_bp
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/v1")
@@ -30,4 +31,5 @@ api_bp.register_blueprint(invoices_bp)
 api_bp.register_blueprint(payments_bp)
 api_bp.register_blueprint(dashboard_bp)
 api_bp.register_blueprint(settings_bp)
+api_bp.register_blueprint(services_bp)
 api_bp.register_blueprint(uploads_bp)

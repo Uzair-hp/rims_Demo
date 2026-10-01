@@ -106,6 +106,23 @@ def test_migration_downgrade_upgrade_cycle(tmp_path):
         assert "payment_qr_path" in {
             col["name"] for col in inspector.get_columns("company_settings")
         }
+        # Phase 9A (SERVICES_PLAN §4): the catalog table exists, the item columns
+        # arrived on both item tables, and the partial unique index came with them.
+        assert "services" in inspector.get_table_names()
+        for table in ("quotation_items", "invoice_items"):
+            columns = {col["name"] for col in inspector.get_columns(table)}
+            assert {"service_id", "catalog_rate_paise"}.issubset(columns)
+        indexes = {ix["name"] for ix in inspector.get_indexes("services")}
+        assert "ix_services_archived_category_name" in indexes
+        # The partial unique index on lower(name) is expression-based, which
+        # SQLite's inspector cannot reflect ("unsupported reflection"), so its
+        # existence is read from the DDL directly.
+        service_ddl = db.session.execute(
+            db.text("SELECT sql FROM sqlite_master WHERE type='index' AND name='uq_services_active_name'")
+        ).scalar_one_or_none()
+        assert service_ddl is not None
+        assert "lower(name)" in (service_ddl or "")
+        assert "archived_at IS NULL" in (service_ddl or "")
 
         downgrade(revision="base")
         inspector = inspect(db.engine)
@@ -118,3 +135,7 @@ def test_migration_downgrade_upgrade_cycle(tmp_path):
         assert "payment_qr_path" in {
             col["name"] for col in inspector.get_columns("company_settings")
         }
+        # The catalog must come back too — the downgrade is a full undo, not a
+        # one-way street that leaves Phase 9A behind.
+        assert "services" in inspector.get_table_names()
+        assert "service_id" in {col["name"] for col in inspector.get_columns("quotation_items")}

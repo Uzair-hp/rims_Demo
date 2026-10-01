@@ -1,0 +1,40 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The unit / default-qty / rate trio sits side by side where there is width,
+   stacking below `sm` — the same treatment the editor's charge rows get. */
+.row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.rateField input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-left: var(--border-width-accent) solid var(--color-gold);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (min-width: 480px) {
+  .row {
+    grid-template-columns: 1fr 1fr 1.2fr;
+  }
+}

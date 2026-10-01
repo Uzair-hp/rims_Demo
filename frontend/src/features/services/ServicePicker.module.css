@@ -1,0 +1,119 @@
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.search {
+  max-width: 36ch;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.item:hover {
+  background: var(--color-surface-alt);
+}
+
+.itemBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.itemName {
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.itemMeta {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.rate {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.createRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width) dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-gold);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.createRow:hover {
+  background: var(--color-gold-soft);
+  border-style: solid;
+}
+
+.noResults {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--color-ink-muted);
+  font-size: var(--font-size-sm);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.count {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+}
+
+.done {
+  padding: var(--space-2) var(--space-5);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.done:hover {
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+}

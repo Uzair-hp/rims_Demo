@@ -62,6 +62,35 @@
   text-align: right;
 }
 
+/*
+ * Catalogue provenance (SERVICES_PLAN S7/S8). Editor-only by design: a printed
+ * quotation line must read like any other line, so neither the marker nor the
+ * hint reaches the preview, the print route or the detail page.
+ */
+.provenance {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.catalogBadge {
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.standardHint {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
 .invalid {
   border-color: var(--color-danger);
 }
@@ -107,6 +136,13 @@
 
 .right {
   text-align: right;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .iconBtn,

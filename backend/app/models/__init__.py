@@ -12,6 +12,7 @@ from app.models.company_settings import CompanySettings
 from app.models.counter import NumberingCounter
 from app.models.invoice import Invoice, InvoiceItem, Payment
 from app.models.quotation import Quotation, QuotationItem
+from app.models.service import Service
 from app.models.terms import TermsConditions
 from app.models.user import User, utcnow, verify_dummy
 
@@ -25,6 +26,7 @@ __all__ = [
     "Payment",
     "Quotation",
     "QuotationItem",
+    "Service",
     "TermsConditions",
     "User",
     "utcnow",

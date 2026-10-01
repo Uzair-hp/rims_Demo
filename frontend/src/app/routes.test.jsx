@@ -41,6 +41,7 @@ describe('routing', () => {
       '/invoices/7',
       '/clients',
       '/clients/9',
+      '/services',
       '/settings',
       '/no-such-page',
       // Chrome-less print surfaces (§14.2). Still real routes with real headings.
@@ -141,7 +142,17 @@ describe('routing', () => {
       .getAllByRole('link', { hidden: true })
       .map((link) => link.textContent)
 
+    // The bottom bar holds exactly three destinations; Clients, Services and
+    // Settings reach mobile through the More sheet instead (SERVICES_PLAN §6).
     expect(labels).toEqual(['Dashboard', 'Quotations', 'Invoices'])
+  })
+
+  it('offers Services from the desktop sidebar but never as a bottom-bar slot', () => {
+    renderAt('/')
+
+    const [desktop, mobile] = screen.getAllByRole('navigation', { name: 'Primary', hidden: true })
+    expect(within(desktop).getByRole('link', { name: 'Services', hidden: true })).toBeInTheDocument()
+    expect(within(mobile).queryByRole('link', { name: 'Services', hidden: true })).not.toBeInTheDocument()
   })
 
   it('shows the signed-in identity in the sidebar footer', () => {

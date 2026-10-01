@@ -17,6 +17,7 @@ from app.schemas.quotations import (
     quotation_schema,
     quotation_status_action_schema,
 )
+from app.schemas.services import ServiceSchema
 from app.schemas.settings import CompanySettingsSchema, TermsSchema, TermsUpdateSchema
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "ClientSchema",
     "CompanySettingsSchema",
     "LoginSchema",
+    "ServiceSchema",
     "TermsSchema",
     "TermsUpdateSchema",
     "load_or_raise",

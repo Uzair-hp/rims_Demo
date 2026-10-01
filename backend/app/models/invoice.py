@@ -104,6 +104,11 @@ class InvoiceItem(db.Model):
     qty_milli = db.Column(db.Integer, server_default="0")
     rate_paise = db.Column(db.Integer, server_default="0")
     line_total_paise = db.Column(db.Integer)
+    # SERVICES_PLAN §4.2/§8.4 (Phase 9A): copied from the quotation item at
+    # conversion so the invoice carries the same provenance snapshot. Never
+    # written by the client and never read by the calculation core (S7).
+    service_id = db.Column(db.Integer, db.ForeignKey("services.id", ondelete="RESTRICT"))
+    catalog_rate_paise = db.Column(db.Integer)
 
     invoice = db.relationship("Invoice", back_populates="items")
 

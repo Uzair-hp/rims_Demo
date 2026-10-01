@@ -25,7 +25,7 @@ from flask import Blueprint, request, g
 from sqlalchemy import or_, desc, asc
 
 from app.extensions.database import db
-from app.models import Client, Quotation, QuotationItem
+from app.models import Client, Quotation, QuotationItem, Service
 from app.schemas import load_or_raise
 from app.schemas.quotations import (
     quotation_schema,
@@ -142,6 +142,10 @@ def _recompute_and_replace_items(quotation: Quotation, items_data: list[dict]) -
             "rate_paise": item_data["rate_paise"],
             "line_total_paise": calc.line_total_paise,
             "position": i,
+            # SERVICES_PLAN §4.3: catalog provenance rides along with the line.
+            # It never influences `line_total_paise` or any total (S7).
+            "service_id": _validated_service_id(item_data.get("service_id")),
+            "catalog_rate_paise": item_data.get("catalog_rate_paise"),
         }
         normalized.append(item)
         line_totals.append(calc.line_total_paise)
@@ -179,6 +183,22 @@ def _apply_header_fields(quotation: Quotation, data: dict, client: Client) -> No
     quotation.other_charges_paise = data.get("other_charges_paise", 0)
     quotation.terms_text = data.get("terms_text")
     quotation.notes = data.get("notes")
+
+
+def _validated_service_id(service_id):
+    """
+    Check a catalog reference before it is stored on a line (SERVICES_PLAN §4.3).
+
+    An unknown id is a 422 (edge case 7). A **known but archived** id is accepted,
+    so a draft that already contains a since-archived service can still be saved —
+    it just cannot be added again (edge case 2). `None` means "typed by hand" and
+    passes untouched.
+    """
+    if service_id is None:
+        return None
+    if db.session.get(Service, service_id) is None:
+        raise field_error("items", "One of the line items refers to a service that does not exist.")
+    return service_id
 
 
 def _get_or_404(quotation_id: int) -> Quotation:
@@ -338,6 +358,10 @@ def duplicate_quotation(quotation_id: int):
             "unit": item.unit,
             "qty_milli": item.qty_milli,
             "rate_paise": item.rate_paise,
+            # SERVICES_PLAN FR-SV8: a duplicate copies the catalog provenance
+            # unchanged, exactly as §8.4 snapshot semantics require.
+            "service_id": item.service_id,
+            "catalog_rate_paise": item.catalog_rate_paise,
         }
         for item in original.items
     ]

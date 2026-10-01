@@ -6,8 +6,9 @@
  * save), and persists through the quotations API. Drafts autosave ~10s after the
  * last edit; a `beforeunload` guard warns if there are unsaved changes (§20).
  *
- * The client is chosen through the shared `ClientPicker`, so the editor and the
- * Clients page can never disagree on the directory.
+ * The client is chosen through the shared `ClientPicker` and line items can be
+ * pulled from the catalogue through the shared `ServicePicker`, so the editor, the
+ * Clients page and the Services page can never disagree on either list.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -18,9 +19,10 @@ import Card from '../../components/ui/Card.jsx'
 import Skeleton from '../../components/ui/Skeleton.jsx'
 import TextField from '../../components/ui/TextField.jsx'
 import ClientPicker from '../clients/ClientPicker.jsx'
+import ServicePicker from '../services/ServicePicker.jsx'
 import QuotationPreview from '../documents/QuotationPreview.jsx'
 import { useSettings } from '../settings/SettingsProvider.jsx'
-import ItemsEditor, { newItem } from './ItemsEditor.jsx'
+import ItemsEditor, { itemFromService, newItem } from './ItemsEditor.jsx'
 import TotalsPanel from './TotalsPanel.jsx'
 import { createQuotation, fetchQuotation, updateQuotation } from '../../api/endpoints/quotations.js'
 import { fetchTerms } from '../../api/endpoints/settings.js'
@@ -78,7 +80,16 @@ function emptyForm(defaultTerms = '') {
   }
 }
 
-function fromQuotation(q) {
+/**
+ * Rebuild the editor form from a saved quotation.
+ *
+ * The two catalogue fields are carried across deliberately: `fromQuotation` used
+ * to drop them, so merely opening a saved catalog-derived quotation for an edit —
+ * or letting it autosave — silently stripped its provenance and the rate snapshot,
+ * and the "Catalog" marker and "Standard ₹X" hint disappeared for good. They are
+ * informational only (S7) and never touch a total.
+ */
+export function fromQuotation(q) {
   return {
     client: q.client_snapshot ? { id: q.client_id, name: q.client_snapshot.name } : null,
     client_id: q.client_id,
@@ -100,12 +111,23 @@ function fromQuotation(q) {
         category: it.category || '',
         qty_milli: it.qty_milli || 0,
         rate_paise: it.rate_paise || 0,
+        service_id: it.service_id ?? null,
+        catalog_rate_paise: it.catalog_rate_paise ?? null,
       }),
     ),
   }
 }
 
-function buildPayload(form) {
+/**
+ * Serialise the form for create/update.
+ *
+ * `service_id` / `catalog_rate_paise` are always sent, explicitly null for a
+ * hand-typed line, so the server never has to guess: a line either carries its
+ * provenance or it is declared not to have any. Exported so the round-trip
+ * through `fromQuotation` can be unit-tested — that pair is where the data loss
+ * above lived.
+ */
+export function buildPayload(form) {
   const isPercent = form.discount_type === 'percent'
   return {
     client_id: form.client_id,
@@ -127,6 +149,8 @@ function buildPayload(form) {
       qty_milli: Number(it.qty_milli || 0),
       rate_paise: Number(it.rate_paise || 0),
       position: i,
+      service_id: it.service_id ?? null,
+      catalog_rate_paise: it.catalog_rate_paise ?? null,
     })),
   }
 }
@@ -243,6 +267,7 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
   const [dirty, setDirty] = useState(false)
   const [autosaveState, setAutosaveState] = useState('idle')
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [servicePickerOpen, setServicePickerOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -323,6 +348,20 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
 
   const setItems = useCallback((items) => {
     setForm((f) => ({ ...f, items }))
+    setDirty(true)
+    setAutosaveState('idle')
+  }, [])
+
+  /**
+   * Append one item functionally.
+   *
+   * The service picker deliberately stays open, so several `onAdd` calls can land
+   * before React re-renders the editor. Spreading a captured `form.items` here
+   * would drop all but the last of them; the functional updater applies every
+   * append in order.
+   */
+  const appendItem = useCallback((item) => {
+    setForm((f) => ({ ...f, items: [...f.items, item] }))
     setDirty(true)
     setAutosaveState('idle')
   }, [])
@@ -499,6 +538,7 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
               errors={errors.items}
               units={units}
               categories={categories}
+              onAddFromServices={() => setServicePickerOpen(true)}
             />
           </Card>
 
@@ -597,6 +637,13 @@ export default function QuotationEditor({ mode = 'create', quotationId = null })
         isUnsaved={!id}
         onSave={handleSave}
         saving={saving}
+      />
+
+      {/* Catalogue → line items (SERVICES_PLAN 9A.3). Stays open across taps. */}
+      <ServicePicker
+        open={servicePickerOpen}
+        onAdd={(service) => appendItem(itemFromService(service))}
+        onClose={() => setServicePickerOpen(false)}
       />
 
       <ClientPicker

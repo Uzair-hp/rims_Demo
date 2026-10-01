@@ -1,0 +1,175 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.search {
+  /* Matches the Clients page: long enough to be worth typing into, short enough
+     that it does not dominate the toolbar on a wide screen. */
+  max-width: 40ch;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* An archived service keeps its row but loses contrast — the same treatment the
+   Clients list gives archived clients, so the state reads without a second look. */
+.archived {
+  opacity: 0.65;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* The service name deliberately sets no font-family or font-size, so it inherits
+   `--font-body` at the base scale exactly as the Clients list's `.rowTitle` does
+   — this is a list row like any other, not a display heading. */
+.rowTitle {
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-subtle);
+  overflow-wrap: anywhere; /* edge case 11: long descriptions wrap, never overflow */
+}
+
+.rate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.rateValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+.rateUnit {
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+}
+
+/* Labelled actions need a little more air than bare icons did (same as Clients). */
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.message {
+  text-align: center;
+  color: var(--color-ink-muted);
+  padding: var(--space-8) var(--space-4);
+}
+
+/* Category chip scroller — §7's single permitted horizontal scroll. `overflow-x:
+   auto` with hidden scrollbars keeps it reachable on desktop without it reading
+   as a second layout; chips never wrap, so the row stays one tidy line. */
+.chipScroller {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  scrollbar-width: none;
+}
+
+.chipScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.chip:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-ink);
+}
+
+.chipActive {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.chip:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-gold);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (max-width: 767px) {
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .rate {
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 768px) {
+  .toolbar {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: var(--space-4);
+  }
+}

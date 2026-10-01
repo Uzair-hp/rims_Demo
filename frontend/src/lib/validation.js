@@ -12,6 +12,63 @@
 const MAX_INT = 10 ** 12
 const GST_MAX_BP = 2800
 
+/** SERVICES_PLAN §4.1 caps, mirroring the backend ServiceSchema. */
+const SERVICE_NAME_MAX = 200
+const SERVICE_CATEGORY_MAX = 100
+const SERVICE_DESCRIPTION_MAX = 2000
+const SERVICE_UNIT_MAX = 50
+
+/**
+ * Validate one service form (FR-SV1, S3).
+ *
+ * Mirrors the backend `ServiceSchema` so the modal can flag problems inline
+ * before a save; the server re-validates and its 422 is authoritative.
+ *
+ * Values are in the API's integer units: rate in paise, default quantity in
+ * milli-units.
+ *
+ * @param {{
+ *   name?: string,
+ *   category?: string,
+ *   description?: string,
+ *   unit?: string,
+ *   default_qty_milli?: number,
+ *   rate_paise?: number,
+ * }} service
+ * @returns {Record<string, string>} field → message (empty when valid)
+ */
+export function validateService(service) {
+  const errors = {}
+  const name = (service.name || '').trim()
+  const category = (service.category || '').trim()
+  const description = (service.description || '').trim()
+  const unit = (service.unit || '').trim()
+  const rate = Number(service.rate_paise || 0)
+  const qty = Number(service.default_qty_milli ?? 0)
+
+  if (!name) errors.name = 'A service name is required.'
+  else if (name.length > SERVICE_NAME_MAX)
+    errors.name = `Name must be at most ${SERVICE_NAME_MAX} characters.`
+
+  if (category.length > SERVICE_CATEGORY_MAX) {
+    errors.category = `Category must be at most ${SERVICE_CATEGORY_MAX} characters.`
+  }
+  if (description.length > SERVICE_DESCRIPTION_MAX) {
+    errors.description = `Description must be at most ${SERVICE_DESCRIPTION_MAX} characters.`
+  }
+  if (unit.length > SERVICE_UNIT_MAX) errors.unit = `Unit must be at most ${SERVICE_UNIT_MAX} characters.`
+
+  // S3: the standard rate must be strictly positive — a zero-rate service would
+  // pre-fill a line that can never be sent (§10.3).
+  if (rate <= 0) errors.rate_paise = 'The standard rate must be more than zero.'
+  else if (rate > MAX_INT) errors.rate_paise = 'Value exceeds the maximum allowed'
+
+  if (qty < 0) errors.default_qty_milli = 'Quantity cannot be negative'
+  else if (qty > MAX_INT) errors.default_qty_milli = 'Value exceeds the maximum allowed'
+
+  return errors
+}
+
 /**
  * @param {{ name?: string, qty_milli?: number, rate_paise?: number }} item
  * @returns {{ name?: string, qty_milli?: string, rate_paise?: string }} field → message

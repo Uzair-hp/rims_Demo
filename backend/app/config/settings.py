@@ -136,7 +136,10 @@ class Settings:
 
     API_PREFIX = "/api/v1"
     APP_VERSION = "1.0.0"
-    PHASE = 9
+    # Phase 9A (SERVICES_PLAN): the services catalog rides between Phase 9 and
+    # Phase 10 so the later sweeps cover it. Bumping it past 9 keeps `/health`
+    # reporting the true build state.
+    PHASE = 9.1
 
     # Deployment: where the built frontend lives, so one origin can serve both the
     # API and the SPA.

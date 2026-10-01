@@ -10,6 +10,9 @@ export const NAV_ITEMS = [
   { to: '/quotations', label: 'Quotations', icon: 'fileText' },
   { to: '/invoices', label: 'Invoices', icon: 'receipt' },
   { to: '/clients', label: 'Clients', icon: 'users' },
+  // Phase 9A (SERVICES_PLAN §6): the bottom nav is already full (5 slots), so
+  // Services rides in the More sheet on mobile and the sidebar on desktop.
+  { to: '/services', label: 'Services', icon: 'spark' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
@@ -39,6 +42,7 @@ export const PAGE_TITLES = {
   '/quotations/new': 'New quotation',
   '/invoices': 'Invoices',
   '/clients': 'Clients',
+  '/services': 'Services',
   '/settings': 'Settings',
 }
 

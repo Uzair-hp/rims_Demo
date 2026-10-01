@@ -31,6 +31,7 @@ import PrintQuotation from '../pages/PrintQuotation.jsx'
 import QuotationDetail from '../pages/QuotationDetail.jsx'
 import RootLayout from './RootLayout.jsx'
 import Quotations, { QuotationNew } from '../pages/Quotations.jsx'
+import Services from '../pages/Services.jsx'
 import Settings from '../pages/Settings.jsx'
 import Login from '../features/auth/LoginPage.jsx'
 import { RedirectIfAuthenticated, RequireAuth } from '../features/auth/guards.jsx'
@@ -94,6 +95,10 @@ export const routes = [
           { path: 'invoices/:id', element: <InvoiceDetail /> },
           { path: 'clients', element: <Clients /> },
           { path: 'clients/:id', element: <ClientDetail /> },
+          // Phase 9A (SERVICES_PLAN §6): page #11, inside the shell like the
+          // other catalog surfaces. No detail route in v1 — a service has no
+          // history section to show, so edit happens in the form modal.
+          { path: 'services', element: <Services /> },
           { path: 'settings', element: <Settings /> },
           { path: '*', element: <NotFound /> },
         ],
