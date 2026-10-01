@@ -16,13 +16,14 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.api import api_bp
 from app.bootstrap import ensure_database_ready
 from app.config.settings import BACKEND_ROOT, settings
 from app.extensions.database import db, init_database
 from app.spa import register_spa
-from app.utils.errors import ApiError
+from app.utils.errors import CODE_STATUS, ApiError
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -33,6 +34,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     _ensure_sqlite_parent(app)
     _configure_logging(app)
+    _apply_proxy_fix(app)
 
     # The allow-list is resolved once, here, from app.config. Flask-Cors only
     # supports a static list/pattern (not a callable), so `CORS_ORIGINS` is an
@@ -127,6 +129,40 @@ def _ensure_sqlite_parent(app_or_config: Flask | dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _apply_proxy_fix(app: Flask) -> None:
+    """
+    Trust `X-Forwarded-*` from a known number of reverse proxies.
+
+    `TRUST_PROXY_HEADERS` already exists because the login rate limiter needs
+    `X-Forwarded-For` to see the real client IP behind Render rather than the
+    proxy's. `ProxyFix` closes the rest of the gap: without it `request.url_scheme`
+    is `http` and `request.remote_addr` is the proxy's address for *every*
+    request, so anything scheme-dependent is wrong behind a proxy — including the
+    `secure` flag on a cookie and any future HTTPS-only branch.
+
+    Gated on the same setting, and on `TRUSTED_PROXY_COUNT` rather than "any
+    number": the count is how many proxies are in front, and trusting a client-
+    supplied `X-Forwarded-Proto` beyond that lets a caller claim HTTPS when it is
+    not. Werkzeug reads the headers right-to-left and stops at the configured
+    depth, so the client cannot forge its way past it.
+
+    It wraps `app.wsgi_app` rather than being passed the app: `ProxyFix` is a
+    WSGI middleware that returns a *new* callable, so `ProxyFix(app, ...)` would
+    be constructed and discarded and nothing would change.
+    """
+    if not app.config.get("TRUST_PROXY_HEADERS"):
+        return
+    hops = app.config.get("TRUSTED_PROXY_COUNT", 1)
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=hops,
+        x_proto=hops,
+        x_host=hops,
+        x_port=hops,
+        x_prefix=hops,
+    )
+
+
 def _configure_logging(app: Flask) -> None:
     if not app.debug and not app.testing:
         return
@@ -141,6 +177,24 @@ def _register_request_hooks(app: Flask) -> None:
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Content-Security-Policy", app.config["CONTENT_SECURITY_POLICY"])
+        # Cross-origin isolation. The app loads nothing cross-origin and embeds
+        # nothing, so this is free, and it denies a `<img src>` pointed at an
+        # authenticated endpoint from being read back out by another origin.
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()"
+        )
+
+        # HSTS is only meaningful — and only safe — over HTTPS. Sending it over
+        # plain HTTP is ignored by browsers anyway, and pinning a host that is
+        # reachable without TLS locks out the HTTP path entirely, so it is
+        # production-only.
+        if app.config["IS_PRODUCTION"]:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
 
         # Auth responses carry credentials and must never be cached by a proxy or
         # the service worker.
@@ -162,7 +216,15 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(ApiError)
     def handle_api_error(error: ApiError):
         """Every deliberate failure already knows its envelope and status."""
-        return jsonify(error.to_dict()), error.status
+        response = jsonify(error.to_dict())
+        response.status_code = error.status
+        # RFC 6585 §4: a 429 tells the client when it may come back. The limiter
+        # knows exactly how long is left in its window, so it is passed rather
+        # than discarded — a well-behaved client that reads this backs off instead
+        # of retrying into the same wall.
+        if error.retry_after is not None:
+            response.headers["Retry-After"] = str(max(1, int(error.retry_after)))
+        return response
 
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
@@ -201,13 +263,22 @@ def _register_error_handlers(app: Flask) -> None:
         )
 
 
-_CODE_BY_STATUS = {
-    400: "VALIDATION_ERROR",
-    401: "UNAUTHENTICATED",
-    403: "FORBIDDEN",
-    404: "NOT_FOUND",
-    405: "METHOD_NOT_ALLOWED",
-    409: "CONFLICT",
-    422: "VALIDATION_ERROR",
-    429: "RATE_LIMITED",
-}
+# HTTP status -> envelope code, for errors raised by Werkzeug/Flask rather than
+# by `ApiError` (a 404 from an unmatched route, a 405, a 413 from the body-size
+# ceiling). Derived from `CODE_STATUS` rather than restated: a second hand-written
+# copy of this mapping is free to drift, and the failure mode is an HTTP error
+# silently rendered with the wrong `error.code`, which the frontend switches on.
+#
+# 422 is the one genuinely ambiguous status — `ApiError` uses it for both
+# `VALIDATION_ERROR` and `BUSINESS_RULE` — so the first code registered for a
+# status wins and yields `VALIDATION_ERROR`, the more common of the two.
+_CODE_BY_STATUS: dict[int, str] = {}
+for _code, _status in CODE_STATUS.items():
+    _CODE_BY_STATUS.setdefault(_status, _code)
+del _code, _status
+
+# Statuses Flask/Werkzeug raise that this application's own `ApiError` codes do
+# not cover, so they cannot be derived. 400 is a malformed request the client can
+# fix; 413 is `MAX_CONTENT_LENGTH` refusing a body before any handler runs.
+_CODE_BY_STATUS.setdefault(400, "VALIDATION_ERROR")
+_CODE_BY_STATUS.setdefault(413, "VALIDATION_ERROR")

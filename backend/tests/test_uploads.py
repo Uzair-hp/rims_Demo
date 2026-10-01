@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 
 import pytest
+from flask import current_app
 from PIL import Image
 
 from app.models import CompanySettings
@@ -84,27 +85,90 @@ def test_svg_upload_is_rejected_with_clear_error(authed_client):
     assert error["details"][0]["field"] == "logo"
 
 
-def test_oversize_upload_is_rejected(authed_client):
-    """A valid PNG above the 2 MB cap must be rejected with a clear message."""
-    cap = 2 * 1024 * 1024
-    # A noise-heavy image at this size compresses far past the cap, which keeps
-    # the test honest: the file is a real decodable PNG, just too large.
-    import os
+def _png_of_at_least(min_bytes: int, max_bytes: int) -> bytes:
+    """A real, decodable PNG whose size lands inside `[min_bytes, max_bytes)`.
+
+    Noise does not compress, so the file size tracks the pixel count closely
+    enough to hit a target band. Keeping the test honest matters: the file has to
+    be a genuine PNG, not a blob with PNG magic bytes, or it would be refused by
+    the decode check instead of the size check under test.
+    """
     import random
 
     random.seed(7)
-    image = Image.new("RGB", (1600, 1600))
-    image.putdata([(random.randrange(256), random.randrange(256), random.randrange(256)) for _ in range(1600 * 1600)])
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG", optimize=False)
-    big = buffer.getvalue()
-    assert len(big) > cap, "test could not build an oversize image"
+    for side in range(400, 2400, 20):
+        image = Image.new("RGB", (side, side))
+        image.putdata(
+            [
+                (random.randrange(256), random.randrange(256), random.randrange(256))
+                for _ in range(side * side)
+            ]
+        )
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG", optimize=False)
+        blob = buffer.getvalue()
+        if min_bytes <= len(blob) < max_bytes:
+            return blob
+    raise AssertionError(f"could not build a PNG in [{min_bytes}, {max_bytes})")
+
+
+def test_oversize_upload_is_rejected(authed_client):
+    """A valid PNG above the 2 MB cap must be rejected with a clear message.
+
+    This is the handler's own limit, so the file is sized to clear 2 MB while
+    staying under `MAX_CONTENT_LENGTH` — otherwise Werkzeug rejects it at the
+    transport layer (see `test_body_over_max_content_length_is_refused_by_the
+   _framework`) and the size check under test never runs.
+    """
+    app = current_app
+    cap = app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"]
+    body_cap = app.config["MAX_CONTENT_LENGTH"]
+    # Leave room for the multipart framing so the request as a whole fits.
+    big = _png_of_at_least(cap + 1024, body_cap - 64 * 1024)
 
     response = _upload(authed_client, big, "big.png", "image/png")
     assert response.status_code == 422
     error = response.get_json()["error"]
     assert "MB" in error["message"]
     assert error["details"][0]["field"] == "logo"
+
+
+def test_body_over_max_content_length_is_refused_by_the_framework(authed_client):
+    """
+    A body past `MAX_CONTENT_LENGTH` never reaches the handler.
+
+    This is the bound that actually prevents a memory-exhaustion upload. The
+    handler's own 2 MB image check runs *after* the body has been buffered, so on
+    its own it is a politeness rule rather than a resource limit; `MAX_CONTENT_LENGTH`
+    is enforced by Werkzeug before any handler code executes, which is why the
+    status is 413 rather than the 422 the in-handler check returns.
+    """
+    cap = current_app.config["MAX_CONTENT_LENGTH"]
+    response = _upload(authed_client, b"\x89PNG\r\n\x1a\n" + b"0" * (cap + 1024), "big.png", "image/png")
+    assert response.status_code == 413
+
+
+def test_a_lying_content_length_cannot_force_a_large_read(authed_client):
+    """
+    A `Content-Length` under the cap does not make an oversize body acceptable.
+
+    The declared length is only an early exit. If a client declares a small
+    length and sends more, the bounded read is what stops it — without that, the
+    early exit would be a bypass of the size limit rather than an optimisation.
+    """
+    cap = current_app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"]
+    blob = b"\x89PNG\r\n\x1a\n" + b"0" * (cap + 4096)
+
+    response = authed_client.post(
+        "/api/v1/settings/logo",
+        data={"logo": (io.BytesIO(blob), "sneaky.png")},
+        content_type="multipart/form-data",
+        headers={**_csrf(authed_client), "Content-Length": "1024"},
+    )
+    # Werkzeug may reject it at the transport layer or the handler may; either is
+    # a refusal. What must not happen is a 200.
+    assert response.status_code in (413, 422)
+    assert "logo_path" not in response.get_json().get("data", {})
 
 
 def test_forged_extension_is_rejected_by_magic_bytes(authed_client):

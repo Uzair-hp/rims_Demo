@@ -28,24 +28,11 @@
 
     <!--
       Apply the stored theme before first paint: a dark-theme user must never see
-      a white flash on reload. Kept inline and tiny on purpose.
+      a white flash on reload. Synchronous and in <head>, so it runs before the
+      first paint. Kept in a file rather than inline so the CSP can forbid inline
+      script outright — see public/theme-boot.js.
     -->
-    <script>
-      ;(function () {
-        try {
-          var stored = localStorage.getItem('ri.theme')
-          var theme =
-            stored === 'light' || stored === 'dark'
-              ? stored
-              : window.matchMedia('(prefers-color-scheme: dark)').matches
-                ? 'dark'
-                : 'light'
-          document.documentElement.setAttribute('data-theme', theme)
-        } catch (error) {
-          document.documentElement.setAttribute('data-theme', 'light')
-        }
-      })()
-    </script>
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

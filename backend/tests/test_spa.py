@@ -19,6 +19,9 @@ feature is a function of what is on disk.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from app import create_app
@@ -218,3 +221,150 @@ def test_path_traversal_does_not_escape_the_build(spa_client):
     # Either Flask normalises it away or the fallback returns the shell; what must
     # never happen is the contents of a file outside the build.
     assert b"root:" not in response.data
+
+
+# ---------------------------------------------------------------------------
+# CSP vs. the real build
+# ---------------------------------------------------------------------------
+
+
+def _real_dist() -> Path:
+    """The actual `frontend/dist`, not the throwaway fixture layout."""
+    from app.config.settings import BACKEND_ROOT
+
+    return BACKEND_ROOT.parent / "frontend" / "dist"
+
+
+@pytest.fixture()
+def real_build_client(tmp_path):
+    """
+    An app serving the *real* Vite build, or skipping when there isn't one.
+
+    `spa_client` writes a synthetic `index.html` that could never violate a CSP,
+    so it proves nothing about the policy. These checks are only meaningful against
+    the file a browser actually receives, which means the artefact `npm run build`
+    produced. Skipping rather than failing when it is absent keeps a backend-only
+    checkout's test run honest.
+    """
+    dist = _real_dist()
+    if not (dist / "index.html").is_file():
+        pytest.skip("no frontend build present; run `npm run build` to check this")
+
+    app = _make_app(tmp_path, dist=dist)
+    with app.app_context():
+        yield app.test_client()
+        db.session.remove()
+        db.drop_all()
+
+
+def _directives(csp: str) -> dict[str, set[str]]:
+    parsed: dict[str, set[str]] = {}
+    for part in csp.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        tokens = part.split()
+        parsed[tokens[0]] = set(tokens[1:])
+    return parsed
+
+
+def _allows(directives: dict[str, set[str]], name: str, value: str) -> bool:
+    """Would `value` be permitted by `name`, falling back to `default-src`?
+
+    Only the two forms this app actually emits are judged: a same-origin path,
+    and an explicit scheme/host allow-list entry. An unrecognised form is treated
+    as blocked, so a future off-origin dependency fails the test rather than
+    quietly passing an `_allows` check that never considered it.
+    """
+    effective = directives.get(name) or directives.get("default-src") or set()
+    if value in effective:
+        return True
+    same_origin = value.startswith(("/", "./", "../")) or not value.startswith(("http:", "https:", "//"))
+    return same_origin and "'self'" in effective
+
+
+def test_the_real_build_has_no_inline_script(real_build_client):
+    """
+    The shipped `index.html` must contain no inline `<script>`.
+
+    The CSP sets `script-src 'self'` with no `'unsafe-inline'` and no hash, so a
+    single inline block is a total application failure: React never boots and the
+    user sees a blank page with no error. That is the whole reason the pre-paint
+    theme script lives in `public/theme-boot.js` instead.
+    """
+    html = (Path(real_build_client.application.config["SPA_DIST_DIR"]) / "index.html").read_text(
+        encoding="utf-8"
+    )
+    # A `<script>` with a `src` is fine; one with content between the tags is not.
+    for tag in re.findall(r"<script\b[^>]*>(.*?)</script>", html, re.DOTALL | re.IGNORECASE):
+        assert not tag.strip(), f"inline <script> in the built index.html: {tag[:80]!r}"
+
+
+def test_every_script_in_the_real_build_is_same_origin(real_build_client):
+    """No script may point off-origin — `script-src 'self'` would block it."""
+    html = (Path(real_build_client.application.config["SPA_DIST_DIR"]) / "index.html").read_text(
+        encoding="utf-8"
+    )
+    sources = re.findall(r"<script\b[^>]*\bsrc=[\"']([^\"']+)[\"']", html, re.IGNORECASE)
+    assert sources, "the built index.html loads no scripts at all, which cannot be right"
+    for src in sources:
+        assert src.startswith(("/", "./")), f"script src {src!r} is not same-origin"
+
+
+def test_the_csp_permits_what_the_real_build_loads(real_build_client):
+    """
+    Walk the built `index.html` against the policy the app actually sends.
+
+    A CSP that is merely strict is not the same as a CSP that is correct: one
+    directive too tight and the app is blank, with nothing in the test suite or
+    the server logs to say why. Each resource type the shell references is checked
+    against the directive that governs it, using the header from a real response.
+    """
+    response = real_build_client.get("/")
+    directives = _directives(response.headers["Content-Security-Policy"])
+    html = (Path(real_build_client.application.config["SPA_DIST_DIR"]) / "index.html").read_text(
+        encoding="utf-8"
+    )
+
+    def links(rel: str) -> list[str]:
+        pattern = rf"<link\b[^>]*\brel=[\"']{rel}[\"'][^>]*\bhref=[\"']([^\"']+)[\"']"
+        return re.findall(pattern, html, re.IGNORECASE)
+
+    # The module entry point, the theme bootstrap and the service-worker
+    # registration — every one governed by script-src.
+    scripts = re.findall(r"<script\b[^>]*\bsrc=[\"']([^\"']+)[\"']", html, re.IGNORECASE)
+    assert scripts
+    for src in scripts:
+        assert _allows(directives, "script-src", src), f"script-src blocks {src}"
+
+    for href in links("stylesheet"):
+        assert _allows(directives, "style-src", href), f"style-src blocks {href}"
+
+    # The manifest, which `manifest-src` governs.
+    for href in links("manifest"):
+        assert _allows(directives, "manifest-src", href), f"manifest-src blocks {href}"
+
+    # Icons, which `img-src` governs.
+    icons = links("icon") + links("apple-touch-icon")
+    assert icons, "the built index.html declares no icons"
+    for href in icons:
+        assert _allows(directives, "img-src", href), f"img-src blocks {href}"
+
+    # The API is same-origin and credentialed.
+    assert _allows(directives, "connect-src", "/api/v1/health")
+    # The service worker, without which the app is not installable.
+    assert _allows(directives, "worker-src", "/sw.js")
+
+
+def test_the_spa_shell_carries_the_csp(real_build_client):
+    """
+    The policy has to reach the HTML document, not just the API responses.
+
+    A CSP on `application/json` protects nothing: the document is what loads the
+    scripts, and it is the document's own policy that governs them.
+    """
+    response = real_build_client.get("/")
+
+    assert response.mimetype == "text/html"
+    assert "default-src 'self'" in response.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]

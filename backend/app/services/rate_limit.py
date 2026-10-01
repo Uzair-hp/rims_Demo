@@ -25,7 +25,7 @@ from typing import Callable
 
 from flask import current_app, request
 
-from app.utils.errors import ApiError
+from app.utils.errors import rate_limited
 
 
 def _config(key: str):
@@ -148,14 +148,17 @@ def client_ip() -> str:
 
 
 def enforce_login_rate_limit(email: str) -> None:
+    """
+    Refuse the attempt if this `(ip, email)` is over budget.
+
+    Raises the shared `rate_limited()` error rather than constructing an
+    `ApiError` inline, so the 429 envelope has exactly one producer. The wait is
+    passed through to become the `Retry-After` header.
+    """
     limiter = get_limiter()
     ip = client_ip()
     if limiter.is_blocked(ip, email):
-        raise ApiError(
-            "RATE_LIMITED",
-            "Too many sign-in attempts. Please wait a few minutes and try again.",
-            status=429,
-        )
+        raise rate_limited(limiter.seconds_until_available(ip, email))
 
 
 def reset_rate_limit() -> None:

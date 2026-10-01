@@ -52,13 +52,24 @@ class Settings:
 
     SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
-    # A separate signing key for access/refresh tokens. Falling back to
-    # SECRET_KEY keeps a fresh clone runnable, but they are generated distinctly
-    # in `.env` so that a session-key rotation cannot invalidate live tokens.
+    # A separate signing key for access/refresh tokens. They are generated
+    # distinctly in `.env` so that rotating the session key cannot invalidate live
+    # tokens.
+    #
+    # Both keys fall back to a per-process random value, which is what makes a
+    # fresh clone runnable with no configuration at all. That fallback is a
+    # development convenience with a sharp edge: the value is regenerated on every
+    # restart, so a production boot that reaches it silently invalidates every
+    # session on each deploy and every token on each worker. `_verify_production_secrets`
+    # refuses that combination outright rather than letting it run.
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or SECRET_KEY
     JWT_ALGORITHM = "HS256"
     ACCESS_TOKEN_TTL_SECONDS = _as_int("ACCESS_TOKEN_TTL_SECONDS", 15 * 60)
     REFRESH_TOKEN_TTL_SECONDS = _as_int("REFRESH_TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60)
+
+    # The `.env.example` placeholders. Shipping these is a public, known signing
+    # key, so production refuses to start on them.
+    SECRET_PLACEHOLDERS = frozenset({"change-me", "changeme", "change_me", "please-change-me"})
 
     # CSRF double-submit (§16): a readable cookie plus a matching header.
     CSRF_COOKIE_NAME = "csrf_token"
@@ -88,7 +99,58 @@ class Settings:
     # "localhost" and "127.0.0.1" must be listed separately - the browser treats
     # them as different origins *and* as different sites for SameSite cookies, so an
     # unlisted origin is silently blocked and surfaces as "Cannot reach the server".
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS") or os.getenv("FRONTEND_URL") or "http://localhost:5173,http://127.0.0.1:5173"
+    # An explicitly empty `CORS_ORIGINS` means "no cross-origin access at all",
+    # which is the correct production posture for a same-origin deployment. It is
+    # distinguished from unset via `is not None` rather than truthiness: `or`
+    # treats "" as absent and silently substitutes the two localhost dev origins,
+    # so the one value that means "lock it down" could not be expressed.
+    _cors = os.getenv("CORS_ORIGINS")
+    if _cors is None:
+        _cors = os.getenv("FRONTEND_URL") or "http://localhost:5173,http://127.0.0.1:5173"
+    CORS_ORIGINS = _cors
+
+    # §16 Content-Security-Policy. The app is a same-origin SPA that loads
+    # nothing from anywhere else, so this can be strict rather than permissive —
+    # and strictness is the point: it is the backstop for the user-supplied text
+    # that flows through the whole product (client names, line-item descriptions,
+    # notes, terms) and into the printed documents.
+    #
+    # No 'unsafe-inline' anywhere, which is why the pre-paint theme script in
+    # `frontend/index.html` is a file (`public/theme-boot.js`) rather than an
+    # inline block: a synchronously-loaded same-origin script still runs before
+    # the first paint, so the no-white-flash guarantee is unchanged and the policy
+    # needs no hash to stay accurate when the file changes.
+    #
+    # Overridable as a single string so the policy can be tightened or relaxed
+    # without a code change, but the shipped default is the strict one.
+    CONTENT_SECURITY_POLICY = os.getenv("CONTENT_SECURITY_POLICY") or "; ".join(
+        (
+            # Everything loads from this origin: the bundle, the stylesheet, the
+            # manifest, the icons, and the authenticated image routes.
+            "default-src 'self'",
+            # 'unsafe-inline' is required for styles only, and only because the
+            # print documents set a handful of computed style properties (a QR
+            # size in mm, a page-break rule) at render time. Scripts get no such
+            # exemption.
+            "style-src 'self' 'unsafe-inline'",
+            "script-src 'self'",
+            # data: covers the inline SVG data URIs the UI uses for icons; blob:
+            # covers object URLs.
+            "img-src 'self' data: blob:",
+            "font-src 'self'",
+            # The service worker is what makes the PWA installable and offline-capable.
+            "worker-src 'self'",
+            "manifest-src 'self'",
+            # The API is same-origin and sends credentials; no other origin may
+            # read any of it.
+            "connect-src 'self'",
+            # No <form> submits anywhere in the app, and no <iframe> is embedded.
+            "form-action 'none'",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "object-src 'none'",
+        )
+    )
 
     # Seeded owner account (FR-A4). Consumed by `flask seed-admin`, never by a
     # request handler, so a password can never be changed through the API
@@ -134,6 +196,16 @@ class Settings:
     LOGO_ALLOWED_EXTENSIONS = IMAGE_UPLOAD_ALLOWED_EXTENSIONS
     LOGO_ALLOWED_MIME_TYPES = IMAGE_UPLOAD_ALLOWED_MIME_TYPES
 
+    # Werkzeug's hard ceiling on a request body, enforced by the framework before
+    # any handler runs. Without it the upload limit above is only a limit the
+    # handler chooses to apply *after* the body has already been buffered — so a
+    # large upload is a memory-exhaustion vector, not a rejected file.
+    #
+    # It is the whole body, not just the file part: multipart framing and the
+    # other form fields ride along, hence the headroom over the 2 MB image limit.
+    # A JSON API request that legitimately needs more can raise this explicitly.
+    MAX_CONTENT_LENGTH = _as_int("MAX_CONTENT_LENGTH", 3 * 1024 * 1024)
+
     API_PREFIX = "/api/v1"
     APP_VERSION = "1.0.0"
     # Phase 9A (SERVICES_PLAN): the services catalog rides between Phase 9 and
@@ -167,5 +239,61 @@ class Settings:
     # ephemeral, so every cold start is a first boot and every start needs this.
     AUTO_SEED_ADMIN = _as_bool("AUTO_SEED_ADMIN", False)
 
+    @classmethod
+    def verify_production_secrets(cls) -> None:
+        """
+        Refuse to run in production on an unusable signing key.
+
+        The fallbacks above are a development convenience: a fresh clone boots with
+        no configuration. In production the same code path is a silent outage, and
+        a security hole at the same time:
+
+        - **Silent outage.** The fallback is `secrets.token_hex(32)`, generated per
+          process. A production boot that reaches it signs cookies and tokens with a
+          key nobody else has, so every deploy and every extra worker invalidates
+          every live session — the user is logged out at random, with nothing in the
+          logs to explain it.
+        - **Security hole.** `JWT_SECRET_KEY` falls back to `SECRET_KEY`, so one
+          leaked session key also forges tokens; and the `.env.example` placeholder
+          `change-me` is a *public* signing key, since the template is committed.
+
+        A loud refusal at boot is the only outcome that is safe in both cases: the
+        alternative is a process that appears healthy and is not. A no-op outside
+        production, so tests and a bare `flask run` are unaffected.
+        """
+        if not cls.IS_PRODUCTION:
+            return
+
+        problems = []
+        for name, value in (("SECRET_KEY", cls.SECRET_KEY), ("JWT_SECRET_KEY", cls.JWT_SECRET_KEY)):
+            if not os.getenv(name):
+                problems.append(
+                    f"{name} is not set — it would fall back to a per-process random "
+                    f"value, invalidating every session on each restart."
+                )
+            elif value.strip().lower() in cls.SECRET_PLACEHOLDERS:
+                problems.append(
+                    f"{name} is still the .env.example placeholder — that is a public "
+                    f"signing key."
+                )
+
+        if cls.SECRET_KEY == cls.JWT_SECRET_KEY and os.getenv("JWT_SECRET_KEY"):
+            problems.append(
+                "SECRET_KEY and JWT_SECRET_KEY are identical — rotating one would "
+                "invalidate the other's tokens. Generate two values."
+            )
+
+        if len(cls.SECRET_KEY) < 32:
+            problems.append("SECRET_KEY must be at least 32 characters.")
+
+        if problems:
+            raise RuntimeError(
+                "Refusing to start in production with unsafe secrets:\n  - "
+                + "\n  - ".join(problems)
+                + "\n\nGenerate two distinct values, e.g.:\n"
+                "  python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+
 
 settings = Settings()
+settings.verify_production_secrets()

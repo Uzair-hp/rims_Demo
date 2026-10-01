@@ -41,7 +41,7 @@ from app.services.settings import (
     set_payment_qr_path,
 )
 from app.utils.errors import not_found, success, validation_error
-from app.utils.guards import login_required
+from app.utils.guards import login_required, owner_required
 
 uploads_bp = Blueprint("uploads", __name__)
 
@@ -55,8 +55,18 @@ _MAGIC = {
     "webp": (b"RIFF", {"image/webp"}),
 }
 
+# The logo and the payment QR are owner-only, like the settings row they live in:
+# the QR is a live payment instruction read on every invoice render, so replacing
+# it redirects where customers send money. Reading one only needs a session —
+# every document needs to render it — but changing one needs the owner.
+#
+# `@owner_required` sits under `@login_required` so an anonymous request still
+# gets 401 rather than a 403 that would confirm the route exists.
+
+
 @uploads_bp.post("/settings/logo")
 @login_required
+@owner_required
 @csrf_protect
 def upload_logo():
     return _store_image("logo")
@@ -70,6 +80,7 @@ def serve_logo():
 
 @uploads_bp.delete("/settings/logo")
 @login_required
+@owner_required
 @csrf_protect
 def delete_logo():
     return _remove_image("logo", clear_logo, logo_absolute_path)
@@ -85,6 +96,7 @@ def delete_logo():
 
 @uploads_bp.post("/settings/payment-qr")
 @login_required
+@owner_required
 @csrf_protect
 def upload_payment_qr():
     return _store_image("payment_qr")
@@ -98,6 +110,7 @@ def serve_payment_qr():
 
 @uploads_bp.delete("/settings/payment-qr")
 @login_required
+@owner_required
 @csrf_protect
 def delete_payment_qr():
     return _remove_image("payment_qr", clear_payment_qr, payment_qr_absolute_path)
@@ -114,6 +127,24 @@ def _uploaded_file(field: str, label: str):
             [{"field": field, "message": "A file is required."}],
         )
     return file
+
+
+def _declared_content_length() -> int | None:
+    """
+    The request's `Content-Length`, or `None` when it is absent or unparseable.
+
+    `None` is not treated as zero and does not fail the request: chunked
+    multipart bodies legitimately arrive without one. The bounded read in
+    `_validate` is what actually enforces the limit in that case, and this is
+    only the cheap early exit.
+    """
+    raw = request.content_length
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _validate(file, *, field: str, label: str) -> str:
@@ -141,18 +172,44 @@ def _validate(file, *, field: str, label: str) -> str:
             [{"field": field, "message": "The file type is not an accepted image."}],
         )
 
-    blob = file.read()
+    # Size is checked BEFORE the body is read, and read in bounded slices.
+    #
+    # `file.read()` with no argument pulls the whole upload into memory, so a
+    # 2 MB policy checked afterwards is not a 2 MB policy: the process has
+    # already allocated whatever the client sent. `MAX_CONTENT_LENGTH` (set in
+    # config) is the outer bound, enforced by Werkzeug before the handler runs;
+    # the declared `Content-Length` is the cheap in-handler check; and the read
+    # itself stops one byte past the limit so an undeclared or lying
+    # `Content-Length` still cannot force a large allocation.
+    max_bytes = current_app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"]
+    limit_mb = max_bytes // (1024 * 1024)
+
+    oversize = [
+        {"field": field, "message": f"Keep the file under {limit_mb} MB."}
+    ]
+
+    declared_length = _declared_content_length()
+    if declared_length is not None and declared_length > max_bytes:
+        raise validation_error(f"The {label} must be {limit_mb} MB or smaller.", oversize)
+
+    blob = file.read(max_bytes + 1)
     file.seek(0)
+    if len(blob) > max_bytes:
+        raise validation_error(f"The {label} must be {limit_mb} MB or smaller.", oversize)
     if len(blob) == 0:
         raise validation_error("The file is empty.", [{"field": field, "message": "The file is empty."}])
-    if len(blob) > current_app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"]:
-        limit_mb = current_app.config["IMAGE_UPLOAD_MAX_SIZE_BYTES"] // (1024 * 1024)
-        raise validation_error(
-            f"The {label} must be {limit_mb} MB or smaller.",
-            [{"field": field, "message": f"Keep the file under {limit_mb} MB."}],
-        )
 
-    magic, _allowed_mimes = _MAGIC[extension]
+    # `.get`, not `[...]`: the extension is validated against
+    # `IMAGE_UPLOAD_ALLOWED_EXTENSIONS` above, and if that config and this table
+    # ever drift apart a bare lookup would raise `KeyError` and surface as a 500
+    # on a user-supplied filename.
+    magic_entry = _MAGIC.get(extension)
+    if magic_entry is None:
+        raise validation_error(
+            "That file is not an accepted image type.",
+            [{"field": field, "message": "Use a PNG, JPEG or WEBP file."}],
+        )
+    magic, _allowed_mimes = magic_entry
     if not blob.startswith(magic):
         raise validation_error(
             "The file's contents do not match its extension.",
@@ -239,9 +296,14 @@ def _serve_image(slot: str):
         raise not_found(f"No {label} has been uploaded yet.")
 
     extension = path.suffix.lower().lstrip(".")
-    if extension not in _MAGIC:
+    entry = _MAGIC.get(extension)
+    if entry is None:
         raise not_found(f"The stored {label} has an unsupported format.")
-    mimetype = next(iter(_MAGIC[extension][1]))
+    # The first MIME in the set, sorted rather than taken from set iteration
+    # order: `.jpg` and `.jpeg` both map to a three-element set, and set order
+    # varies per process, so the served `Content-Type` — and therefore the
+    # browser's handling of it — was not stable across restarts.
+    mimetype = sorted(entry[1])[0]
     response = send_file(path, mimetype=mimetype, conditional=True)
     response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     return response

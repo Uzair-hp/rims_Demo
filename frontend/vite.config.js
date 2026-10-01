@@ -15,20 +15,20 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         navigateFallback: '/index.html',
-        runtimeCaching: [
-          {
-            // Read-only API responses may be served from cache while offline;
-            // writes always hit the network.
-            urlPattern: /\/api\/v1\/.*/,
-            method: 'GET',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'ri-api',
-              networkTimeoutSeconds: 3,
-              expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 },
-            },
-          },
-        ],
+        // No `runtimeCaching` for the API, deliberately.
+        //
+        // An earlier version cached every `GET /api/v1/*` response for 24 hours,
+        // which reads well as offline support and is wrong here: those responses
+        // are authenticated business data. Client names, invoice amounts and
+        // payment records sit in Cache Storage, which is not cleared by signing
+        // out — so the next person to use the device, or anyone who opens devtools,
+        // can read the whole ledger. Cache Storage is also not bound by
+        // `Cache-Control`, so a `no-store` response header does not save it.
+        //
+        // Offline reads of business data are the wrong trade for an app whose
+        // value is that its numbers are current. The app shell is precached
+        // above, so the app still opens offline and shows its own "can't reach
+        // the server" state rather than stale figures.
       },
       devOptions: { enabled: true, type: 'module' },
     }),

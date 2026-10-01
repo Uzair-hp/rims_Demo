@@ -44,12 +44,16 @@ class ApiError(Exception):
         message: str,
         details: Iterable[dict[str, Any]] | None = None,
         status: int | None = None,
+        retry_after: int | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = list(details or [])
         self.status = status or CODE_STATUS.get(code, 500)
+        # Seconds for the `Retry-After` header. `None` on every other error, so
+        # the factory can test it rather than special-casing the code.
+        self.retry_after = retry_after
 
     def to_dict(self) -> dict[str, Any]:
         return {"error": {"code": self.code, "message": self.message, "details": self.details}}
@@ -87,7 +91,20 @@ def business_rule(message: str, details: Iterable[dict[str, Any]] | None = None)
 
 
 def rate_limited(retry_after_seconds: int) -> ApiError:
-    return ApiError("RATE_LIMITED", "Too many sign-in attempts. Please wait and try again.")
+    """
+    Too many attempts (429).
+
+    `retry_after_seconds` is carried on the error rather than discarded, because
+    a 429 without it tells a well-behaved client nothing except that it was
+    rejected: RFC 6585 defines `Retry-After` for exactly this status, and a client
+    that honours it backs off instead of retrying into the same wall. The app
+    factory reads it off the error to set the header.
+    """
+    return ApiError(
+        "RATE_LIMITED",
+        "Too many sign-in attempts. Please wait and try again.",
+        retry_after=retry_after_seconds,
+    )
 
 
 def success(data: Any, status: int = 200):
