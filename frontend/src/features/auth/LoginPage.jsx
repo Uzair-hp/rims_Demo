@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import BrandLockup from '../../components/layout/BrandLockup.jsx'
+import AttributionFooter from '../../components/layout/AttributionFooter.jsx'
 import Button from '../../components/ui/Button.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import { useAuth } from './AuthProvider.jsx'
@@ -222,6 +223,7 @@ export default function Login() {
             This system is for Ruchita Interiors only. If you have lost your password, contact the
             administrator to reset it.
           </p>
+          <AttributionFooter />
         </div>
       </div>
     </main>

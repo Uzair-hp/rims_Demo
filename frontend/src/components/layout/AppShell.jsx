@@ -6,6 +6,7 @@ import BottomNav from './BottomNav.jsx'
 import BrandLockup from './BrandLockup.jsx'
 import ApiStatus from './ApiStatus.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
+import AttributionFooter from './AttributionFooter.jsx'
 import Sheet from '../ui/Sheet.jsx'
 import SheetList from '../ui/SheetList.jsx'
 import Icon from '../ui/Icon.jsx'
@@ -68,6 +69,7 @@ export default function AppShell() {
         <main id="main-content" className={styles.main} tabIndex={-1}>
           <ApiStatus />
           <Outlet />
+          {pathname === '/settings' || pathname.startsWith('/invoices') ? <AttributionFooter /> : null}
         </main>
       </div>
 

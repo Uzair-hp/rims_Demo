@@ -17,6 +17,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-inline-size: 0;
 }
 
 .brand {
@@ -54,6 +55,7 @@
 
 .nav {
   flex: 1;
+  min-inline-size: 0;
   overflow-y: auto;
 }
 
@@ -247,8 +249,18 @@
 @media (max-width: 1023px) {
   .sidebar.mobileOpen {
     display: flex;
-    inline-size: min(var(--size-sidebar), calc(100vw - (var(--space-4) * 2)));
+    box-sizing: border-box;
+    inline-size: min(var(--size-sidebar), 100vw);
+    max-inline-size: 100vw;
+    z-index: var(--z-sheet);
+    overflow-x: hidden;
+    overflow-y: auto;
     box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar.mobileOpen .nav {
+    flex: none;
+    overflow-y: visible;
   }
 }
 

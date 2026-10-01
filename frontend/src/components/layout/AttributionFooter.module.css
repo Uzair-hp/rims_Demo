@@ -1,0 +1,9 @@
+.footer {
+  inline-size: 100%;
+  margin-block-start: var(--space-8);
+  padding-block: var(--space-2);
+  color: var(--color-ink-subtle);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-relaxed);
+  text-align: center;
+}
