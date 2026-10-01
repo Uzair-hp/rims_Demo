@@ -98,10 +98,36 @@
 .companyMeta {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  gap: 0.8mm;
   font-style: normal;
   font-size: 8pt;
   line-height: 1.35;
   color: var(--color-ink-muted);
+}
+
+.metaLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5mm;
+}
+
+.metaIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+}
+
+.labelIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+  margin-inline-end: 1mm;
+}
+
+.inlineIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+  margin-inline-end: 1.5mm;
+  vertical-align: middle;
 }
 
 .gstin {
@@ -129,8 +155,8 @@
 
 .dateLine {
   display: flex;
-  align-items: baseline;
-  gap: 2mm;
+  align-items: center;
+  gap: 1.5mm;
   margin: 0;
 }
 
@@ -156,9 +182,10 @@
 .docTitle {
   margin: 0;
   font-family: var(--font-display);
-  /* Reduced from 20pt: the company name in the header is now the largest type on
-     the sheet, so the document kind reads as a clear second and the header has a
-     proper hierarchy instead of the title out-shouting the business. */
+  /* Reduced from 20pt, and kept at 16pt rather than 18pt: the company name in the
+     header is the largest type on the sheet, so the document kind reads as a clear
+     second and the header has a proper hierarchy instead of the title out-shouting
+     the business. */
   font-size: 16pt;
   font-weight: var(--weight-semibold);
   line-height: var(--line-height-tight);
@@ -193,6 +220,9 @@
 }
 
 .blockLabel {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
   margin: 0 0 1.5mm;
   font-size: 7.5pt;
   font-weight: var(--weight-semibold);
@@ -209,10 +239,12 @@
 }
 
 .clientLine {
-  margin: 0;
-  font-size: 9pt;
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  margin: 0 0 0.5mm;
+  font-size: 8.5pt;
   color: var(--color-ink-muted);
-  /* A long address wraps; it never overflows the page box. */
   overflow-wrap: anywhere;
 }
 
@@ -435,40 +467,49 @@
 }
 
 /*
- * A single column, because there is no longer a QR to sit beside.
- *
- * The old layout was a two-column flex row with the code on the right, and the QR's
- * position depended on how many bank rows the snapshot happened to contain — six
- * rows wrapped one way, four wrapped another, so the block's height and the code's
- * placement moved per invoice. One column removes that entirely and costs nothing
- * visually, since the content is a short list of label/value pairs.
- */
-/*
  * A row, not a column, so a QR sits beside the details it explains rather than
  * pushing the block 26mm taller. `flex-wrap` is the safety valve: when there is no
  * QR the only child is `.paymentDetails`, which flexes to the full width, so all
  * four presentations share this rule and none of them needs a `:has()` or a
  * modifier class to select a different layout.
+ *
+ * The 4mm gutter and `align-items: center` are the two-column QR slot from the
+ * reference layout: the code and the details read as one row, and the code sits
+ * centred against the block instead of hanging off the top of a taller column.
  */
 .paymentBody {
   display: flex;
   flex-flow: row wrap;
-  gap: 1.5mm;
-  align-items: flex-start;
+  gap: 4mm;
+  align-items: center;
 }
 
 /*
- * The card's natural width, not a 26mm gutter.
+ * The card's natural width, not a 26mm or 30mm gutter.
  *
  * `UpiQrCard`'s print variant is itself a row - code on the left, VPA/payee/ref on
- * the right - and owns its own 26mm QR. Pinning this wrapper to 26mm squeezes that
- * internal row into a 26mm column, so the VPA and payee wrap one word per line and
- * the block grows to roughly 100mm. Measured, not assumed: the first print check
- * of FR-P8 reported a 104mm payment block for exactly this reason.
+ * the right - and owns its own 26mm QR. Pinning this wrapper to a fixed square
+ * squeezes that internal row into one narrow column, so the VPA and payee wrap one
+ * word per line and the block grows to roughly 100mm. Measured, not assumed: the
+ * first print check of FR-P8 reported a 104mm payment block for exactly this
+ * reason. So there is deliberately no fixed size here and no 30mm image box.
  */
 .paymentQr {
   flex: 0 0 auto;
   max-inline-size: 100%;
+}
+
+/* The code's own caption, in the same small-caps register as a block label. */
+.paymentQrHeader {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  margin: 0 0 1.5mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
 }
 
 .paymentDetails {
@@ -502,6 +543,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8mm 6mm;
   margin: 0;
+  flex: 1;
 }
 
 /* Beside a QR, one column: see the note above. */
@@ -525,6 +567,7 @@
 .paymentRow dd {
   margin: 0;
   font-size: 8.5pt;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
   color: var(--color-ink);
 }
