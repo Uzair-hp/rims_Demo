@@ -2,13 +2,158 @@
 
 | | |
 |---|---|
-| **Status** | APPROVED — **Phases 1, 2 and 3 are complete and verified; Phase 4 is next.** Appendix B records the decisions that supersede parts of this document (JavaScript-only frontend, plain CSS design tokens, no TypeScript, no Tailwind) and the Phase 2 deviations (B7–B9). |
-| **Version** | 1.5 — 2026-09-28 (Phase 4 specified: client restore added to FR-C4/§9.2, picker contract and summary behavior clarified, frontend tests added to the Phase 4 gate; Phase 3 exit confirmed in v1.4; status mirror in `docs/phases.md`) |
+| **Status** | APPROVED — **Phases 1–10 are implemented and verified, plus a full end-to-end audit pass.** See §0 for the current COMPLETED / IN PROGRESS / REMAINING / FUTURE split. Appendix B records the decisions that supersede parts of this document (JavaScript-only frontend, plain CSS design tokens, no TypeScript, no Tailwind) and the Phase 2 deviations (B7–B9). |
+| **Version** | 1.6 — 2026-10-01 (§0 implementation status added; phase list in the header corrected from "1–3 complete, Phase 4 next" to the true 1–10 state; status mirror in `docs/phases.md`, findings mirror in `full audit.md`) |
 | **Client** | Ruchita Interiors — https://ruchitainteriors.in/ |
 | **Product** | Internal, single-user business management PWA for quotations, invoices and payments |
 | **Purpose of this document** | A complete, unambiguous implementation plan. Another developer/agent must be able to build the system phase-by-phase from this document alone, without rediscovering requirements. |
 
 **How to use this plan:** Sections 1–23 define *what to build and why*. Section 24 defines *the order to build it in*, and Section 25 defines *when each phase is done*. An implementing agent should read Sections 8–16 (data, API, calculations, lifecycle) before writing any feature code — they are the contract.
+
+---
+
+## 0. Implementation status (2026-10-01)
+
+Sections 1–23 remain the specification. This section records what the repository
+actually contains today, so the plan is not mistaken for a work order. Phase
+detail and per-phase acceptance criteria stay in §24–§25; the audit that produced
+the hardening work below is `full audit.md`.
+
+**Verification gates at time of writing:** frontend lint clean, Prettier clean,
+**504 frontend tests / 29 files** passing, **496 backend tests** passing,
+production build succeeding (PWA service worker generated).
+
+### COMPLETED
+
+**Phases 1–10.** Architecture & project foundation; authentication & user system;
+database & company settings; client management; quotation engine; quotation
+document/print; invoice system; payments & financial tracking; dashboard &
+analytics; PWA/mobile optimisation. All four business surfaces (Clients →
+Quotations → Invoices → Payments) work end to end, and print output is verified
+against a real A4 layout engine (`scripts/print-check.mjs`, 6 document variants).
+
+**Phase 9A — services catalog.** `services` table with a partial unique index on
+`lower(name) WHERE archived_at IS NULL`; catalog provenance survives
+quotation → convert → invoice; the Services page carries create/edit,
+archive/restore, search and archived filtering.
+
+**Phase 10 payments detail.** Payment QR generated from an intent URI in integer
+paise, returning `None` rather than a zero-amount code, with three-level
+degradation; bank details snapshotted at conversion and frozen at issue; the
+account number printed exactly once per sheet.
+
+**Services page layout rework.** The card is stacked in rows instead of one
+crowded line, so a long name no longer runs under the price at narrow widths; the
+name truncates with a two-line clamp, the price is `flex-shrink: 0` and never
+wraps, and the search field gained a leading icon and a trailing clear control
+with a `visually-hidden` label so it keeps its accessible name.
+
+**Mobile navigation: bottom bar → left hamburger drawer.** `BottomNav` and its
+More sheet are gone. `Sidebar` is now the single navigation plate rendered twice —
+the fixed rail (`variant="desktop"`) and the drawer (`variant="drawer"`) — both
+reading `NAV_ITEMS`, so destinations, icons, branding, active-route highlighting,
+theme toggle and sign out cannot drift apart. The drawer adds a portal panel,
+scrim, Escape handling, a Tab focus trap, background scroll lock, focus restore,
+`role="dialog"` + `aria-modal`, and unmounts when closed so it is never a second
+`Primary` navigation landmark. Net gain: mobile now reaches all six destinations,
+including Services and Settings, which the five-slot bottom bar could not hold.
+The removed `CREATE_ACTIONS` "New" slot now appears under a **Create** heading in
+the drawer footer, sourced from the same constant the desktop FAB sheet uses.
+
+**Drawer motion.** Opening is a `@keyframes` animation and closing a `transition`,
+both on `--duration-slow` (220 ms) with `--ease-out`. The split is load-bearing:
+the panel is mounted already carrying its open class, so a transition would have no
+previous computed value and the drawer would appear rather than slide in, while
+closing — which only removes that class from an element already on screen —
+animated correctly. `prefers-reduced-motion` collapses both globally via
+`base.css`.
+
+**Responsive/mobile refinements.** The `lg` breakpoint (1024 px) is unchanged and
+the desktop rail is untouched; the drawer renders only below it and auto-closes on
+growth to desktop. Panel width is `min(248px, 86vw)`, safe-area insets are applied
+to the drawer's leading edge, the removed bottom-bar content inset is gone, and the
+top bar's leading grid track is content-driven so the hamburger and back link fit
+without a fixed placeholder.
+
+**Login fixes.** The lock icon is vertically centred by a dedicated
+`.passwordIcon` rule (`inset-block-start: 50%` + `translateY(-50%)`) instead of
+depending on the wrapper's alignment, which `.passwordWrap` does not set — it
+previously sat at the top of the row beside the taller reveal toggle. The password
+reveal toggle itself was already present.
+
+**Audit hardening pass** (full detail and remaining findings in `full audit.md`):
+
+- *Authorization* — a new `@owner_required` guard enforces `role == "owner"` on
+  every settings route, on logo/payment-QR mutation, and on `PUT /auth/password`.
+  `User.role` was previously read by nothing, so any second account that ever
+  appeared in `users` was instantly owner-equivalent.
+- *Security headers* — strict same-origin CSP, `Cross-Origin-Opener-Policy`,
+  `Cross-Origin-Resource-Policy`, `Permissions-Policy`, and production-only HSTS.
+  The pre-paint theme bootstrap moved from an inline `<script>` to
+  `public/theme-boot.js` so the CSP can forbid inline script.
+- *Production secrets* — `IS_PRODUCTION` now refuses to boot on a missing,
+  placeholder, duplicated or under-32-character signing key, and `run.py` refuses
+  `debug=True` in production (the Werkzeug debugger is an RCE surface).
+- *Reverse proxy* — `ProxyFix` is applied when `TRUST_PROXY_HEADERS` is set, so
+  scheme/host/remote address reflect the real client.
+- *Uploads* — `MAX_CONTENT_LENGTH` plus a bounded read one byte past the limit, so
+  the 2 MB policy is enforced before the body is buffered.
+- *Data integrity* — invoice `PUT` no longer erases `notes`/`terms_text`/
+  `payment_method`; the two company-settings CHECKs exist in the migration history
+  (not just test databases) and every CHECK now has a name; `b8d5f0e2c7a1`'s
+  downgrade rebuilds `invoices` by hand instead of failing on a foreign key;
+  `allowed_actions` no longer advertises `duplicate`/`delete` with no route behind
+  them; `save_settings` validates a merged candidate before writing anything and
+  rolls back on failure; `CompanySettings.get_row()` flushes instead of committing
+  on a GET path.
+- *Service worker* — the 24-hour `runtimeCaching` of `GET /api/v1/*` is removed, so
+  authenticated business data no longer sits in Cache Storage surviving logout. The
+  app shell is still precached.
+- *Rate limiting* — a single `RATE_LIMITED` producer that carries the wait into a
+  `Retry-After` header.
+
+### IN PROGRESS
+
+- **Phase 11 hardening is partially complete.** The security checklist items in
+  §16 are addressed; the §21 edge-case sweep, the §20 error/empty/loading audit and
+  the a11y pass are not yet executed in full.
+- **Documentation reconciliation.** `docs/api.md` now documents authorization,
+  security headers and money units, but the ~24 business CRUD endpoints
+  (`/services`, `/quotations`, `/invoices`, `/payment-due`) are still undocumented.
+  `README.md`'s "Current Status" still contradicts `docs/phases.md`.
+
+### REMAINING
+
+| # | Item | Note |
+|---|---|---|
+| 1 | §21 edge-case sweep | Every row executed as fix + regression test. |
+| 2 | Phase 11 exit gate | §16 checklist signed off; §20 states audit; a11y pass. |
+| 3 | Missing indexes | `payments.paid_on`, `invoices.issue_date`, both `created_at` columns, all `created_by` FKs. Documented as deliberate; revisit past a few hundred invoices. |
+| 4 | Quotation `notes` / `terms_text` length caps | Invoice draft is capped (4000/8000); **quotations are still uncapped**. |
+| 5 | `outstanding_paise` clamping | Clamped in `payment_due_document`, not in `serialize_invoice`. |
+| 6 | Duplicated money/line logic | Four copies of the "valid line" rule, three of the subtotal computation; no cross-check that the Python and JS UPI builders agree. |
+| 7 | Dead code | `Quotation.archived_at`, `issue_tokens`, `ensure_csrf_cookie`, `round_paise`, `get_next_number_preview`, `validate_line`, `QuotationDuplicateSchema`, `PagePlaceholder.jsx`, `usePwaInstall.js`, `ServicePicker.jsx` (built, tested, never imported by `QuotationEditor`). |
+| 8 | `clients.phone` uniqueness | Service-level 409 only; no unique index, unlike every other business invariant. |
+| 9 | `sent` quotation re-pricing | `PUT` allowed in `sent`; a quotation the customer has seen can be changed. |
+| 10 | Phase 12 production readiness | Playwright suite, coverage report, bundle budget, backup runbook, version tag. |
+| 11 | Documentation | `docs/api.md` business endpoints; `README.md` status. |
+| 12 | `b8d5f0e2c7a1.downgrade()` is not atomic | Confirmed in `full audit.md` §M1. A failure mid-rebuild leaves the schema gutted, exactly as happened to the development database. |
+
+### FUTURE / OPTIONAL
+
+None of these are commitments; each is listed in §1.3 as an explicit non-goal or in
+§26 as a scaling consideration.
+
+- Payment allocation across invoices (a payment currently applies to one whole invoice).
+- Ageing / receivables reporting.
+- `PUT /payments/:id` (editing a payment without delete + recreate).
+- Invoice `delete` / `duplicate` routes — the state machine entries are retained as
+  the specification for them; nothing advertises them today.
+- CSV service import (deferred by `SERVICES_PLAN` §9A.4).
+- PWA install prompt in the UI (`usePwaInstall` exists, unwired).
+- Multi-currency (`INR` is hard-coded) and multi-user / roles.
+- Dashboard date range (not designed; §9.2 defines no query string).
+- Document page numbers (omitted by design, FR-DOC4).
 
 ---
 
@@ -955,6 +1100,8 @@ ruchita-interiors/
 ## 24. Development Phases
 
 > Each phase lists Objective → Work → Tests → Dependencies → Exit gate. Acceptance criteria are in §25. Do not start a phase before its dependencies' exit gates pass.
+
+> **Status of each phase as of 2026-10-01** (§0 is the canonical status): **Phases 1–10 implemented and verified.** Phase 9A (services catalog) shipped alongside Phase 9. Phase 11 is **partially** complete — the §16 security checklist is addressed, but the §21 edge-case sweep, the §20 states audit and the a11y pass are outstanding, so its exit gate has **not** been met. Phase 12 has not started. The phase definitions below are kept as delivered, not rewritten.
 
 **Phase 1 — Architecture & project foundation**
 Objective: running skeleton of the whole system.

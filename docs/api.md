@@ -67,19 +67,37 @@ from either is final.
 | POST   | `/api/v1/auth/logout`    | CSRF    | Revoke sessions server-side, clear cookies |
 | POST   | `/api/v1/auth/refresh`   | CSRF    | New token pair, sliding window           |
 | GET    | `/api/v1/auth/me`        | cookie  | Current user                             |
-| PUT    | `/api/v1/auth/password`  | cookie + CSRF | Change password, revoke other sessions |
-| GET    | `/api/v1/settings/company` | cookie | The singleton settings row (created with defaults) |
-| PUT    | `/api/v1/settings/company` | cookie + CSRF | Save the editable fields; returns the normalized row |
-| GET    | `/api/v1/settings/terms` | cookie  | All terms entries                        |
-| POST   | `/api/v1/settings/terms` | cookie + CSRF | Create a terms entry (201)          |
-| PUT    | `/api/v1/settings/terms/:id` | cookie + CSRF | Update a terms entry              |
-| DELETE | `/api/v1/settings/terms/:id` | cookie + CSRF | Delete a terms entry              |
-| POST   | `/api/v1/settings/logo`  | cookie + CSRF | Multipart upload, field `logo`         |
-| DELETE | `/api/v1/settings/logo`  | cookie + CSRF | Remove the stored logo                  |
+| PUT    | `/api/v1/auth/password`  | owner + CSRF | Change password, revoke other sessions |
+| GET    | `/api/v1/settings/company` | owner | The singleton settings row (created with defaults) |
+| PUT    | `/api/v1/settings/company` | owner + CSRF | Save the editable fields; returns the normalized row |
+| GET    | `/api/v1/settings/terms` | owner  | All terms entries                        |
+| POST   | `/api/v1/settings/terms` | owner + CSRF | Create a terms entry (201)          |
+| PUT    | `/api/v1/settings/terms/:id` | owner + CSRF | Update a terms entry              |
+| DELETE | `/api/v1/settings/terms/:id` | owner + CSRF | Delete a terms entry              |
+| POST   | `/api/v1/settings/logo`  | owner + CSRF | Multipart upload, field `logo`         |
+| DELETE | `/api/v1/settings/logo`  | owner + CSRF | Remove the stored logo                  |
 | GET    | `/api/v1/uploads/logo`   | cookie  | The stored logo file (long cache)       |
-| POST   | `/api/v1/settings/payment-qr` | cookie + CSRF | Multipart upload, field `payment_qr` |
-| DELETE | `/api/v1/settings/payment-qr` | cookie + CSRF | Remove the stored payment QR        |
+| POST   | `/api/v1/settings/payment-qr` | owner + CSRF | Multipart upload, field `payment_qr` |
+| DELETE | `/api/v1/settings/payment-qr` | owner + CSRF | Remove the stored payment QR        |
 | GET    | `/api/v1/uploads/payment-qr`  | cookie  | The stored payment QR (long cache)   |
+
+### Authorization
+
+Every route requires a valid session; the settings routes and
+`PUT /auth/password` additionally require `role == "owner"` and answer `403
+FORBIDDEN` otherwise.
+
+This is one guard on an existing column, not a roles feature — v1 is
+single-user (§1.3 of `docs/phases.md`). It exists because `User.role` was
+previously read by nothing, so the invariant lived only in prose: the moment a
+second row appeared in `users` (a seed script, a restored backup, a future team
+feature) that account would have been owner-equivalent and able to rewrite
+`bank_account_number` and `upi_id` — the bank account and UPI ID printed on every
+invoice. Reading a stored image still needs only a session, because every
+rendered document needs to fetch it.
+
+An unauthenticated request to a settings route gets `401`, never `403`: a `403`
+would confirm both that the route exists and that an owner does.
 
 ### Payments (Phase 8)
 
@@ -246,6 +264,10 @@ keys (including a forged `logo_path`) are ignored. GST is stored in basis points
 (`default_gst_bp`, 0–2800) and validity in days; responses are the normalized
 saved row.
 
+Validation runs against the *merged* result, before anything is written: a
+partial save is checked as the row it would produce, not as the fragment it
+carried. A rejected save leaves the stored row untouched.
+
 ```jsonc
 // PUT /settings/company
 { "quotation_prefix": "RIQ", "default_gst_bp": 1800 }
@@ -264,11 +286,73 @@ served only through `GET /uploads/logo`, which requires a session and sets a
 long-lived cache header (the Settings payload's `updated_at` busts it after a
 re-upload).
 
+The 2 MB image limit is enforced by a bounded read *before* the body is
+buffered, on top of `MAX_CONTENT_LENGTH` (3 MB, configurable), which Werkzeug
+applies to the whole request before any handler runs. A `Content-Length` above
+either bound is rejected early; a lying or absent one still cannot force a large
+allocation, because the read stops one byte past the limit.
+
 ```text
 POST /settings/logo (multipart)   → 200 { "data": { "logo_path": "branding/<uuid>.png" } }
 SVG / oversize / forged file      → 422 { "error": { "details": [{ "field": "logo", ... }] } }
+body over MAX_CONTENT_LENGTH      → 413
 GET  /uploads/logo (no logo)      → 404
 ```
+
+## Security headers
+
+Every response carries:
+
+| Header                          | Applies to        | Value                                                |
+| ------------------------------- | ----------------- | ---------------------------------------------------- |
+| `Content-Security-Policy`       | all               | strict same-origin policy, no inline script (see below) |
+| `X-Content-Type-Options`        | all               | `nosniff`                                            |
+| `X-Frame-Options`               | all               | `DENY`                                               |
+| `Referrer-Policy`               | all               | `same-origin`                                        |
+| `Cross-Origin-Opener-Policy`    | all               | `same-origin`                                        |
+| `Cross-Origin-Resource-Policy`  | all               | `same-origin`                                        |
+| `Permissions-Policy`            | all               | `geolocation=(), microphone=(), camera=(), payment=()` |
+| `Cache-Control: no-store`       | `/api/v1/auth/*`  | credentials are never cached                         |
+| `Strict-Transport-Security`     | production only   | `max-age=31536000; includeSubDomains`                |
+
+HSTS is production-only because it is meaningless over plain HTTP and would lock
+out the HTTP path on a host that is still reachable without TLS.
+
+The CSP is strict because the app is a single-origin SPA that loads nothing
+external:
+
+```text
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob:; font-src 'self'; worker-src 'self';
+manifest-src 'self'; connect-src 'self'; form-action 'none';
+frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+```
+
+`'unsafe-inline'` is granted to **styles only** — the print documents set computed
+style properties at render time. Scripts get no such exemption, which is why the
+pre-paint theme bootstrap is a file (`frontend/public/theme-boot.js`) rather than
+an inline `<script>`: a synchronously-loaded same-origin script still runs before
+the first paint, so the no-white-flash guarantee is unchanged and the policy needs
+no hash to maintain.
+
+Override the whole policy with `CONTENT_SECURITY_POLICY` if it must be changed.
+
+Behind a reverse proxy, set `TRUST_PROXY_HEADERS=true`; that also enables
+`ProxyFix`, so `request.scheme`, `request.host` and `request.remote_addr` reflect
+the real client rather than the proxy.
+
+## Money on the wire
+
+Every monetary field is an **integer number of paise** (§8.1): `_paise` fields and
+nothing else. The two exceptions to the naming convention are the list filters
+below, which predate it and are pinned by `test_amount_filters_are_in_paise_not_rupees`.
+
+### `GET /quotations` filters
+
+`min_amount` and `max_amount` are compared directly against
+`grand_total_paise`, so they are **paise despite the name**: `min_amount=10000`
+means ₹100.00, not ₹10,000. The client converts before sending
+(`rupeesToPaise` in `QuotationsPage.jsx`). A negative value is a `422`.
 
 ## Status
 
