@@ -3,7 +3,7 @@
   inset-block-start: 0;
   z-index: var(--z-topbar);
   display: grid;
-  grid-template-columns: var(--size-touch) 1fr var(--size-touch);
+  grid-template-columns: auto 1fr var(--size-touch);
   align-items: center;
   gap: var(--space-2);
   min-height: var(--size-topbar);
@@ -22,6 +22,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-1);
+  min-inline-size: 0;
 }
 
 .placeholder {
@@ -36,6 +38,23 @@
   block-size: var(--size-touch);
   color: var(--color-ink);
   border-radius: var(--radius-pill);
+}
+
+.menuButton {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-touch);
+  block-size: var(--size-touch);
+  flex: none;
+  border: 0;
+  color: var(--color-ink);
+  background: transparent;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+
+.menuButton:hover {
+  background: var(--color-surface-alt);
 }
 
 .iconButton:hover {

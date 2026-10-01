@@ -244,6 +244,14 @@
   padding-inline: 0;
 }
 
+@media (max-width: 1023px) {
+  .sidebar.mobileOpen {
+    display: flex;
+    inline-size: min(var(--size-sidebar), calc(100vw - (var(--space-4) * 2)));
+    box-shadow: var(--shadow-lg);
+  }
+}
+
 /* Icons stay, labels fold away so the rail is a clean icon column. */
 .collapsed .linkLabel,
 .collapsed .footerLabel,

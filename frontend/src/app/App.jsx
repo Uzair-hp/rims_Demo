@@ -2,6 +2,7 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './router.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import { AuthProvider } from '../features/auth/AuthProvider.jsx'
+import { ThemeProvider } from './useTheme.js'
 
 /**
  * The provider composition for the running app.
@@ -16,14 +17,11 @@ import { AuthProvider } from '../features/auth/AuthProvider.jsx'
 export default function App() {
   return (
     <ErrorBoundary>
-      {/* Outermost provider: RequireAuth reads it, and it must be able to redirect
-          the whole tree without an ancestor remounting it. */}
-      <AuthProvider>
-        {/* RouterProvider renders no DOM itself, so nothing may be mounted as its
-            sibling. Anything needing router context (useLocation, useNavigate,
-            useParams) belongs in the route table in app/routes.jsx. */}
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }

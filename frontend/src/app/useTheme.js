@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react'
 
 const STORAGE_KEY = 'ri.theme'
 const THEMES = ['system', 'light', 'dark']
 const DARK_QUERY = '(prefers-color-scheme: dark)'
+const ThemeContext = createContext(null)
 
 /**
  * Subscribes to the operating system colour preference.
@@ -43,7 +44,7 @@ function readStoredTheme() {
  * The pre-paint script in index.html sets the same `data-theme` attribute before
  * React runs, so a stored dark theme never flashes white on reload.
  */
-export function useTheme() {
+function useThemeState() {
   const [theme, setThemeState] = useState(readStoredTheme)
   const systemTheme = useSystemTheme()
   const resolvedTheme = theme === 'system' ? systemTheme : theme
@@ -66,4 +67,17 @@ export function useTheme() {
   }, [resolvedTheme, setTheme])
 
   return { theme, resolvedTheme, setTheme, toggleTheme }
+}
+
+export function ThemeProvider({ children }) {
+  const value = useThemeState()
+  return createElement(ThemeContext.Provider, { value }, children)
+}
+
+export function useTheme() {
+  const value = useContext(ThemeContext)
+  // Keep isolated route/component tests and embedded consumers usable without
+  // requiring them to recreate the full application provider tree.
+  const fallback = useThemeState()
+  return value || fallback
 }

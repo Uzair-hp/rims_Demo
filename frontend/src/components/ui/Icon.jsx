@@ -70,6 +70,7 @@ export const ICON_PATHS = {
   search: { paths: [circle(11, 11, 6.4), 'm15.8 15.8 4.4 4.4'] },
   check: { paths: ['m5 12.8 4.6 4.6L19 6.6'] },
   x: { paths: ['m6.4 6.4 11.2 11.2', 'M17.6 6.4 6.4 17.6'] },
+  menu: { paths: ['M4 6h16', 'M4 12h16', 'M4 18h16'] },
   alert: { paths: ['M12 4.4 21 19.6H3z', 'M12 10.2v4', 'M12 16.8h.01'] },
   info: { paths: [circle(12, 12, 8.4), 'M12 11.2v5', 'M12 8h.01'] },
   logOut: {

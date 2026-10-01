@@ -1,0 +1,21 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 0;
+  cursor: pointer;
+}
+
+.iconOnly {
+  justify-content: center;
+  inline-size: var(--size-touch);
+  block-size: var(--size-touch);
+  padding: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-ink);
+  background: transparent;
+}
+
+.iconOnly:hover {
+  background: var(--color-surface-alt);
+}

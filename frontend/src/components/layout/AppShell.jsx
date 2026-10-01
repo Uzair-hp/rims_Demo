@@ -5,11 +5,11 @@ import TopBar from './TopBar.jsx'
 import BottomNav from './BottomNav.jsx'
 import BrandLockup from './BrandLockup.jsx'
 import ApiStatus from './ApiStatus.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 import Sheet from '../ui/Sheet.jsx'
 import SheetList from '../ui/SheetList.jsx'
 import Icon from '../ui/Icon.jsx'
 import { CREATE_ACTIONS, MORE_NAV_ITEMS } from '../../app/navigation.js'
-import { useTheme } from '../../app/useTheme.js'
 import { useSidebarCollapsed } from '../../app/useSidebarCollapsed.js'
 import { useAuth } from '../../features/auth/AuthProvider.jsx'
 import styles from './AppShell.module.css'
@@ -24,7 +24,7 @@ import styles from './AppShell.module.css'
 export default function AppShell() {
   const [moreOpen, setMoreOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
-  const { resolvedTheme, toggleTheme } = useTheme()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const { collapsed, toggleCollapsed } = useSidebarCollapsed()
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
@@ -47,10 +47,24 @@ export default function AppShell() {
         Skip to main content
       </a>
 
-      <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
+      <Sidebar
+        collapsed={collapsed}
+        onToggleCollapse={toggleCollapsed}
+        mobileOpen={mobileMenuOpen}
+        onCloseMobile={() => setMobileMenuOpen(false)}
+        onNavigate={() => setMobileMenuOpen(false)}
+      />
+      {mobileMenuOpen ? (
+        <button
+          type="button"
+          className={`${styles.mobileBackdrop} no-print`}
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close navigation menu"
+        />
+      ) : null}
 
       <div className={`${styles.content} ${collapsed ? styles.contentCollapsed : ''}`.trim()}>
-        <TopBar />
+        <TopBar mobileMenuOpen={mobileMenuOpen} onToggleMobileMenu={() => setMobileMenuOpen((open) => !open)} />
         <main id="main-content" className={styles.main} tabIndex={-1}>
           <ApiStatus />
           <Outlet />
@@ -76,10 +90,7 @@ export default function AppShell() {
           <div className={styles.sheetBrand}>
             <BrandLockup variant="text" />
           </div>
-          <button type="button" className={styles.sheetAction} onClick={toggleTheme}>
-            <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={20} />
-            {resolvedTheme === 'dark' ? 'Light theme' : 'Dark theme'}
-          </button>
+          <ThemeToggle className={styles.sheetAction} />
           <span className={styles.sheetMeta} data-route={pathname}>
             {user?.email || ''}
           </span>

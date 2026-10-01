@@ -20,6 +20,10 @@
   margin-block-end: var(--space-4);
 }
 
+.tiles > * {
+  min-inline-size: 0;
+}
+
 @media (min-width: 768px) {
   .tiles {
     grid-template-columns: repeat(3, minmax(0, 1fr));

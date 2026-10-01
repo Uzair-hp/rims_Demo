@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import BrandLockup from './BrandLockup.jsx'
 import Icon from '../ui/Icon.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 import { NAV_ITEMS } from '../../app/navigation.js'
-import { useTheme } from '../../app/useTheme.js'
 import { useAuth } from '../../features/auth/AuthProvider.jsx'
 import { useSettings } from '../../features/settings/SettingsProvider.jsx'
 import styles from './Sidebar.module.css'
@@ -15,10 +15,15 @@ import styles from './Sidebar.module.css'
  * `useSidebarCollapsed` in the shell. The collapsed state is desktop-only — the
  * whole sidebar is hidden below `lg`, so mobile navigation is unaffected.
  *
- * @param {{ onNavigate?: () => void, collapsed?: boolean, onToggleCollapse?: () => void }} props
+ * @param {{ onNavigate?: () => void, collapsed?: boolean, onToggleCollapse?: () => void, mobileOpen?: boolean, onCloseMobile?: () => void }} props
  */
-export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }) {
-  const { resolvedTheme, toggleTheme } = useTheme()
+export default function Sidebar({
+  onNavigate,
+  collapsed = false,
+  onToggleCollapse,
+  mobileOpen = false,
+  onCloseMobile,
+}) {
   const { user, signOut } = useAuth()
   // Phase 3 exit criterion: the uploaded company logo renders in the app shell.
   // Before a logo is uploaded (or if the file 404s), BrandLockup keeps the
@@ -26,7 +31,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   const { logoSrc } = useSettings()
 
   return (
-    <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''} no-print`.trim()}>
+    <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''} ${mobileOpen ? styles.mobileOpen : ''} no-print`.trim()}>
       <div className={styles.head}>
         <div className={styles.brand}>
           {/*
@@ -46,12 +51,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         <button
           type="button"
           className={styles.collapseToggle}
-          onClick={onToggleCollapse}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-pressed={collapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={mobileOpen ? onCloseMobile : onToggleCollapse}
+          aria-label={mobileOpen ? 'Close navigation menu' : collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-pressed={mobileOpen ? true : collapsed}
+          title={mobileOpen ? 'Close navigation menu' : collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={18} />
+          <Icon name={mobileOpen ? 'x' : collapsed ? 'chevronRight' : 'chevronLeft'} size={18} />
         </button>
       </div>
 
@@ -75,17 +80,7 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
       </nav>
 
       <div className={styles.footer}>
-        <button
-          type="button"
-          className={styles.footerButton}
-          onClick={toggleTheme}
-          title={collapsed ? (resolvedTheme === 'dark' ? 'Light theme' : 'Dark theme') : undefined}
-        >
-          <Icon name={resolvedTheme === 'dark' ? 'sun' : 'moon'} size={20} />
-          <span className={styles.footerLabel}>
-            {resolvedTheme === 'dark' ? 'Light theme' : 'Dark theme'}
-          </span>
-        </button>
+        <ThemeToggle className={styles.footerButton} />
         {/*
           Logout lives here rather than on Settings: it is the one action that must
           be reachable from anywhere, and on mobile this sidebar is not rendered at

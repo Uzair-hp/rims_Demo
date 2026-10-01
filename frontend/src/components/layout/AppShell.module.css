@@ -42,6 +42,10 @@
   outline: none;
 }
 
+.mobileBackdrop {
+  display: none;
+}
+
 .desktopNew {
   display: none;
 }
@@ -129,5 +133,15 @@
     inset-inline-end: var(--space-6);
     z-index: var(--z-fab);
     display: block;
+  }
+}
+
+@media (max-width: 1023px) {
+  .mobileBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-sidebar) - 1);
+    border: 0;
+    background: rgba(0, 0, 0, 0.28);
   }
 }
