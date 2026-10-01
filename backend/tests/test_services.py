@@ -320,7 +320,11 @@ def test_restore_unknown_service_404s(authed_client):
 def _make_quotation_with_service(authed_client, service):
     """Create a client + draft quotation with one line taken from the catalog."""
     client_resp = authed_client.post(
-        "/api/v1/clients", json={"name": "Snapshot Client"}, headers=_csrf(authed_client)
+        # A phone is required on the client; these tests care about the catalog,
+        # so a fixed valid one is enough here.
+        "/api/v1/clients",
+        json={"name": "Snapshot Client", "phone": "9000012345"},
+        headers=_csrf(authed_client),
     )
     client_id = client_resp.get_json()["data"]["client"]["id"]
 
@@ -356,7 +360,7 @@ def test_quotation_item_carries_service_fields(authed_client):
 
 def test_quotation_item_without_service_has_null_fields(authed_client):
     client_resp = authed_client.post(
-        "/api/v1/clients", json={"name": "Plain Client"}, headers=_csrf(authed_client)
+        "/api/v1/clients", json={"name": "Plain Client", "phone": "9000023456"}, headers=_csrf(authed_client)
     )
     client_id = client_resp.get_json()["data"]["client"]["id"]
     resp = authed_client.post(
@@ -377,7 +381,7 @@ def test_quotation_item_without_service_has_null_fields(authed_client):
 
 def test_unknown_service_id_in_quotation_put_is_422(authed_client):
     client_resp = authed_client.post(
-        "/api/v1/clients", json={"name": "Unknown Ref"}, headers=_csrf(authed_client)
+        "/api/v1/clients", json={"name": "Unknown Ref", "phone": "9000034567"}, headers=_csrf(authed_client)
     )
     client_id = client_resp.get_json()["data"]["client"]["id"]
     resp = authed_client.post(

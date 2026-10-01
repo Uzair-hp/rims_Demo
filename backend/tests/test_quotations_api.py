@@ -32,6 +32,15 @@ def _csrf(client) -> dict:
 def _make_client(authed_client, name="Acme Decorators", **overrides):
     payload = {"name": name}
     payload.update(overrides)
+    # A phone is required on the client and unique per client, so one is derived
+    # from the current client count unless the caller supplies its own.
+    if "phone" not in overrides:
+        with authed_client.application.app_context():
+            from app.extensions.database import db
+            from app.models import Client
+
+            existing = db.session.scalar(db.select(db.func.count()).select_from(Client)) or 0
+        payload["phone"] = f"7{str(300000000 + existing * 733)[-9:]}"
     resp = authed_client.post("/api/v1/clients", json=payload, headers=_csrf(authed_client))
     assert resp.status_code == 201, resp.get_data(as_text=True)
     return resp.get_json()["data"]["client"]

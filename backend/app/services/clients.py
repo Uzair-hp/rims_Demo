@@ -104,6 +104,7 @@ def get_client(client_id: int) -> Client:
 
 
 def create_client(payload: dict) -> Client:
+    _reject_duplicate_phone(payload.get("phone"), exclude_client_id=None)
     client = Client(**_editable_fields(payload))
     db.session.add(client)
     db.session.commit()
@@ -112,6 +113,10 @@ def create_client(payload: dict) -> Client:
 
 def update_client(client_id: int, payload: dict) -> Client:
     client = get_client(client_id)
+    # Excluding the row being edited is what lets a user rename a client, or
+    # re-save one whose number they are correcting, without the check firing
+    # against the client's own existing value.
+    _reject_duplicate_phone(payload.get("phone"), exclude_client_id=client_id)
     for field, value in _editable_fields(payload).items():
         setattr(client, field, value)
     db.session.commit()
@@ -256,6 +261,36 @@ def _paid_for(invoice_id: int) -> int:
 
 
 # ------------------------------------------------------------------- helpers
+
+
+def _reject_duplicate_phone(phone: str | None, *, exclude_client_id: int | None) -> None:
+    """
+    409 when `phone` already belongs to a different client.
+
+    The phone is the identity a business actually recognises, so two clients
+    sharing one is a data-entry accident worth stopping rather than a duplicate
+    to be discovered later. The message names the client that already holds it,
+    because "that number is taken" on its own leaves the user guessing which
+    record to open.
+
+    Archived clients still hold their number. Archiving hides a client from the
+    list, it does not release its identity, so an archived row still triggers the
+    conflict — otherwise archiving and re-adding someone would quietly create the
+    duplicate this prevents.
+    """
+    if not phone:
+        return
+
+    statement = select(Client).where(Client.phone == phone)
+    if exclude_client_id is not None:
+        statement = statement.where(Client.id != exclude_client_id)
+
+    existing = db.session.scalars(statement.limit(1)).first()
+    if existing is not None:
+        raise conflict(
+            f"That phone number is already used by {existing.name}.",
+            [{"field": "phone", "message": f"That phone number is already used by {existing.name}."}],
+        )
 
 
 def _editable_fields(payload: dict) -> dict:
