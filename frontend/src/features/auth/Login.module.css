@@ -287,6 +287,13 @@
   display: flex;
 }
 
+.passwordIcon {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 14px;
+  transform: translateY(-50%);
+}
+
 .passwordInput {
   flex: 1 1 auto;
   min-inline-size: 0;

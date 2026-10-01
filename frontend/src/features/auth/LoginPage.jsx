@@ -179,7 +179,7 @@ export default function Login() {
                 Password
               </label>
               <div className={styles.passwordWrap}>
-                <span className={styles.inputIcon} aria-hidden="true">
+                <span className={`${styles.inputIcon} ${styles.passwordIcon}`} aria-hidden="true">
                   <Icon name="lock" size={20} />
                 </span>
                 <input
@@ -213,7 +213,7 @@ export default function Login() {
               ) : null}
             </div>
 
-            <Button type="submit" variant="primary" size="lg" fullWidth loading={submitting}>
+              <Button type="submit" variant="primary" size="lg" fullWidth loading={submitting} icon="logIn">
               {submitting ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
