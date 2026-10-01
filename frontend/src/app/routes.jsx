@@ -19,14 +19,16 @@
  * The print routes are the other chrome-less surfaces (§14.2). They are
  * deliberately *outside* `AppShell` but still inside `RequireAuth` and
  * `SettingsProvider` — a document needs the company settings row for
- * its header and footer, and it must not render a sidebar. Both document kinds
- * share the `PrintQuotation` shell.
+ * its header and footer, and it must not render a sidebar. Quotations and
+ * invoices share the `PrintQuotation` shell; the Balance / Payment Due document
+ * has its own shell because it is a reminder rather than a bill.
  */
 import AppShell from '../components/layout/AppShell.jsx'
 import Clients, { ClientDetail } from '../pages/Clients.jsx'
 import Dashboard from '../pages/Dashboard.jsx'
 import Invoices, { InvoiceDetail } from '../pages/Invoices.jsx'
 import NotFound from '../pages/NotFound.jsx'
+import PrintPaymentDue from '../pages/PrintPaymentDue.jsx'
 import PrintQuotation from '../pages/PrintQuotation.jsx'
 import QuotationDetail from '../pages/QuotationDetail.jsx'
 import RootLayout from './RootLayout.jsx'
@@ -71,6 +73,20 @@ export const routes = [
           <RequireAuth>
             <SettingsProvider>
               <PrintQuotation documentType="invoice" />
+            </SettingsProvider>
+          </RequireAuth>
+        ),
+      },
+      {
+        // Balance / Payment Due (§8.5) — a third chrome-less print surface, and the
+        // only one with its own shell: this is a payment reminder, not a quote or a
+        // bill, so it renders `PaymentDuePaper` rather than `DocumentPaper`. It is a
+        // pure read of the ledger, so "opening" it writes nothing.
+        path: 'print/payment-due/:id',
+        element: (
+          <RequireAuth>
+            <SettingsProvider>
+              <PrintPaymentDue />
             </SettingsProvider>
           </RequireAuth>
         ),

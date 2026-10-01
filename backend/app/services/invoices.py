@@ -142,6 +142,19 @@ def serialize_invoice(invoice: Invoice) -> dict:
     data["paid_paise"] = paid
     data["outstanding_paise"] = grand_total - paid
     data["payment_status"] = payment_status(paid, grand_total)
+    # How the client actually paid most recently — the *ledger's* method, for
+    # application/status display only. This is deliberately NOT the invoice's
+    # `payment_method` (b8d5f0e2c7a1), which is the presentation choice frozen at
+    # issue. The two are allowed to disagree, and it is the reason this read
+    # exists separately: a derived value that no row is written from cannot make an
+    # issued invoice a different document (§8.4). DocumentPaper must not consult
+    # it — the printed payment block reads `payment_method` and the settings.
+    data["latest_payment_method"] = db.session.scalar(
+        select(Payment.method)
+        .where(Payment.invoice_id == invoice.id)
+        .order_by(Payment.paid_on.desc(), Payment.id.desc())
+        .limit(1)
+    )
     data["allowed_actions"] = get_invoice_allowed_actions(invoice).to_list()
     return data
 
@@ -156,6 +169,113 @@ def get_invoice(invoice_id: int) -> Invoice:
     if invoice is None:
         raise not_found("Invoice not found.")
     return invoice
+
+
+# ------------------------------------------------------- payment due document
+
+
+def payment_due_document(invoice: Invoice) -> dict:
+    """
+    Build the Balance / Payment Due document for an invoice (§8.5).
+
+    **This writes nothing.** It is a read of the invoice and its payment ledger, so
+    generating one cannot create revenue, duplicate a payment, or leave a stored
+    balance to go stale. Every figure is re-derived on each call, which is exactly why
+    a previously printed copy needs no updating: it was a snapshot, and the next one
+    reflects whatever the ledger says now.
+
+    Deliberately **not** a new `Invoice` row. `services/dashboard.py` sums
+    `SUM(invoice.grand_total_paise)` over issued invoices, and `clients.py` does the
+    same for a client summary, so a persisted "balance invoice" would add a second
+    ₹60,000 to revenue. The original invoice stays the only billing document and the
+    ledger stays the only record of money received.
+
+    Nor does it get its own document number. `numbering.py` allocates per
+    `(doc_type, year)` and would need a new counter to carry a `PD-` prefix, but a
+    second number on a collection notice reads as a second sale - the confusion this
+    document exists to avoid. It is referenced by the invoice number it is about,
+    which is the only identity it needs.
+
+    The amount due is `grand_total_paise - Σ payments` (§11), the same arithmetic
+    `payment_status` uses, so the figure on the paper and the badge on the invoice
+    list are produced by one calculation. Amounts stay integer paise end to end; the
+    client formats them, so no float ever touches money.
+
+    `upi_uri` is built here rather than in the browser so the QR cannot encode a
+    different amount from the one this function reports, and so a non-positive
+    balance yields `None` (no QR) instead of a code that opens a payment app asking
+    for ₹0. Scanning it initiates a payment and nothing more: recording one is still
+    the Record Payment flow, and no status changes as a result of reading this.
+    """
+    from app.models.company_settings import CompanySettings
+    from app.services.calculations import format_upi_amount, build_upi_uri
+    from app.services.lifecycle import InvoiceAction, validate_invoice_transition
+
+    # A demand notice is only meaningful for an issued invoice. Drafts have not been
+    # billed, and a cancelled one must never produce a demand for money.
+    allowed, reason = validate_invoice_transition(invoice, InvoiceAction.RECORD_PAYMENT)
+    if not allowed:
+        raise business_rule(reason or "A payment due document can only be issued for an issued invoice.")
+
+    grand_total = invoice.grand_total_paise or 0
+    paid = paid_paise_for(invoice.id)
+    outstanding = max(0, grand_total - paid)
+
+    # Which method actually collected money most recently, so the reminder states how
+    # the customer has been paying. Same derived read as `serialize_invoice` uses for
+    # the invoice's payment line, and from the same source.
+    latest = db.session.scalar(
+        select(Payment.method)
+        .where(Payment.invoice_id == invoice.id)
+        .order_by(Payment.paid_on.desc(), Payment.id.desc())
+        .limit(1)
+    )
+
+    # A fully settled invoice has nothing to collect, so there is no document to
+    # produce. Refusing here (rather than returning an empty one) means the client
+    # cannot render a ₹0 QR by ignoring the flag.
+    if outstanding <= 0:
+        raise business_rule(
+            f"Invoice {invoice.number} is fully paid, so there is no outstanding balance."
+        )
+
+    settings = CompanySettings.get_row()
+    upi_id = (settings.upi_id or "").strip()
+    payee = (settings.company_name or "").strip()
+
+    return {
+        "kind": "payment_due",
+        "title": "PAYMENT DUE",
+        # The original invoice is the only billing document; this one is a
+        # collection notice about it.
+        "source_invoice_id": invoice.id,
+        "source_invoice_number": invoice.number,
+        "generated_on": date.today().isoformat(),
+        "due_date": invoice.due_date.isoformat() if invoice.due_date else None,
+        "currency": "INR",
+        "grand_total_paise": grand_total,
+        "paid_paise": paid,
+        "outstanding_paise": outstanding,
+        "amount_due_paise": outstanding,
+        "payment_status": payment_status(paid, grand_total),
+        "latest_payment_method": latest,
+        # Live from Settings, never snapshotted: a payee that closes the account must
+        # not leave a printed notice directing money at it. This mirrors the §8.4
+        # exception already made for the payment QR.
+        "upi_id": upi_id,
+        "payee_name": payee,
+        "upi_uri": build_upi_uri(vpa=upi_id, payee_name=payee, amount_paise=outstanding, note=invoice.number),
+        "upi_amount": format_upi_amount(outstanding),
+        "bank": {
+            "account_name": settings.bank_account_name,
+            "account_number": settings.bank_account_number,
+            "bank_name": settings.bank_name,
+            "ifsc": settings.bank_ifsc,
+            "branch": settings.bank_branch,
+            "upi_id": upi_id,
+        },
+        "client": invoice.client_snapshot or {},
+    }
 
 
 def list_invoices(
@@ -226,7 +346,10 @@ def update_invoice_draft(invoice: Invoice, payload: dict) -> Invoice:
     if invoice.status != "draft":
         raise business_rule("Only draft invoices can be edited.")
 
-    for field in ("issue_date", "due_date", "notes", "terms_text"):
+    # `payment_method` is in this list and nowhere else: the draft-only guard above
+    # is the whole of the "frozen at issue" guarantee, so there is no second lock
+    # and no ledger path that can reach it. See migration b8d5f0e2c7a1.
+    for field in ("issue_date", "due_date", "notes", "terms_text", "payment_method"):
         if field in payload:
             setattr(invoice, field, payload[field])
 
@@ -424,6 +547,11 @@ def convert_quotation(quotation: Quotation, *, created_by: int | None = None) ->
                 rate_paise=item.rate_paise,
                 line_total_paise=item.line_total_paise,
                 position=item.position,
+                # SERVICES_PLAN FR-SV8: conversion copies the catalog provenance
+                # with everything else that is snapshotted (§8.4). Informational
+                # only — no total depends on either field (S7).
+                service_id=item.service_id,
+                catalog_rate_paise=item.catalog_rate_paise,
             )
         )
 

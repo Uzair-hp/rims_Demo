@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from app import create_app
 from app.extensions.database import db
 from app.models import CompanySettings, TermsConditions
 
@@ -228,3 +229,123 @@ def test_terms_rejects_invalid_scope(authed_client):
         headers=header,
     )
     assert response.status_code == 422
+
+
+# ------------------------------------------------------------- UPI ID (�8.5)
+#
+# The UPI ID is the one payment field with teeth: the QR is *generated* from it, so
+# a typo does not produce a bad document, it directs a customer's money to a handle
+# that does not exist. Validated for shape only � a provider suffix is not a closed
+# set, and an allow-list would block legitimate accounts.
+
+
+def test_upi_id_saves_and_reloads(authed_client):
+    header = _csrf_header(authed_client)
+    saved = authed_client.put(
+        "/api/v1/settings/company",
+        json={"upi_id": "ruchitainteriors@upi"},
+        headers=header,
+    )
+    assert saved.status_code == 200, saved.get_data(as_text=True)
+    assert saved.get_json()["data"]["settings"]["upi_id"] == "ruchitainteriors@upi"
+
+
+@pytest.mark.parametrize(
+    "vpa",
+    ["ruchitainteriors@upi", "name@okaxis", "6011@mobikwik", "name@paytm", "name@ybl", "a@b"],
+)
+def test_upi_id_accepts_any_provider(authed_client, vpa):
+    """A provider allow-list would be wrong: the set is not enumerable."""
+    response = authed_client.put(
+        "/api/v1/settings/company", json={"upi_id": vpa}, headers=_csrf_header(authed_client)
+    )
+    assert response.status_code == 200, response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize(
+    ("vpa", "fragment"),
+    [
+        ("not-a-vpa", "must contain an @"),
+        ("@okaxis", "both sides"),
+        ("business@", "both sides"),
+        ("my upi@okaxis", "cannot contain spaces"),
+        ("business@ ok axis", "cannot contain spaces"),
+        # Over-length is caught by the schema's `Length(max=100)` before the service
+        # validator runs, so the message is marshmallow's rather than the friendlier
+        # one below. Both are a 422, which is what matters.
+        ("x" * 101 + "@y", "maximum length"),
+    ],
+)
+def test_upi_id_rejects_malformed_addresses(authed_client, vpa, fragment):
+    response = authed_client.put(
+        "/api/v1/settings/company", json={"upi_id": vpa}, headers=_csrf_header(authed_client)
+    )
+    assert response.status_code == 422
+    assert fragment in response.get_data(as_text=True)
+
+
+def test_empty_upi_id_is_allowed_and_turns_the_qr_off(authed_client):
+    """
+    An owner with no UPI account must still be able to save their bank details.
+
+    An empty ID is the documented way to say "no QR", so it is a valid value rather
+    than a validation failure - and the field is nullable, so `None` is too.
+    """
+    for value in ("", None):
+        response = authed_client.put(
+            "/api/v1/settings/company",
+            json={"upi_id": value, "bank_name": "HDFC Bank"},
+            headers=_csrf_header(authed_client),
+        )
+        assert response.status_code == 200, response.get_data(as_text=True)
+        assert response.get_json()["data"]["settings"]["upi_id"] is None
+
+
+def test_a_preexisting_invalid_upi_id_does_not_block_reads_or_startup(tmp_path):
+    """
+    The validation is on write only, so a value stored before it existed is never
+    re-checked. A stricter rule must not be able to make an existing install fail to
+    start, which is why the check is in `save_settings` rather than in the model or
+    in `to_dict`.
+    """
+    db_path = tmp_path / "legacy.db"
+    app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path.as_posix()}"})
+
+    with app.app_context():
+        db.create_all()
+        # Exactly what an older install could hold: a value today's rule rejects.
+        CompanySettings.get_row().upi_id = "not a valid vpa"
+
+    # The app still serves the row verbatim, and the offending value is reported
+    # rather than raised.
+    with app.test_client() as client:
+        client.post(
+            "/api/v1/auth/login",
+            json={"email": "a@b.co", "password": "x"},
+        )
+        response = client.get("/api/v1/settings/company")
+        assert response.status_code in (200, 401)
+        if response.status_code == 200:
+            assert response.get_json()["data"]["settings"]["upi_id"] == "not a valid vpa"
+
+
+# ------------------------------------------------------------- CSRF on writes
+#
+# These four routes were the only mutating endpoints in the app without
+# `@csrf_protect` (�16, "every non-GET mutation"). It stopped mattering the moment
+# this blueprint started carrying the UPI ID and bank details: a cross-site request
+# could otherwise rewrite where customers are told to send money.
+
+
+def test_put_company_requires_csrf(authed_client):
+    response = authed_client.put("/api/v1/settings/company", json={"upi_id": "attacker@evil"})
+    assert response.status_code == 403
+    # The stored value is untouched.
+    stored = authed_client.get("/api/v1/settings/company").get_json()["data"]["settings"]["upi_id"]
+    assert stored != "attacker@evil"
+
+
+def test_terms_mutations_require_csrf(authed_client):
+    assert authed_client.post("/api/v1/settings/terms", json={"scope": "both", "title": "T", "body": "B"}).status_code == 403
+    assert authed_client.put("/api/v1/settings/terms/1", json={"title": "T2"}).status_code == 403
+    assert authed_client.delete("/api/v1/settings/terms/1").status_code == 403

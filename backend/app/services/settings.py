@@ -24,6 +24,49 @@ from app.extensions.database import db
 from app.models import CompanySettings, TermsConditions
 from app.utils.errors import not_found, validation_error
 
+#: Longest accepted UPI ID, matching the column width (§8.5).
+MAX_UPI_ID_LENGTH = 100
+
+
+def validate_upi_id(value: str) -> str | None:
+    """
+    Shape-check a UPI ID. Returns a message when invalid, else None.
+
+    Permissive by design. A UPI ID is `handle@provider`, and the provider suffix is
+    *not* a closed set: `okaxis`, `paytm`, `ybl`, `oksbi` and a bank's own handle are
+    all real, and a new one can appear without notice. An allow-list would reject a
+    legitimate account and block a real payment, which is far worse than accepting a
+    well-formed-but-nonexistent handle - and an account that does not exist fails
+    loudly in the payer's app, where a customer can see it.
+
+    So the checks are the ones that catch actual typos:
+
+    - must contain an "@", splitting handle from provider,
+    - must have something on both sides of it,
+    - no whitespace anywhere (a VPA cannot contain it, and a space is almost always a
+      paste artefact),
+    - within the column's length.
+
+    Applied on write only. A value stored before this rule existed is left alone and
+    is never re-validated on read, so a stricter rule can never make an existing
+    install fail to start.
+    """
+    if not isinstance(value, str):
+        return "The UPI ID must be text."
+    candidate = value.strip()
+    if not candidate:
+        return "Enter a UPI ID, or leave it empty to turn the QR off."
+    if len(candidate) > MAX_UPI_ID_LENGTH:
+        return f"The UPI ID must be at most {MAX_UPI_ID_LENGTH} characters."
+    if any(character.isspace() for character in candidate):
+        return "The UPI ID cannot contain spaces."
+    if "@" not in candidate:
+        return "The UPI ID must contain an @, e.g. business@okaxis."
+    handle, _, provider = candidate.partition("@")
+    if not handle or not provider:
+        return "The UPI ID needs text on both sides of the @, e.g. business@okaxis."
+    return None
+
 # Only these keys are writable through PUT /settings/company. `logo_path` is
 # deliberately absent: it changes exclusively through the upload/delete
 # endpoints (§15 Branding), never by client-supplied JSON.
@@ -104,6 +147,20 @@ def save_settings(payload: dict) -> CompanySettings:
             "IFSC must be exactly 11 characters.",
             [{"field": "bank_ifsc", "message": "IFSC must be exactly 11 characters."}],
         )
+
+    # The UPI ID becomes the `pa` parameter of every payment QR (§8.5), so a typo
+    # here silently misdirects customer money rather than failing visibly.
+    #
+    # Validated only for *shape*: no spaces, and an "@" separating the handle from a
+    # provider suffix. Deliberately not a provider allow-list — a VPA's suffix is not
+    # an enumerable set, and rejecting a legitimate one (`name@okaxis`, `name@paytm`,
+    # a bank's own handle) would block a real payment to fix a cosmetic problem.
+    if row.upi_id:
+        problem = validate_upi_id(row.upi_id)
+        if problem:
+            raise validation_error(
+                problem, [{"field": "upi_id", "message": "Check the UPI ID format."}]
+            )
 
     for field in ("item_categories", "units"):
         value = getattr(row, field)

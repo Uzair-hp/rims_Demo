@@ -147,6 +147,9 @@ class InvoiceSchema(Schema):
     issue_date = fields.Date(allow_none=True)
     due_date = fields.Date(allow_none=True)
     status = fields.String(dump_only=True)
+    # How the document presents its payment options. Read-only here: it is set
+    # through the draft editor before issue and never again.
+    payment_method = fields.String(allow_none=True)
 
     discount_type = fields.String(dump_only=True)
     discount_bp = fields.Integer(dump_only=True)
@@ -191,6 +194,17 @@ class InvoiceDraftSchema(Schema):
     due_date = fields.Date(allow_none=True)
     notes = fields.String(allow_none=True, load_default=None)
     terms_text = fields.String(allow_none=True, load_default=None)
+    # The invoice's payment *presentation*, not the ledger's record of how the
+    # client actually paid. Deliberately narrower than PaymentSchema.method:
+    # cheque/card/other are legitimate ways to be paid but are not offered as
+    # instructions printed on an invoice. NULL means "Not Selected", which the
+    # document renders as both UPI and bank transfer, so clearing the selector
+    # back to that state has to be expressible.
+    payment_method = fields.String(
+        allow_none=True,
+        load_default=None,
+        validate=validate.OneOf(["upi", "bank_transfer", "cash"]),
+    )
 
 
 class InvoiceListQuerySchema(Schema):

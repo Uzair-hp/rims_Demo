@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { act, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DocumentPaper, { groupItemsByCategory } from '../documents/DocumentPaper.jsx'
@@ -36,6 +36,10 @@ const SETTINGS = {
   gstin: '23ABCDE1234F1Z5',
   signatory_name: 'Live Settings Signatory',
   footer_text: 'Modular Kitchen · Wardrobes · Turnkey Interiors',
+  // The generated UPI QR (§8.5) reads the VPA from live Settings, never from the
+  // document's bank snapshot. A test that wants a QR sets this; one that wants to
+  // prove the block disappears clears it.
+  upi_id: 'ruchitainteriors@upi',
 }
 
 const BANK = {
@@ -214,7 +218,10 @@ describe('DocumentPaper — invoice variant', () => {
   })
 
   it('shows Amount Paid and Balance Due from the server figures', () => {
-    renderInvoice()
+    // No UPI ID, so the only place the outstanding appears is the Balance Due row.
+    // With a QR configured the figure appears twice by design — the row states what
+    // is owed and the QR asks for it — and the QR block has its own test below.
+    render(<DocumentPaper document={invoice()} settings={{ ...SETTINGS, upi_id: '' }} docKind="invoice" />)
     expect(screen.getByText('Amount Paid')).toBeInTheDocument()
     expect(screen.getByText('Balance Due')).toBeInTheDocument()
     expect(screen.getByText('−₹4,000.00')).toBeInTheDocument()
@@ -229,39 +236,188 @@ describe('DocumentPaper — invoice variant', () => {
   })
   it('renders the bank details from the snapshot', () => {
     renderInvoice()
-    const bank = document.querySelector('[data-document-bank]')
-    expect(bank).toBeTruthy()
-    expect(within(bank).getByText('HDFC Bank')).toBeInTheDocument()
-    expect(within(bank).getByText('00123456789')).toBeInTheDocument()
-    expect(within(bank).getByText('HDFC0001234')).toBeInTheDocument()
-    expect(within(bank).getByText('ruchita@hdfcbank')).toBeInTheDocument()
+    const payment = document.querySelector('[data-document-payment]')
+    expect(payment).toBeTruthy()
+    expect(within(payment).getByText('HDFC Bank')).toBeInTheDocument()
+    expect(within(payment).getByText('00123456789')).toBeInTheDocument()
+    expect(within(payment).getByText('HDFC0001234')).toBeInTheDocument()
   })
 
-  // --------------------------------------------------------------- QR (§8.5)
+  // ------------------------------------------- FR-P8: the payment presentation (§8.5)
+  //
+  // The invoice prints the payment *instructions* the admin chose before issue, and
+  // nothing derived from the ledger. The distinction is enforced by the whole
+  // describe block: `latest_payment_method` and `paid_paise` are supplied by the
+  // server in the payloads below and must never reach the sheet.
+  //
+  // The QR is back on the invoice (FR-P8 §7) and encodes the **grand total**, not
+  // the outstanding balance: an outstanding amount is unknowable at issue and moves
+  // with every payment, so encoding it would make a reprint of the same document ask
+  // for a different figure. Collecting a reduced sum is the Balance / Payment Due
+  // document's job, and that document is regenerated per payment.
 
-  describe('live payment QR', () => {
-    const QR_URL = '/api/v1/uploads/payment-qr?v=2026-09-29'
+  describe('payment presentation (FR-P8)', () => {
+    it('is a section of the invoice, with a hairline like the other blocks', () => {
+      renderInvoice()
 
-    it('renders the QR as a subsection inside the payment block', () => {
-      renderInvoice({}, { qrSrc: QR_URL })
-
-      const bank = document.querySelector('[data-document-bank]')
-      const qr = document.querySelector('[data-document-qr]')
-      expect(qr).toBeTruthy()
-      // A subsection of the bank block, not a sibling of it.
-      expect(bank.contains(qr)).toBe(true)
-      expect(within(qr).getByText('UPI QR code')).toBeInTheDocument()
-      expect(within(qr).getByRole('img', { name: /upi payment qr/i })).toHaveAttribute('src', QR_URL)
+      const payment = document.querySelector('[data-document-payment]')
+      expect(payment).toBeTruthy()
+      expect(within(payment).getByText('Payment')).toBeInTheDocument()
     })
 
-    it('is omitted entirely when Settings has no QR', () => {
-      renderInvoice({}, { qrSrc: null })
-      expect(document.querySelector('[data-document-qr]')).toBeNull()
-      // The rest of the payment block is unaffected.
-      expect(document.querySelector('[data-document-bank]')).toBeTruthy()
+    it('UPI selected: UPI details and a QR, and no bank details at all', () => {
+      renderInvoice({ payment_method: 'upi' })
+      const payment = document.querySelector('[data-document-payment]')
+
+      expect(within(payment).getByText('ruchitainteriors@upi')).toBeInTheDocument()
+      expect(within(payment).getByText('Ruchita Interiors')).toBeInTheDocument()
+      expect(within(payment).getByText(/Scan to Pay/)).toBeInTheDocument()
+      expect(within(payment).getByText(/verify the amount before paying/i)).toBeInTheDocument()
+      expect(document.querySelector('[data-upi-qr]')).toBeTruthy()
+
+      // The exclusion matters as much as the inclusion: an account number printed
+      // beside a UPI code invites the customer to pick the wrong rail.
+      expect(within(payment).queryByText('00123456789')).toBeNull()
+      expect(within(payment).queryByText('HDFC0001234')).toBeNull()
+      expect(within(payment).queryByText('HDFC Bank')).toBeNull()
     })
 
-    it('never appears on a quotation, which is not payable', () => {
+    it('bank transfer selected: the bank details, and no QR or UPI ID', () => {
+      renderInvoice({ payment_method: 'bank_transfer' })
+      const payment = document.querySelector('[data-document-payment]')
+
+      expect(within(payment).getByText('Ruchita Interiors LLP')).toBeInTheDocument()
+      expect(within(payment).getByText('00123456789')).toBeInTheDocument()
+      expect(within(payment).getByText('HDFC Bank')).toBeInTheDocument()
+      expect(within(payment).getByText('HDFC0001234')).toBeInTheDocument()
+
+      expect(document.querySelector('[data-upi-qr]')).toBeNull()
+      expect(within(payment).queryByText('ruchitainteriors@upi')).toBeNull()
+    })
+
+    it('cash selected: the method line alone, with no rail and no account number', () => {
+      renderInvoice({ payment_method: 'cash' })
+      const payment = document.querySelector('[data-document-payment]')
+
+      expect(within(payment).getByText(/Payment Method: Cash/)).toBeInTheDocument()
+      expect(document.querySelector('[data-upi-qr]')).toBeNull()
+      expect(within(payment).queryByText('00123456789')).toBeNull()
+      expect(within(payment).queryByText('HDFC0001234')).toBeNull()
+      expect(within(payment).queryByText('ruchitainteriors@upi')).toBeNull()
+    })
+
+    it('not selected: both electronic rails, and cash is never offered', () => {
+      // The default is deliberately the permissive one — the client can pay either
+      // way. Cash is a choice the admin makes, not something the sheet suggests.
+      renderInvoice({ payment_method: null })
+      const payment = document.querySelector('[data-document-payment]')
+
+      expect(within(payment).getByText('ruchitainteriors@upi')).toBeInTheDocument()
+      expect(within(payment).getByText('00123456789')).toBeInTheDocument()
+      expect(within(payment).getByText('HDFC0001234')).toBeInTheDocument()
+      expect(document.querySelector('[data-upi-qr]')).toBeTruthy()
+      expect(within(payment).queryByText(/Cash/)).toBeNull()
+    })
+
+    it('an absent payment_method reads as not selected, not as an error', () => {
+      // A server predating the column sends no key at all; both rails must show
+      // rather than an empty block or a thrown render.
+      renderInvoice({ payment_method: undefined })
+      const payment = document.querySelector('[data-document-payment]')
+      expect(within(payment).getByText('ruchitainteriors@upi')).toBeInTheDocument()
+      expect(within(payment).getByText('00123456789')).toBeInTheDocument()
+    })
+
+    it('ignores the ledger entirely, so a differently-paid invoice prints identically', () => {
+      // The load-bearing case. Issued as UPI, then settled by bank transfer: the
+      // document must still print the UPI presentation, and the derived figures the
+      // server sends must not leak onto the page.
+      const before = renderInvoice({ payment_method: 'upi' })
+      const sheetBefore = document.querySelector('[data-document-paper]').textContent
+
+      before.unmount()
+      renderInvoice({
+        payment_method: 'upi',
+        latest_payment_method: 'bank_transfer',
+        paid_paise: 585500,
+        outstanding_paise: 585500,
+        payment_status: 'partially_paid',
+      })
+
+      const payment = document.querySelector('[data-document-payment]')
+      expect(within(payment).getByText('ruchitainteriors@upi')).toBeInTheDocument()
+      expect(within(payment).queryByText(/Bank transfer/)).toBeNull()
+      expect(within(payment).queryByText('Awaiting Payment')).toBeNull()
+      expect(sheetBefore).toContain('ruchitainteriors@upi')
+    })
+
+    it('never prints a ledger-derived method, whatever the server sends', () => {
+      // `latest_payment_method` is for the application UI. On a permanent document
+      // it would be the exact confusion FR-P8 exists to prevent: a sheet that
+      // silently re-presents itself in the method it was last paid by.
+      renderInvoice({ payment_method: 'upi', latest_payment_method: 'cash' })
+      const payment = document.querySelector('[data-document-payment]')
+      expect(within(payment).queryByText(/Cash/)).toBeNull()
+    })
+
+    it('prints the UPI ID live from Settings, not the frozen snapshot', () => {
+      // The one §8.4 exception on this sheet: a payment address is an instruction
+      // to send money somewhere, not a term of the invoice, so a closed account must
+      // not stay on already-issued documents. The *method* is frozen; the address it
+      // points at is live.
+      renderInvoice({ bank_snapshot: { ...BANK, upi_id: 'closed-account@oldbank' } })
+      const payment = document.querySelector('[data-document-payment]')
+      expect(within(payment).getAllByText(/ruchitainteriors@upi/).length).toBeGreaterThan(0)
+      expect(within(payment).queryByText('closed-account@oldbank')).toBeNull()
+    })
+
+    it('prints no rail at all when a UPI invoice has no UPI ID configured', () => {
+      // An admin misconfiguration, so the fallback is deliberately *not* to widen
+      // the presentation: showing bank details on an invoice that says UPI would
+      // contradict the choice on the document, and a "Scan to Pay" line with no code
+      // points nowhere. An empty block is the honest outcome.
+      render(
+        <DocumentPaper
+          document={invoice({ payment_method: 'upi' })}
+          settings={{ ...SETTINGS, upi_id: '' }}
+          docKind="invoice"
+        />,
+      )
+      expect(document.querySelector('[data-upi-qr]')).toBeNull()
+      expect(document.querySelector('[data-document-payment]')).toBeNull()
+    })
+
+    it('omits the section entirely when there is nothing to show in it', () => {
+      // §21.24: no snapshot rows and no configured UPI ID means no block, rather
+      // than an empty panel on a customer-facing document.
+      render(
+        <DocumentPaper
+          document={invoice({ bank_snapshot: { account_name: null, bank_name: null, upi_id: null } })}
+          settings={{ ...SETTINGS, upi_id: '' }}
+          docKind="invoice"
+        />,
+      )
+      expect(document.querySelector('[data-document-payment]')).toBeNull()
+    })
+
+    it('still prints for a cash invoice with no payment details configured at all', () => {
+      // The method line is the invoice's whole instruction, so the block must not
+      // vanish just because the snapshot is empty.
+      render(
+        <DocumentPaper
+          document={invoice({
+            payment_method: 'cash',
+            bank_snapshot: { account_name: null, bank_name: null, upi_id: null },
+          })}
+          settings={{ ...SETTINGS, upi_id: '' }}
+          docKind="invoice"
+        />,
+      )
+      const payment = document.querySelector('[data-document-payment]')
+      expect(within(payment).getByText(/Payment Method: Cash/)).toBeInTheDocument()
+    })
+
+    it('is absent from a quotation, which is not payable', () => {
       render(
         <DocumentPaper
           document={{
@@ -270,44 +426,14 @@ describe('DocumentPaper — invoice variant', () => {
             items: [],
             grand_total_paise: 0,
             bank_snapshot: { bank_name: 'HDFC Bank', account_number: '00123456789' },
+            payment_method: 'upi',
           }}
           settings={SETTINGS}
-          qrSrc={QR_URL}
           docKind="quotation"
         />,
       )
-      expect(document.querySelector('[data-document-qr]')).toBeNull()
+      expect(document.querySelector('[data-document-payment]')).toBeNull()
     })
-
-    it('drops the whole subsection when the image fails to load', async () => {
-      // A broken-image icon inside a bank block reads as a defect on a document
-      // a customer is meant to pay from.
-      renderInvoice({}, { qrSrc: '/api/v1/uploads/payment-qr?v=broken' })
-      const img = document.querySelector('[data-document-qr] img')
-      expect(img).toBeTruthy()
-
-      await act(async () => {
-        img.dispatchEvent(new Event('error'))
-      })
-
-      expect(document.querySelector('[data-document-qr]')).toBeNull()
-      // The UPI ID text is still there to pay by.
-      expect(
-        within(document.querySelector('[data-document-bank]')).getByText('ruchita@hdfcbank'),
-      ).toBeInTheDocument()
-    })
-
-    it('shows the QR even when there is no bank snapshot to sit beside', () => {
-      renderInvoice({ bank_snapshot: null }, { qrSrc: QR_URL })
-      const bank = document.querySelector('[data-document-bank]')
-      expect(bank).toBeTruthy()
-      expect(document.querySelector('[data-document-qr]')).toBeTruthy()
-    })
-  })
-
-  it('omits the bank block when the snapshot has no details (§21.24)', () => {
-    renderInvoice({ bank_snapshot: { account_name: null, bank_name: null, upi_id: null } })
-    expect(document.querySelector('[data-document-bank]')).toBeNull()
   })
 
   it('prints the snapshotted signatory, not the live Settings value', () => {

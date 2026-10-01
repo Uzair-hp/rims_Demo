@@ -11,6 +11,12 @@ Ruchita Interiors — settings endpoints (§9.2).
 Every route is behind `@login_required`: settings are owner-only data (§16).
 The §15 rule "changing settings needs no code change" is exercised by these
 endpoints alone — documents read this row live in later phases.
+
+Every mutating route is also `@csrf_protect`, per §16's "every non-GET mutation".
+These four were the only mutations in the app missing it, which mattered as soon as
+this blueprint started carrying payment configuration: `PUT /settings/company` holds
+the UPI ID and bank details, so a cross-site request could otherwise rewrite where
+customers are told to send money.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from flask import Blueprint, request
 
 from app.schemas import CompanySettingsSchema, TermsSchema, TermsUpdateSchema, load_or_raise
 from app.services import settings as settings_service
+from app.services.csrf import csrf_protect
 from app.utils.errors import success
 from app.utils.guards import login_required
 
@@ -34,6 +41,7 @@ def get_company_settings():
 
 @settings_bp.put("/company")
 @login_required
+@csrf_protect
 def update_company_settings():
     payload = load_or_raise(CompanySettingsSchema(), request_json())
     row = settings_service.save_settings(payload)
@@ -49,6 +57,7 @@ def list_terms():
 
 @settings_bp.post("/terms")
 @login_required
+@csrf_protect
 def create_term():
     payload = load_or_raise(TermsSchema(), request_json())
     term = settings_service.create_term(payload)
@@ -57,6 +66,7 @@ def create_term():
 
 @settings_bp.put("/terms/<int:term_id>")
 @login_required
+@csrf_protect
 def update_term(term_id: int):
     payload = load_or_raise(TermsUpdateSchema(), request_json())
     term = settings_service.update_term(term_id, payload)
@@ -65,6 +75,7 @@ def update_term(term_id: int):
 
 @settings_bp.delete("/terms/<int:term_id>")
 @login_required
+@csrf_protect
 def delete_term(term_id: int):
     settings_service.delete_term(term_id)
     return success({"deleted": True})

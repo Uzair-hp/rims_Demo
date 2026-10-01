@@ -414,99 +414,135 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Payment details (invoice only, §14.3)
+ * Payment (invoice only, §8.5)
  * ------------------------------------------------------------------ */
 
-.bank {
-  margin-block-start: 5mm;
-  padding: 3mm 4mm;
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
+/*
+ * A section of the sheet, not a panel sitting on it.
+ *
+ * The previous version of this block was a filled card — `--color-surface-alt`
+ * background, a border, a radius — which is what made the payment area read as a
+ * separate document pasted onto the invoice. It is now a plain section separated
+ * by a hairline, using the same left edge and the same block label as Terms, so it
+ * belongs to the document the way the other sections do.
+ */
+.payment {
+  margin-block-start: 4mm;
+  padding-block-start: 2.5mm;
+  border-block-start: var(--border-width) solid var(--color-border);
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 /*
- * Bank details on the left, QR on the right.
+ * A single column, because there is no longer a QR to sit beside.
  *
- * The QR is a *sibling of the definition list inside the bank block*, not a
- * third grid child: keeping it in a two-column flex row means the list keeps its
- * own `1fr 1fr` pair layout no matter whether a QR is present, so adding a QR
- * can never reflow or re-wrap the account rows above it.
- *
- * Every length is in mm because this is the printed stylesheet — the whole point
- * is that the block occupies the same physical space on A4 as it does on screen.
+ * The old layout was a two-column flex row with the code on the right, and the QR's
+ * position depended on how many bank rows the snapshot happened to contain — six
+ * rows wrapped one way, four wrapped another, so the block's height and the code's
+ * placement moved per invoice. One column removes that entirely and costs nothing
+ * visually, since the content is a short list of label/value pairs.
  */
-.bankBody {
+/*
+ * A row, not a column, so a QR sits beside the details it explains rather than
+ * pushing the block 26mm taller. `flex-wrap` is the safety valve: when there is no
+ * QR the only child is `.paymentDetails`, which flexes to the full width, so all
+ * four presentations share this rule and none of them needs a `:has()` or a
+ * modifier class to select a different layout.
+ */
+.paymentBody {
   display: flex;
-  flex-wrap: wrap;
+  flex-flow: row wrap;
+  gap: 1.5mm;
   align-items: flex-start;
-  gap: 3mm 5mm;
-}
-
-.bankQr {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1mm;
-}
-
-.bankQrLabel {
-  margin: 0;
-  font-size: 7pt;
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--color-ink-subtle);
 }
 
 /*
- * 32mm ≈ 1.26in, the size a phone camera reads reliably at a printed A4 — the
- * same range payment apps expect. It is capped rather than allowed to grow with
- * an uploaded source image, because a 4000px QR printed at its natural size
- * would push the bank block onto a second page.
+ * The card's natural width, not a 26mm gutter.
+ *
+ * `UpiQrCard`'s print variant is itself a row - code on the left, VPA/payee/ref on
+ * the right - and owns its own 26mm QR. Pinning this wrapper to 26mm squeezes that
+ * internal row into a 26mm column, so the VPA and payee wrap one word per line and
+ * the block grows to roughly 100mm. Measured, not assumed: the first print check
+ * of FR-P8 reported a 104mm payment block for exactly this reason.
  */
-.bankQrImage {
-  inline-size: 32mm;
-  block-size: 32mm;
-  object-fit: contain;
-  /* Square codes need a quiet zone to scan; a hairline keeps it off the block edge. */
-  border: 0.25mm solid var(--color-surface);
-  background: #fff;
+.paymentQr {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
 }
 
-.bankRows {
+.paymentDetails {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5mm;
+}
+
+/* The only instruction a cash invoice has; see the presentation matrix. */
+.paymentMethodLine {
+  margin: 0;
+  font-size: 9pt;
+  color: var(--color-ink);
+}
+
+/*
+ * Label/value pairs in a two-column grid.
+ *
+ * A fixed label column keeps every value on the same left edge regardless of label
+ * length, which is what "Account number" beside "IFSC" would otherwise break.
+ * `mm` throughout, for the same reason as the rest of the sheet: identical physical
+ * space on A4 and on screen.
+ *
+ * The grid collapses to one column when a QR is sharing the row, because two 30mm
+ * label columns plus their values do not fit a 142mm-wide details column legibly.
+ */
+.paymentRows {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1mm 6mm;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8mm 6mm;
   margin: 0;
 }
 
-.bankRow {
+/* Beside a QR, one column: see the note above. */
+.paymentQr ~ .paymentDetails .paymentRows {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.paymentRow {
   display: flex;
   gap: 2mm;
   align-items: baseline;
   min-inline-size: 0;
 }
 
-.bankRow dt {
-  flex: 0 0 26mm;
+.paymentRow dt {
+  flex: 0 0 30mm;
   font-size: 7.5pt;
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-  color: var(--color-ink-subtle);
+  color: var(--color-ink-muted);
 }
 
-.bankRow dd {
+.paymentRow dd {
   margin: 0;
   font-size: 8.5pt;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-ink);
-  /* A long account number wraps rather than pushing the card wider. */
   overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+/*
+ * The one instruction, and the reason the block exists.
+ *
+ * The verification note is not padding. A printed QR encodes the invoice's grand
+ * total, which is what the sheet states as owed; the amount a customer is actually
+ * asked for after a part payment lives on the Balance / Payment Due document. So the
+ * paper can be behind the live balance, and "verify the amount before paying" is
+ * what makes a stale reprint safe to act on.
+ */
+.paymentHint {
+  margin: 0;
+  font-size: 7pt;
+  line-height: 1.4;
+  color: var(--color-ink-subtle);
 }
 
 /* ------------------------------------------------------------------ *

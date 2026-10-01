@@ -38,6 +38,7 @@ from app.services.invoices import (
     get_invoice,
     issue_invoice,
     list_invoices,
+    payment_due_document,
     serialize_invoice,
     update_invoice_draft,
 )
@@ -127,6 +128,30 @@ def list_invoice_payments_route(invoice_id: int):
             "payment_status": figures["payment_status"],
         }
     )
+
+
+@invoices_bp.get("/<int:invoice_id>/payment-due")
+@login_required
+def payment_due_document_route(invoice_id: int):
+    """
+    GET /invoices/:id/payment-due — the Balance / Payment Due document (§8.5).
+
+    **A read.** No `@csrf_protect`, because nothing is mutated, and no write happens
+    anywhere in this path: no invoice row, no payment row, no stored balance. The
+    document is re-derived from the invoice and its payment ledger on every call, so
+    it is correct by construction and cannot go stale — and generating one can never
+    add revenue, because `dashboard.py` and `clients.py` sum the `invoices` table and
+    this endpoint never writes to it.
+
+    It carries no document number of its own. It is referenced by the invoice it
+    concerns, which is the only identity it needs, and giving a collection notice a
+    second number would read as a second sale.
+
+    Refused with 422 when the invoice is not issued, or when nothing is outstanding:
+    a fully paid invoice has no balance to collect, and answering 200 with a zero
+    amount would let a client render a ₹0 QR.
+    """
+    return success({"payment_due": payment_due_document(get_invoice(invoice_id))})
 
 
 @invoices_bp.post("/<int:invoice_id>/payments")

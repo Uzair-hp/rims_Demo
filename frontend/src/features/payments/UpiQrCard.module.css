@@ -1,0 +1,281 @@
+/*
+ * UPI payment card (§8.5).
+ *
+ * Tokens only — the single-file rule in styles/tokens.css. The gold hairline and the
+ * dashed edge on the QR frame are the only ornament, so the card reads as part of
+ * the existing invoice surfaces rather than a foreign widget pasted beside them.
+ *
+ * Sized for a phone first: the QR is the element, the amount sits immediately under
+ * it, and both actions are full-width and at least --touch-target-min tall.
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+  letter-spacing: var(--tracking-wide);
+}
+
+.body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.qrColumn {
+  flex: 0 0 auto;
+}
+
+.qr {
+  display: block;
+  background: #fff;
+  border: var(--border-width-accent) solid var(--color-gold);
+  border-radius: var(--radius-sm);
+  /* A QR needs quiet space around it to scan reliably, and a tight crop produces
+     the "it will not scan on the first try" failure that looks like a bad code. */
+  padding: var(--space-2);
+}
+
+.qrFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.fallbackText {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-muted);
+  line-height: var(--line-height-body);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.amount {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.payee {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+.vpa {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-ink);
+  /* The VPA is the one thing a customer may need to read aloud or retype, so it
+     must not wrap mid-address. */
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.openApp,
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-on-gold);
+  background: var(--color-gold);
+  border: var(--border-width) solid var(--color-gold);
+  border-radius: var(--radius-input);
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.copyButton {
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+}
+
+.openApp:hover {
+  background: var(--color-gold-strong);
+  border-color: var(--color-gold-strong);
+}
+
+.copyButton:hover {
+  background: var(--color-surface-alt);
+}
+
+.openApp:focus-visible,
+.copyButton:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.copyNote {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+}
+
+.disclaimer {
+  margin: 0;
+  padding-block-start: var(--space-2);
+  border-block-start: var(--border-width) solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
+  line-height: var(--line-height-body);
+}
+
+/* Narrow phones: the QR keeps its size and the text moves underneath it, rather
+   than squeezing the amount into an unreadable column beside it. */
+@media (max-width: 30rem) {
+  .body {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .openApp,
+  .copyButton {
+    flex: 1 1 auto;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Print variant (�8.5)
+ *
+ * The compact form used on the A4 documents. Defined **here**, in the module that
+ * owns these class names, because a parent's `.bankQr .card` selector cannot reach
+ * it: CSS Modules hashes per file, so a descendant rule written in another module
+ * compiles to the parent's own hash and matches nothing. That is not theoretical -
+ * the rules it replaced shipped and silently did nothing, and both printed
+ * documents rendered the full screen card.
+ *
+ * Measured in mm, not px, because this is the printed stylesheet: the QR must
+ * occupy the same physical area on A4 as it does on screen. 26mm is comfortably
+ * above the ~20mm floor where a phone camera starts to struggle, and the encoder
+ * renders at 2x (roughly 300dpi on paper), so it stays sharp at that size.
+ */
+.card[data-variant='print'] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2.5mm;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.card[data-variant='print'] .body {
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2.5mm;
+  min-inline-size: 0;
+}
+
+.card[data-variant='print'] .qrColumn {
+  flex: 0 0 auto;
+}
+
+/* The gold frame is dropped in favour of a plain rule: a heavy border around a
+   26mm square reads as a button, and the quiet zone is what makes a code scan. */
+.card[data-variant='print'] .qr {
+  inline-size: 26mm;
+  block-size: 26mm;
+  border: 0;
+  border-radius: 0;
+  /* A QR needs clear space around it to scan on the first try. 1.5mm is the
+     spec's quiet zone for this module size, and it reads as deliberate spacing
+     rather than padding around a widget. */
+  padding: 1.5mm;
+  background: #fff;
+}
+
+.card[data-variant='print'] .qrFallback {
+  inline-size: 26mm;
+  block-size: 26mm;
+  padding: 1mm;
+  border: var(--border-width) dashed var(--color-border-strong);
+  background: #fff;
+}
+
+.card[data-variant='print'] .fallbackText {
+  font-size: 5.5pt;
+  line-height: 1.25;
+}
+
+.card[data-variant='print'] .details {
+  gap: 0.4mm;
+}
+
+/* The amount is the one figure worth emphasising, and it is set in ink at 9pt -
+ * the same size the sheet's own total rows use. The screen variant's 2xl display
+   serif made the payment block compete with the totals block directly above it,
+   which is what made the page read as two documents. */
+.card[data-variant='print'] .amount {
+  font-family: var(--font-sans);
+  font-size: 9pt;
+  font-weight: var(--weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-ink);
+}
+
+.card[data-variant='print'] .payee {
+  font-size: 7.5pt;
+  line-height: 1.3;
+}
+
+.card[data-variant='print'] .vpa {
+  font-size: 8pt;
+  font-weight: var(--weight-medium);
+  line-height: 1.3;
+}
+
+.card[data-variant='print'] .note {
+  font-size: 6.5pt;
+  line-height: 1.25;
+}

@@ -179,6 +179,20 @@
   font-size: var(--font-size-sm);
 }
 
+/* Same panel as `.cancelNote`, in ink rather than muted: this one explains a
+   discrepancy a customer will otherwise notice between a printed invoice's total
+   and the amount its QR asks for (§8.5). */
+.balanceNote {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-inline-start: var(--border-width-accent) solid var(--color-gold);
+  border-radius: var(--radius-md);
+  background: var(--color-gold-soft);
+  color: var(--color-gold-ink);
+  font-size: var(--font-size-sm);
+}
+
 /* §4.4 FR-I6: paid and outstanding are what the user opened the invoice for, so
    they get a dedicated strip rather than a line in the totals panel. */
 .moneyStrip {

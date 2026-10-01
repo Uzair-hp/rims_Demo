@@ -88,6 +88,49 @@ def _issued_invoice(authed_client, client_id, grand_total_paise=100000):
     return authed_client.get(f"/api/v1/invoices/{invoice['id']}").get_json()["data"]["invoice"]
 
 
+def _draft_invoice(authed_client, client_id):
+    """An approved quotation converted to a Draft invoice, not yet issued.
+
+    Needed because the payment-method selector is only reachable while the invoice
+    is a Draft - the window in which FR-P8 lets the admin choose the presentation.
+    """
+    payload = {
+        "client_id": client_id,
+        "quotation_date": date.today().isoformat(),
+        "valid_until": (date.today() + timedelta(days=15)).isoformat(),
+        "discount_type": "percent",
+        "discount_bp": 0,
+        "gst_bp": 0,
+        "other_charges_paise": 0,
+        "items": [{"name": "Work", "qty_milli": 1000, "rate_paise": 100000}],
+    }
+    created = authed_client.post(
+        "/api/v1/quotations", json=payload, headers=_csrf(authed_client)
+    ).get_json()["data"]["quotation"]
+    for action in ("send", "approve"):
+        authed_client.post(
+            f"/api/v1/quotations/{created['id']}/status",
+            json={"action": action},
+            headers=_csrf(authed_client),
+        )
+    invoice = authed_client.post(
+        f"/api/v1/quotations/{created['id']}/invoice", headers=_csrf(authed_client)
+    ).get_json()["data"]["invoice"]
+    assert invoice["status"] == "draft"
+    return invoice
+
+
+def _set_method(authed_client, invoice_id, method, expect=200):
+    """PUT the draft-only payment method. `method=None` means 'Not Selected'."""
+    resp = authed_client.put(
+        f"/api/v1/invoices/{invoice_id}",
+        json={"payment_method": method},
+        headers=_csrf(authed_client),
+    )
+    assert resp.status_code == expect, resp.get_data(as_text=True)
+    return resp.get_json()["data"]["invoice"] if resp.status_code < 400 else resp.get_json()
+
+
 def _pay(authed_client, invoice_id, amount_paise, method="upi", expect=201, **extra):
     body = {
         "amount_paise": amount_paise,
@@ -568,3 +611,477 @@ def test_unknown_payment_is_404(authed_client):
 )
 def test_format_rupees_uses_indian_grouping(paise, expected):
     assert format_rupees(paise) == expected
+
+# ------------------------------------------- payment method on the invoice
+#
+# The invoice's payment line reports which method actually collected money. It is
+# read from the ledger on every request and never stored on the invoice: a method
+# belongs to a payment that arrived, so an invoice-level column would be a guess the
+# first payment could contradict. No migration, no new column.
+#
+# These reuse the helpers above rather than redeclaring them.
+
+
+def test_invoice_reports_no_payment_method_before_any_payment(authed_client):
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"])
+
+    assert invoice["latest_payment_method"] is None
+    assert invoice["payment_status"] == "unpaid"
+
+
+def test_invoice_reports_the_recorded_payment_method(authed_client):
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"])
+    _pay(authed_client, invoice["id"], 1000, method="upi")
+
+    assert _invoice(authed_client, invoice["id"])["latest_payment_method"] == "upi"
+
+
+def test_invoice_reports_the_most_recent_method_when_several_are_recorded(authed_client):
+    """A 20,000 UPI payment then 30,000 by bank transfer reads as the latter."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 2000000, method="upi")
+    _pay(authed_client, invoice["id"], 3000000, method="bank_transfer")
+
+    assert _invoice(authed_client, invoice["id"])["latest_payment_method"] == "bank_transfer"
+
+
+def test_payment_method_is_derived_and_never_written_to_the_invoice(authed_client):
+    """
+    The invoice's financial content is unchanged by a payment.
+
+    The strongest form: snapshot every stored invoice column before and after
+    recording a payment. If a method or an amount were ever persisted on the
+    invoice, this fails, which is what would turn an issued tax document into a
+    different document after money arrived.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.extensions.database import db
+    from app.models import Invoice
+
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+
+    def snapshot():
+        with authed_client.application.app_context():
+            row = db.session.get(Invoice, invoice["id"])
+            return {c.key: getattr(row, c.key) for c in sa_inspect(row).mapper.column_attrs}
+
+    before = snapshot()
+    # The column exists, but it is a *presentation* choice frozen at issue (FR-P8,
+    # migration b8d5f0e2c7a1) - not a record of how payment happened. The invariant
+    # is that a payment does not write it, not that it is absent.
+    assert "payment_method" in before
+    assert before["payment_method"] is None
+
+    _pay(authed_client, invoice["id"], 4000000, method="upi")
+
+    after = snapshot()
+    for field, value in before.items():
+        assert after[field] == value, f"recording a payment changed invoices.{field}"
+
+
+def test_balance_document_reports_the_latest_method(authed_client):
+    """The reminder says how the customer has been paying, from the same ledger."""
+    resp = authed_client.put(
+        "/api/v1/settings/company",
+        json={"upi_id": "ruchitainteriors@upi"},
+        headers=_csrf(authed_client),
+    )
+    assert resp.status_code == 200
+
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 4000000, method="upi")
+
+    due = authed_client.get(f"/api/v1/invoices/{invoice['id']}/payment-due")
+    assert due.status_code == 200
+    assert due.get_json()["data"]["payment_due"]["latest_payment_method"] == "upi"
+
+
+def test_fully_paid_invoice_still_reports_its_final_method(authed_client):
+    """
+    Settling an invoice does not rewrite it, it only stops the reminder.
+
+    The method stays readable on both surfaces afterwards: the ledger remembers what
+    happened, and hiding it would discard an accounting fact rather than preserve the
+    document.
+    """
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 10000000, method="cash")
+
+    settled = _invoice(authed_client, invoice["id"])
+    assert settled["payment_status"] == "paid"
+    assert settled["latest_payment_method"] == "cash"
+
+    # And no further collection document is producible.
+    again = authed_client.get(f"/api/v1/invoices/{invoice['id']}/payment-due")
+    assert again.status_code == 422
+
+
+# ------------------------------------------------ Balance / Payment Due doc
+#
+# The document is a *read* of the invoice and its ledger (8.5). Every test here is
+# written to fail if that ever stops being true: a balance invoice that persisted
+# would double-count revenue in `services/dashboard.py`, which sums
+# `invoices.grand_total_paise` over issued invoices.
+
+
+def _payment_due(authed_client, invoice_id, expect=200):
+    resp = authed_client.get(f"/api/v1/invoices/{invoice_id}/payment-due")
+    assert resp.status_code == expect, resp.get_data(as_text=True)
+    if expect != 200:
+        return resp.get_json()
+    return resp.get_json()["data"]["payment_due"]
+
+
+def _set_upi(authed_client, vpa="ruchitainteriors@upi", name="Ruchita Interiors"):
+    resp = authed_client.put(
+        "/api/v1/settings/company",
+        json={"upi_id": vpa, "company_name": name},
+        headers=_csrf(authed_client),
+    )
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+
+def test_balance_document_requires_authentication(client):
+    assert client.get("/api/v1/invoices/1/payment-due").status_code == 401
+
+
+def test_balance_for_unpaid_invoice_is_the_full_total(authed_client):
+    """Nothing paid yet, so the balance is the whole invoice."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["outstanding_paise"] == 10000000
+    assert doc["amount_due_paise"] == 10000000
+    assert doc["paid_paise"] == 0
+    assert doc["payment_status"] == "unpaid"
+
+
+def test_balance_after_a_partial_payment_is_the_remainder(authed_client):
+    """40,000 paid on 1,00,000 leaves 60,000."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 4000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["grand_total_paise"] == 10000000
+    assert doc["paid_paise"] == 4000000
+    assert doc["outstanding_paise"] == 6000000
+    assert doc["payment_status"] == "partially_paid"
+
+
+def test_balance_follows_a_second_partial_payment(authed_client):
+    """A further 20,000 takes 60,000 down to 40,000."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 4000000)
+    _pay(authed_client, invoice["id"], 2000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["paid_paise"] == 6000000
+    assert doc["outstanding_paise"] == 4000000
+
+
+def test_fully_paid_invoice_has_no_balance_document(authed_client):
+    """Nothing is owed, so there is no document and no QR to print."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 10000000)
+
+    assert _invoice(authed_client, invoice["id"])["payment_status"] == "paid"
+    body = _payment_due(authed_client, invoice["id"], expect=422)
+    assert "fully paid" in body["error"]["message"].lower()
+
+
+def test_balance_qr_encodes_the_current_outstanding(authed_client):
+    """
+    The QR amount is the balance, and matches the amount reported.
+
+    A QR asking for the original total after a partial payment would over-collect,
+    so the encoded `am` is asserted against the same field the document displays.
+    """
+    _set_upi(authed_client)
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 4000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["upi_amount"] == "60000.00"
+    assert "am=60000.00" in doc["upi_uri"]
+    assert doc["upi_uri"].startswith("upi://pay?")
+    assert "pa=ruchitainteriors%40upi" in doc["upi_uri"]
+    assert "cu=INR" in doc["upi_uri"]
+
+
+def test_balance_qr_is_absent_without_a_configured_upi_id(authed_client):
+    """No UPI ID means no QR, not a QR for nothing."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["upi_uri"] is None
+    assert doc["upi_id"] == ""
+
+
+def test_generating_a_balance_document_writes_nothing(authed_client):
+    """
+    No revenue row, no payment row, no ledger movement.
+
+    Asserted by counting the two tables the document must never touch, and by
+    confirming the derived status is unchanged afterwards. This is the test that
+    fails first if anyone ever makes this endpoint persist a document.
+    """
+    from sqlalchemy import func, select
+
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 4000000)
+
+    with authed_client.application.app_context():
+        before_invoices = db.session.scalar(select(func.count()).select_from(Invoice))
+        before_payments = db.session.scalar(select(func.count()).select_from(Payment))
+        before_total = db.session.scalar(
+            select(func.coalesce(func.sum(Invoice.grand_total_paise), 0))
+        )
+
+    first = _payment_due(authed_client, invoice["id"])
+    second = _payment_due(authed_client, invoice["id"])  # twice, as a repeat cycle would
+
+    with authed_client.application.app_context():
+        after_invoices = db.session.scalar(select(func.count()).select_from(Invoice))
+        after_payments = db.session.scalar(select(func.count()).select_from(Payment))
+        after_total = db.session.scalar(
+            select(func.coalesce(func.sum(Invoice.grand_total_paise), 0))
+        )
+
+    assert after_invoices == before_invoices, "a balance document created an invoice row"
+    assert after_payments == before_payments, "a balance document created a payment row"
+    assert after_total == before_total, "a balance document changed billed revenue"
+    # Two documents, one source invoice, identical figures.
+    assert first["source_invoice_id"] == second["source_invoice_id"] == invoice["id"]
+    assert first["outstanding_paise"] == second["outstanding_paise"] == 6000000
+
+
+def test_repeat_balance_documents_track_the_ledger_not_the_last_document(authed_client):
+    """Each generation re-reads, so the sequence is 75k then 45k."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 2500000)
+    first = _payment_due(authed_client, invoice["id"])
+    assert first["outstanding_paise"] == 7500000
+
+    _pay(authed_client, invoice["id"], 3000000)
+    second = _payment_due(authed_client, invoice["id"])
+    assert second["outstanding_paise"] == 4500000
+
+    # The earlier figure is a snapshot and is not retroactively "wrong": the endpoint
+    # has no memory of it at all.
+    assert first["outstanding_paise"] == 7500000
+
+
+def test_balance_document_reports_the_source_invoice_not_its_own_number(authed_client):
+    """No second document number: it is referenced by the invoice it concerns."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["source_invoice_number"] == invoice["number"]
+    # A `number` of its own would read as a second billing document.
+    assert "number" not in doc
+    assert doc["title"] == "PAYMENT DUE"
+    assert doc["kind"] == "payment_due"
+
+
+def test_balance_document_is_refused_for_a_cancelled_invoice(authed_client):
+    """A cancelled invoice must never produce a demand for money."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    cancelled = authed_client.post(
+        f"/api/v1/invoices/{invoice['id']}/cancel", headers=_csrf(authed_client)
+    )
+    assert cancelled.status_code == 200
+
+    assert _payment_due(authed_client, invoice["id"], expect=422) is not None
+
+
+def test_balance_document_is_refused_for_a_draft_invoice(authed_client):
+    """A draft has not been billed, so there is nothing to collect."""
+    created = authed_client.post(
+        "/api/v1/quotations",
+        json={
+            "client_id": _make_client(authed_client)["id"],
+            "quotation_date": date.today().isoformat(),
+            "valid_until": (date.today() + timedelta(days=15)).isoformat(),
+            "discount_type": "percent",
+            "discount_bp": 0,
+            "gst_bp": 0,
+            "other_charges_paise": 0,
+            "items": [{"name": "Work", "qty_milli": 1000, "rate_paise": 100000}],
+        },
+        headers=_csrf(authed_client),
+    )
+    quotation = created.get_json()["data"]["quotation"]
+    # A quotation only converts from `approved` (13.2), so walk it there first.
+    for action in ("send", "approve"):
+        authed_client.post(
+            f"/api/v1/quotations/{quotation['id']}/status",
+            json={"action": action},
+            headers=_csrf(authed_client),
+        )
+    converted = authed_client.post(
+        f"/api/v1/quotations/{quotation['id']}/invoice", headers=_csrf(authed_client)
+    )
+    assert converted.status_code in (200, 201), converted.get_data(as_text=True)
+    draft = converted.get_json()["data"]["invoice"]
+
+    assert draft["status"] == "draft"
+    assert _payment_due(authed_client, draft["id"], expect=422) is not None
+
+
+def test_balance_document_ignores_untrusted_status_and_amount_fields(authed_client):
+    """
+    A client cannot assert its own status or amount.
+
+    There is no `payment_status` to set and no amount in the request at all - the
+    document is built entirely from the ledger - so the strongest form of this test
+    is that query parameters are ignored rather than honoured.
+    """
+    _set_upi(authed_client)
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+
+    resp = authed_client.get(
+        f"/api/v1/invoices/{invoice['id']}/payment-due"
+        "?outstanding_paise=1&amount_due_paise=1&payment_status=paid"
+    )
+    doc = resp.get_json()["data"]["payment_due"]
+
+    assert doc["outstanding_paise"] == 10000000
+    assert doc["amount_due_paise"] == 10000000
+    assert doc["payment_status"] == "unpaid"
+    assert "am=100000.00" in doc["upi_uri"]
+
+
+def test_existing_payment_status_still_drives_the_balance(authed_client):
+    """The document reports the same derived status the invoice does."""
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+
+    # Unpaid: the document and the invoice agree.
+    assert _payment_due(authed_client, invoice["id"])["payment_status"] == _invoice(
+        authed_client, invoice["id"]
+    )["payment_status"] == "unpaid"
+
+    # Partially paid: still the same single derived figure on both surfaces.
+    _pay(authed_client, invoice["id"], 4000000)
+    assert _payment_due(authed_client, invoice["id"])["payment_status"] == _invoice(
+        authed_client, invoice["id"]
+    )["payment_status"] == "partially_paid"
+
+    # Paid: the document is refused, and the status says why.
+    _pay(authed_client, invoice["id"], 6000000)
+    assert _invoice(authed_client, invoice["id"])["payment_status"] == "paid"
+    assert _payment_due(authed_client, invoice["id"], expect=422) is not None
+
+
+def test_balance_amount_uses_invoice_paise_without_float_error(authed_client):
+    """A decimal total must produce an exact `am`, never a rounded float artefact."""
+    _set_upi(authed_client)
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=600050)
+    _pay(authed_client, invoice["id"], 50)
+
+    doc = _payment_due(authed_client, invoice["id"])
+
+    assert doc["outstanding_paise"] == 600000
+    assert doc["upi_amount"] == "6000.00"
+    assert "am=6000.00" in doc["upi_uri"]
+
+
+# ------------------------------------- FR-P8: the invoice's payment presentation
+
+
+def test_payment_method_is_chosen_while_draft_and_frozen_at_issue(authed_client):
+    """
+    The selector is reachable only before issue, and that is what makes the printed
+    presentation permanent rather than something the first payment can change.
+    """
+    draft = _draft_invoice(authed_client, _make_client(authed_client)["id"])
+    assert draft["payment_method"] is None, "a converted invoice defaults to Not Selected"
+
+    chosen = _set_method(authed_client, draft["id"], "upi")
+    assert chosen["payment_method"] == "upi"
+
+    # Past issue the draft guard refuses, so no later edit can alter the document.
+    authed_client.post(f"/api/v1/invoices/{draft['id']}/issue", headers=_csrf(authed_client))
+    refused = _set_method(authed_client, draft["id"], "cash", expect=422)
+    assert "Only draft invoices can be edited" in refused["error"]["message"]
+    assert _invoice(authed_client, draft["id"])["payment_method"] == "upi"
+
+
+def test_payment_method_accepts_only_the_offered_choices(authed_client):
+    """Cheque and card are real ledger methods but are not invoice presentations."""
+    draft = _draft_invoice(authed_client, _make_client(authed_client)["id"])
+
+    for bad in ("cheque", "card", "other", "UPI", "bank"):
+        _set_method(authed_client, draft["id"], bad, expect=422)
+
+    assert _invoice(authed_client, draft["id"])["payment_method"] is None
+
+
+def test_payment_method_can_be_cleared_back_to_not_selected(authed_client):
+    """'Not Selected' is a real state, not just the absence of a choice."""
+    draft = _draft_invoice(authed_client, _make_client(authed_client)["id"])
+    _set_method(authed_client, draft["id"], "bank_transfer")
+
+    cleared = _set_method(authed_client, draft["id"], None)
+    assert cleared["payment_method"] is None
+
+
+def test_paying_by_a_different_method_does_not_change_the_invoices_presentation(authed_client):
+    """
+    The load-bearing FR-P8 case.
+
+    The invoice is issued presenting UPI; the client then pays by bank transfer. The
+    invoice keeps the UPI presentation, and the ledger records the truth. Conflating
+    the two is exactly the bug this split prevents.
+    """
+    draft = _draft_invoice(authed_client, _make_client(authed_client)["id"])
+    _set_method(authed_client, draft["id"], "upi")
+    authed_client.post(f"/api/v1/invoices/{draft['id']}/issue", headers=_csrf(authed_client))
+
+    _pay(authed_client, draft["id"], 40000, method="bank_transfer")
+
+    after = _invoice(authed_client, draft["id"])
+    assert after["payment_method"] == "upi", "a payment rewrote the invoice's presentation"
+    assert after["latest_payment_method"] == "bank_transfer", "the ledger must keep the truth"
+    assert after["payment_status"] == "partially_paid"
+
+
+def test_the_presentation_survives_a_mixed_sequence_of_payments(authed_client):
+    """Three payments by three different methods, one unchanged invoice."""
+    draft = _draft_invoice(authed_client, _make_client(authed_client)["id"])
+    _set_method(authed_client, draft["id"], "upi")
+    authed_client.post(f"/api/v1/invoices/{draft['id']}/issue", headers=_csrf(authed_client))
+
+    _pay(authed_client, draft["id"], 20000, method="cash")
+    _pay(authed_client, draft["id"], 30000, method="bank_transfer")
+    _pay(authed_client, draft["id"], 50000, method="upi")
+
+    after = _invoice(authed_client, draft["id"])
+    assert after["payment_method"] == "upi"
+    assert after["payment_status"] == "paid"
+    assert after["paid_paise"] == 100000
+    assert after["outstanding_paise"] == 0
+
+
+def test_a_cancelled_invoices_method_never_reaches_the_balance_document(authed_client):
+    """
+    The Balance / Payment Due document is regenerated per collection, so it is free to
+    reflect the current ledger - but it must not present the invoice's frozen choice
+    as if it were its own. The reminder always offers both rails and names what
+    actually collected the money.
+    """
+    draft = _draft_invoice(authed_client, _make_client(authed_client)["id"])
+    _set_method(authed_client, draft["id"], "cash")
+    authed_client.post(f"/api/v1/invoices/{draft['id']}/issue", headers=_csrf(authed_client))
+
+    _pay(authed_client, draft["id"], 40000, method="upi")
+
+    doc = _payment_due(authed_client, draft["id"])
+    assert doc["latest_payment_method"] == "upi"
+    assert "payment_method" not in doc, "the reminder must not inherit the invoice's frozen choice"

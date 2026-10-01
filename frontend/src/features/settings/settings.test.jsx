@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../auth/AuthProvider.jsx'
@@ -136,96 +136,113 @@ const companyPut = ({ calls }) =>
  * fields. These assert the two halves of that: the upload posts on its own
  * endpoint, and the section's PUT is never used to set a path.
  */
-describe('settings — UPI QR subsection', () => {
-  it('offers the QR control inside the payment section when none is set', async () => {
+describe('settings — UPI ID', () => {
+  // §8.5: the QR used to be an uploaded image with its own subsection here. It is
+  // now **generated** from this ID and the outstanding balance (§8.5, amended), so
+  // the upload control is gone and the only thing to configure is the ID itself.
+  //
+  // What matters now is that a typo is caught before it can misdirect a customer's
+  // payment: a malformed VPA produces a QR that opens an app pointed at an account
+  // that does not exist. The check is deliberately permissive — a provider suffix is
+  // not a fixed list, so rejecting a real one would block a real payment.
+
+  it('has no upload control — the QR is generated from the ID', async () => {
     mockApi()
     renderPage()
 
     const bank = await screen.findByRole('region', { name: /payment & bank/i })
-    const control = within(bank).getByLabelText(/upi qr code/i)
-    expect(control).toHaveAttribute('type', 'file')
-    // The whole point: it says the code is not snapshotted.
-    expect(within(bank).getByText(/never snapshotted/i)).toBeInTheDocument()
-    // Nothing to remove yet, so no destructive button is offered.
+    const id = within(bank).getByLabelText(/upi id/i)
+    expect(id).toBeInTheDocument()
+    // The file input that Phase 8 put here is gone.
+    expect(within(bank).queryByLabelText(/upi qr code/i)).toBeNull()
     expect(within(bank).queryByRole('button', { name: /remove qr/i })).toBeNull()
+    // And the section says why there is nothing to upload.
+    expect(within(bank).getByText(/nothing to upload/i)).toBeInTheDocument()
   })
 
-  it('uploads a QR immediately, without a section save', async () => {
+  it('accepts any provider suffix without complaining', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    // One save per address, each with a fresh mock, because `companyPut` returns the
+    // *first* matching PUT and this loop makes several — asserting on it across
+    // iterations would read the previous iteration's body and pass for the wrong
+    // reason.
+    for (const vpa of ['ruchitainteriors@upi', 'name@okaxis', '6011@mobikwik', 'name@paytm']) {
+      const api = mockApi()
+      const field = within(bank).getByLabelText(/upi id/i)
+      await user.clear(field)
+      await user.type(field, vpa)
+      await user.click(within(bank).getByRole('button', { name: /save/i }))
+
+      await waitFor(() => expect(companyPut(api)).toBeTruthy())
+      expect(JSON.parse(companyPut(api).init.body).upi_id).toBe(vpa)
+      // No inline complaint about the shape of the address itself.
+      expect(within(bank).queryByText(/business@okaxis/i)).toBeNull()
+    }
+  })
+
+  it('rejects a VPA with no @ before any request is made', async () => {
     const { calls } = mockApi()
     const user = userEvent.setup()
     renderPage()
 
     const bank = await screen.findByRole('region', { name: /payment & bank/i })
-    const file = new File([new Uint8Array([1, 2, 3])], 'qr.png', { type: 'image/png' })
-    await user.upload(within(bank).getByLabelText(/upi qr code/i), file)
+    const field = within(bank).getByLabelText(/upi id/i)
+    await user.clear(field)
+    await user.type(field, 'not-a-vpa')
+    await user.click(within(bank).getByRole('button', { name: /save/i }))
 
-    await waitFor(() => {
-      expect(calls.some((c) => c.path === '/settings/payment-qr' && c.method === 'POST')).toBe(true)
-    })
-    // The bank fields were not saved as a side effect of the upload.
+    expect(await within(bank).findByText(/business@okaxis/i)).toBeInTheDocument()
     expect(companyPut({ calls })).toBeUndefined()
   })
 
-  it('blocks SVG at the picker, and again in the handler if one gets past', async () => {
+  it('rejects a VPA containing a space before any request is made', async () => {
     const { calls } = mockApi()
     const user = userEvent.setup()
     renderPage()
 
     const bank = await screen.findByRole('region', { name: /payment & bank/i })
-    const input = within(bank).getByLabelText(/upi qr code/i)
-    // First line of defence: the picker itself will not offer an SVG.
-    expect(input).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp')
+    const field = within(bank).getByLabelText(/upi id/i)
+    await user.clear(field)
+    await user.type(field, 'my upi@okaxis')
+    await user.click(within(bank).getByRole('button', { name: /save/i }))
 
-    await user.upload(input, new File(['<svg/>'], 'qr.svg', { type: 'image/svg+xml' }))
-    expect(calls.some((c) => c.path === '/settings/payment-qr')).toBe(false)
-
-    // Second line of defence, for a file forced past the picker: the handler
-    // still refuses, and still sends no request.
-    fireEvent.change(input, {
-      target: { files: [new File(['<svg/>'], 'qr.svg', { type: 'image/svg+xml' })] },
-    })
-
-    expect(await within(bank).findByRole('alert')).toHaveTextContent(/SVG/i)
-    expect(calls.some((c) => c.path === '/settings/payment-qr')).toBe(false)
+    expect(await within(bank).findByText(/cannot contain spaces/i)).toBeInTheDocument()
+    expect(companyPut({ calls })).toBeUndefined()
   })
 
-  it('rejects an oversize QR before any request is made', async () => {
+  it('rejects a VPA with nothing on one side of the @', async () => {
     const { calls } = mockApi()
-    renderPage()
-
-    const bank = await screen.findByRole('region', { name: /payment & bank/i })
-    const input = within(bank).getByLabelText(/upi qr code/i)
-    fireEvent.change(input, {
-      target: { files: [new File([new Uint8Array(3 * 1024 * 1024)], 'qr.png', { type: 'image/png' })] },
-    })
-
-    expect(await within(bank).findByRole('alert')).toHaveTextContent(/2 MB or smaller/i)
-    expect(calls.some((c) => c.path === '/settings/payment-qr')).toBe(false)
-  })
-
-  it('offers Remove only when a QR is stored', async () => {
-    mockApi({ settings: { ...SETTINGS, payment_qr_path: 'payment-qr/abc.png' } })
-    renderPage()
-
-    const bank = await screen.findByRole('region', { name: /payment & bank/i })
-    expect(within(bank).getByRole('img', { name: /upi payment qr code/i })).toHaveAttribute(
-      'src',
-      expect.stringContaining('/uploads/payment-qr'),
-    )
-    expect(within(bank).getByRole('button', { name: /remove qr/i })).toBeInTheDocument()
-  })
-
-  it('removes a stored QR', async () => {
-    const { calls } = mockApi({ settings: { ...SETTINGS, payment_qr_path: 'payment-qr/abc.png' } })
     const user = userEvent.setup()
     renderPage()
 
     const bank = await screen.findByRole('region', { name: /payment & bank/i })
-    await user.click(within(bank).getByRole('button', { name: /remove qr/i }))
+    const field = within(bank).getByLabelText(/upi id/i)
+    await user.clear(field)
+    await user.type(field, '@okaxis')
+    await user.click(within(bank).getByRole('button', { name: /save/i }))
 
-    await waitFor(() => {
-      expect(calls.some((c) => c.path === '/settings/payment-qr' && c.method === 'DELETE')).toBe(true)
-    })
+    expect(await within(bank).findByText(/both sides of the/i)).toBeInTheDocument()
+    expect(companyPut({ calls })).toBeUndefined()
+  })
+
+  it('treats an empty ID as valid — the QR is simply turned off', async () => {
+    // An owner who has not set up a UPI account must still be able to save their
+    // bank details, and an empty ID is the documented way to say "no QR".
+    const api = mockApi()
+    const user = userEvent.setup()
+    renderPage()
+
+    const bank = await screen.findByRole('region', { name: /payment & bank/i })
+    await user.clear(within(bank).getByLabelText(/upi id/i))
+    await user.type(within(bank).getByLabelText(/account name/i), 'Ruchita Interiors LLP')
+    await user.click(within(bank).getByRole('button', { name: /save/i }))
+
+    await waitFor(() => expect(companyPut(api)).toBeTruthy())
+    expect(JSON.parse(companyPut(api).init.body).bank_account_name).toBe('Ruchita Interiors LLP')
+    expect(within(bank).queryByText(/business@okaxis/i)).toBeNull()
   })
 })
 

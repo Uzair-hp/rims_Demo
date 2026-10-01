@@ -47,3 +47,16 @@ export const issueInvoice = (id) => post(`/invoices/${id}/issue`).then((body) =>
 
 /** Refused with 422 once a payment exists; releases the quotation when it succeeds. */
 export const cancelInvoice = (id) => post(`/invoices/${id}/cancel`).then((body) => body.data.invoice)
+
+/**
+ * GET /invoices/:id/payment-due — the Balance / Payment Due document (§8.5).
+ *
+ * A **read**: the server re-derives the balance from the payment ledger on every
+ * call and writes nothing, so the document can never add revenue or a payment row
+ * and can never be stale. Refused with 422 when the invoice is not issued or nothing
+ * is outstanding.
+ *
+ * @returns {object} the payment-due payload
+ */
+export const fetchPaymentDue = (id) =>
+  get(`/invoices/${id}/payment-due`).then((body) => body.data.payment_due)

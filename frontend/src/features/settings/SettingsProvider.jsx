@@ -12,7 +12,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { fetchCompanySettings, logoImageUrl, paymentQrImageUrl } from '../../api/endpoints/settings.js'
+import { fetchCompanySettings, logoImageUrl } from '../../api/endpoints/settings.js'
 
 const SettingsContext = createContext(null)
 
@@ -86,12 +86,13 @@ export function SettingsProvider({ children }) {
       error,
       logoSrc: logoImageUrl(settings),
       /**
-       * Live payment QR (§8.5). Derived from the same settings row, so uploading
-       * or replacing the QR is a normal `refresh()` and every consumer — the
-       * Settings preview, the invoice preview and the printed document — picks
-       * up the new code at once. Never read from a document's bank snapshot.
+       * No `qrSrc` any more. The UPI QR used to be an uploaded image served from
+       * an authenticated route, so it had to be fetched and shared as a URL
+       * (§8.5, Phase 8). It is now **generated** from a UPI intent URI for the
+       * amount being collected, so there is no image to fetch: consumers build it
+       * from `settings.upi_id` via `lib/upi.js`. Live from Settings and never from
+       * a document's bank snapshot, which is the property that actually mattered.
        */
-      qrSrc: paymentQrImageUrl(settings),
       refresh: load,
       /** Merge a freshly saved row into local state without a round trip. */
       applySettings: (row) => {

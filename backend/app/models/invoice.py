@@ -30,6 +30,14 @@ class Invoice(db.Model):
             "status IN ('draft','issued','cancelled')",
             name="ck_invoices_status",
         ),
+        # The payment *presentation* chosen before issue. NULL is "Not Selected",
+        # which prints both UPI and bank transfer. Distinct from payments.method,
+        # which records how the client actually paid and is never copied here.
+        db.CheckConstraint(
+            "payment_method IS NULL OR payment_method IN "
+            "('upi','bank_transfer','cash')",
+            name="ck_invoices_payment_method",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -56,6 +64,9 @@ class Invoice(db.Model):
     grand_total_paise = db.Column(db.Integer)
 
     terms_text = db.Column(db.Text)
+    # How this invoice presents its payment options, chosen while draft and frozen
+    # at issue by the draft-only edit guard. See migration b8d5f0e2c7a1.
+    payment_method = db.Column(db.String(16))
     bank_snapshot = db.Column(db.JSON)
     signatory_name = db.Column(db.String(200))
     notes = db.Column(db.Text)

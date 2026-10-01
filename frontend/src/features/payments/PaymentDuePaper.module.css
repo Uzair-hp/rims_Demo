@@ -1,0 +1,327 @@
+/*
+ * Ruchita Interiors — Balance / Payment Due sheet (§8.5).
+ *
+ * Deliberately a near-subset of `DocumentPaper.module.css`: the same 186mm A4 box,
+ * the same mm/pt scale, the same header band and gold rule, so a payment reminder
+ * and the invoice it refers to look like the same business's paperwork. It is a
+ * separate file rather than extra classes in the document sheet because this is a
+ * different kind of document — a notice, not a bill — and keeping them apart stops
+ * a change to one from reflowing the other.
+ *
+ * The one place it diverges on purpose: the "Amount due now" row owns the brand
+ * gold, because on this sheet that single figure *is* the document. On an invoice
+ * the gold row is the grand total; here it is the balance, for the same reason.
+ */
+
+.paper {
+  /* 210mm A4 minus the 12mm page margins in print.css. */
+  inline-size: 186mm;
+  margin-inline: auto;
+  padding: 10mm;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 9.5pt;
+  line-height: 1.4;
+}
+
+@media screen {
+  .paper {
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 1. Header band — identical treatment to the invoice sheet
+ * ------------------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6mm;
+  padding-block-end: 3mm;
+  border-block-end: 0.6mm solid var(--color-gold);
+}
+
+.logo {
+  max-block-size: 16mm;
+  inline-size: auto;
+  max-inline-size: 62mm;
+}
+
+.headerText {
+  min-inline-size: 0;
+  text-align: end;
+}
+
+.companyName {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-ink);
+}
+
+.companyAddress,
+.companyMeta {
+  margin: 0;
+  font-size: 8pt;
+  color: var(--color-ink-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * 2. Title strip
+ * ------------------------------------------------------------------ */
+
+.titleStrip {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6mm;
+  padding-block: 4mm;
+}
+
+/* "PAYMENT DUE" is set in the same calmer display face as the invoice's
+   "TAX INVOICE", so the two documents are recognisably siblings. */
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+
+/* The reference to the source invoice is the most important identifier on the
+   sheet — more so than any number of its own, because it has none. */
+.reference {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5mm;
+  margin: 0;
+}
+
+.referenceLabel {
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.referenceValue {
+  font-size: 11pt;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * 3. Client block
+ * ------------------------------------------------------------------ */
+
+.clientBlock {
+  padding-block: 3mm;
+  border-block: var(--border-width) solid var(--color-border);
+}
+
+.blockLabel {
+  margin: 0 0 1.5mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.clientName {
+  margin: 0 0 1mm;
+  font-size: 11pt;
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.clientAddress {
+  margin: 0;
+  font-size: 9pt;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. Balance summary
+ * ------------------------------------------------------------------ */
+
+.summary {
+  margin-block-start: 4mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.summaryRows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.summaryRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6mm;
+  padding-block: 1.5mm;
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+.summaryRow dt {
+  font-size: 9.5pt;
+  color: var(--color-ink-muted);
+}
+
+.summaryRow dd {
+  margin: 0;
+  font-size: 10.5pt;
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-ink);
+}
+
+/* The one figure the customer is here to pay: the brand moment of this sheet, and
+   the counterpart to the invoice's grand-total row. */
+.summaryRow:last-child {
+  margin-block-start: 1mm;
+  padding: 2mm 2.5mm;
+  background: var(--color-gold-soft);
+  border: 0;
+  border-inline-start: 0.7mm solid var(--color-gold);
+}
+
+.summaryRow:last-child dt {
+  font-size: 11pt;
+  font-weight: var(--weight-bold);
+  color: var(--color-gold-ink);
+}
+
+.summaryDue {
+  font-size: 12pt !important;
+  font-weight: var(--weight-bold) !important;
+  color: var(--color-gold-ink) !important;
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. QR
+ * ------------------------------------------------------------------ */
+
+/*
+ * The scan card, in its `variant="print"` form.
+ *
+ * This rule is now *layout only*. The rules that flatten the card — no shadow, no
+ * rounded chrome, no buttons, no disclaimer — live in `UpiQrCard.module.css`
+ * behind `[data-variant='print']`, because the `.qrCard .actions` selectors that
+ * used to sit here compiled to this module's own hash and could never match an
+ * element carrying the card's hash. They shipped, matched nothing, and left both
+ * documents rendering the full screen card. The one thing left to own here is where
+ * the block sits on the page.
+ */
+.qrCard {
+  margin-block-start: 4mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* ------------------------------------------------------------------ *
+ * 6. Bank details — an alternative, not a second demand
+ * ------------------------------------------------------------------ */
+
+.bank {
+  margin-block-start: 5mm;
+  padding: 3mm 4mm;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.bankRows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1mm 6mm;
+  margin: 0;
+}
+
+.bankRow {
+  display: flex;
+  gap: 2mm;
+  align-items: baseline;
+  min-inline-size: 0;
+}
+
+.bankRow dt {
+  flex: 0 0 26mm;
+  font-size: 8pt;
+  color: var(--color-ink-muted);
+}
+
+.bankRow dd {
+  margin: 0;
+  font-size: 9pt;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * 7. Footer
+ * ------------------------------------------------------------------ */
+
+.footer {
+  margin-block-start: 6mm;
+  padding-block-start: 3mm;
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+.generated {
+  margin: 0 0 1.5mm;
+  font-size: 8pt;
+  color: var(--color-ink-muted);
+}
+
+/* States plainly that this is a reminder and that the figure is a snapshot. A
+   customer who thinks they are being re-invoiced will dispute it, and they would
+   be right to. */
+.disclaimer {
+  margin: 0 0 2mm;
+  font-size: 8pt;
+  line-height: 1.45;
+  color: var(--color-ink-muted);
+}
+
+.notice {
+  margin: 0 0 2mm;
+  font-size: 8.5pt;
+  font-style: italic;
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.signatory {
+  margin: 0 0 1mm;
+  font-family: var(--font-display);
+  font-size: 10pt;
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+}
+
+.footerText {
+  margin: 0;
+  font-size: 7.5pt;
+  color: var(--color-ink-subtle);
+}

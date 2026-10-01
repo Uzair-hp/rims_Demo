@@ -136,6 +136,104 @@ def calculate_totals(
     )
 
 
+# ---- UPI intent URIs ----
+#
+# §8.5. Built here, beside the money arithmetic and for the same reason: this module
+# is the one place allowed to decide what a number means, and a URI that asks for a
+# different figure than the document displays is a collection bug.
+
+#: The only currency this app issues documents in. Fixed, not configurable.
+UPI_CURRENCY = "INR"
+
+#: UPI scheme prefix defined by NPCI.
+UPI_SCHEME = "upi://pay"
+
+#: UPI apps truncate long notes, and a longer payload needs a denser QR. The invoice
+#: number is what makes a note useful to a payer, so the tail is kept.
+UPI_NOTE_MAX_LENGTH = 64
+
+
+def format_upi_amount(paise: int) -> str:
+    """
+    Integer paise as the plain decimal string UPI expects ("600050" -> "6000.50").
+
+    No currency symbol and no thousands separators, because `am` is a machine-readable
+    number. Integer arithmetic throughout: `paise / 100` in Python would give
+    "6000.5" or, for values that are not exactly representable in binary floating
+    point, something like "6000.499999999999" — a QR that asks for a fraction of a
+    paisa less than the invoice, which no reviewer would spot by eye.
+
+    Non-positive and non-integer values clamp to "0.00" rather than raising, so a bad
+    input produces a caller that declines to build a URI (see `build_upi_uri`) instead
+    of a 500 mid-request.
+    """
+    try:
+        value = int(paise)
+    except (TypeError, ValueError):
+        return "0.00"
+    if value <= 0:
+        return "0.00"
+    return f"{value // 100}.{value % 100:02d}"
+
+
+def _clean_upi_param(value: str | None) -> str:
+    """
+    Keep a query parameter's characters safe and useful.
+
+    Vendor names legitimately contain `.`, `-`, `&`, `/` and spaces ("Ruchita & Co",
+    "M/s Verma"), so those survive — `encodeURIComponent` handles them. Only control
+    characters are dropped, and runs of whitespace collapsed, so a hostile or
+    accidental value cannot inject extra URI parameters.
+    """
+    if value is None:
+        return ""
+    return " ".join(str(value).split())
+
+
+def build_upi_uri(
+    *, vpa: str | None, payee_name: str | None = None, amount_paise: int, note: str | None = None
+) -> str | None:
+    """
+    Build a UPI payment intent URI, or None when there is nothing to ask for.
+
+    Returns `None` — rather than a URI with an empty or zero `am` — when the VPA is
+    missing or malformed, or the amount is not positive. That distinction matters to
+    the caller: "no QR configured" is a normal state that falls back to showing the
+    UPI ID as text, while a QR that opens a payment app asking for ₹0 reads as a
+    broken feature to a customer.
+
+    `vpa` is validated only as "contains an @" rather than against a provider
+    allow-list, for the same reason the settings validator is permissive: a VPA's
+    provider suffix is not an enumerable set, and rejecting a legitimate one would
+    block a real payment.
+    """
+    address = _clean_upi_param(vpa)
+    if not address or "@" not in address:
+        return None
+
+    try:
+        if int(amount_paise) <= 0:
+            return None
+    except (TypeError, ValueError):
+        return None
+
+    params = [
+        ("pa", address),
+        ("pn", _clean_upi_param(payee_name) or "Merchant"),
+        ("am", format_upi_amount(amount_paise)),
+        ("cu", UPI_CURRENCY),
+    ]
+
+    cleaned_note = _clean_upi_param(note)
+    if cleaned_note:
+        params.append(("tn", cleaned_note[:UPI_NOTE_MAX_LENGTH]))
+
+    from urllib.parse import quote
+
+    query = "&".join(f"{key}={quote(value, safe='')}" for key, value in params)
+    return f"{UPI_SCHEME}?{query}"
+
+
 # ---- Validation helpers ----
 
 def validate_line(qty_milli: int, rate_paise: int, name: str) -> list[str]:

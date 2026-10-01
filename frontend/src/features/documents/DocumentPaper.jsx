@@ -24,7 +24,6 @@
  *   document: object,
  *   settings?: object,
  *   logoSrc?: string | null,
- *   qrSrc?: string | null,
  *   titleLevel?: 1 | 2,
  *   numberOverride?: string,
  *   isUnsaved?: boolean,
@@ -35,6 +34,7 @@ import { useState } from 'react'
 import { calcLineTotal, milliToInput } from '../../lib/calc.js'
 import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
+import UpiQrCard from '../payments/UpiQrCard.jsx'
 import styles from './DocumentPaper.module.css'
 
 /**
@@ -44,6 +44,44 @@ import styles from './DocumentPaper.module.css'
  * for the print/PDF renderer, which does not share the app's JS lifecycle.
  */
 const BUNDLED_LOGO = '/brand/logo.svg'
+
+/**
+ * Whether this document is payable.
+ *
+ * A quotation is not, so it never shows a UPI QR — a payment instruction on a
+ * document that is not yet a bill is the kind of thing that gets paid by mistake.
+ */
+function isInvoiceDocKind(docKind) {
+  return docKind === 'invoice'
+}
+
+/**
+ * FR-P8: the invoice's payment *presentation*, and how each choice reads on paper.
+ *
+ * `doc.payment_method` is the admin's choice of which instructions to print, made
+ * while the invoice was a Draft and frozen at issue by the server's draft-only edit
+ * guard. It is NOT `latest_payment_method`, which the server derives from the
+ * payment ledger and which must never influence a printed document: an invoice
+ * issued as UPI still prints UPI after the client pays by bank transfer.
+ *
+ * The four states, and what each is allowed to show:
+ *   upi            -> UPI id, payee, QR, "Scan to Pay". Never bank details.
+ *   bank_transfer  -> account holder, bank, account number, IFSC. Never a QR or VPA.
+ *   cash           -> the method line alone. No rails at all.
+ *   null           -> both electronic rails, so the client can pay either way. Cash is
+ *                     never presented as an instruction here; it is a choice the admin
+ *                     makes deliberately, not a default.
+ */
+const PAYMENT_PRESENTATION = {
+  upi: { label: 'UPI', showUpi: true, showBank: false },
+  bank_transfer: { label: 'Bank transfer', showUpi: false, showBank: true },
+  cash: { label: 'Cash', showUpi: false, showBank: false },
+  default: { label: 'UPI + Bank transfer', showUpi: true, showBank: true },
+}
+
+function paymentPresentation(method) {
+  return PAYMENT_PRESENTATION[method] || PAYMENT_PRESENTATION.default
+}
 
 /** Join the non-empty parts of an address into a single printable line. */
 function joinAddress(...parts) {
@@ -83,7 +121,6 @@ export default function DocumentPaper({
   document: doc,
   settings = null,
   logoSrc = null,
-  qrSrc = null,
   titleLevel: TitleLevel = 'h1',
   numberOverride = null,
   isUnsaved = false,
@@ -99,26 +136,35 @@ export default function DocumentPaper({
   const logoSrcResolved = logoSrc || BUNDLED_LOGO
   const showLogo = !logoFailed
 
-  // The payment QR degrades the same way but only has two steps. It has no bundled
-  // equivalent, and unlike the logo it is served from the authenticated API route
-  // like every other image on an authenticated page, so the browser's print/PDF
-  // renderer fetches it with the same cookies the page already has.
-  //
-  // If the image is missing or fails, the whole subsection is dropped rather than
-  // left blank: a broken-image icon in a bank block reads as a defect, and an
-  // omitted QR still leaves the UPI ID above it as a way to pay.
-  const [qrFailed, setQrFailed] = useState(false)
-  const showQr = Boolean(qrSrc) && !qrFailed
-
   // Phase 7: one sheet, two document kinds. The shared spine — header, client
   // block, items, tax breakdown, terms, signatory, footer — is identical; only
   // the title, the date pair and the money rows below the grand total differ.
-  const isInvoice = docKind === 'invoice'
+  const isInvoice = isInvoiceDocKind(docKind)
   const title = isInvoice ? 'Tax Invoice' : 'Quotation'
   const documentLabel = isInvoice ? 'Invoice document' : 'Quotation document'
 
   const s = settings || {}
   const number = numberOverride || doc.number || ''
+
+  // The payment QR is now **generated** from a UPI intent URI rather than fetched
+  // as an uploaded image (Phase 8 shipped the static version; see PLAN.md FR-P6,
+  // amended). Two consequences worth stating on the sheet itself:
+  //
+  // 1. It needs a UPI ID, not an image. With none configured there is nothing to
+  //    encode, so the subsection is dropped and the UPI ID in the bank rows above
+  //    remains the way to pay — an omitted QR reads as a gap, a broken image reads
+  //    as a defect.
+  // 2. The amount is the *outstanding* balance, read live from the ledger. That is
+  //    the behaviour Phase 8's static image could not have: a customer's own printed
+  //    copy of a partially-paid invoice can no longer over-collect. The cost, stated
+  //    plainly below the QR, is that paper is a snapshot — if the balance moves after
+  //    printing, the printed amount is stale. Hence "Verify the amount before
+  //    paying" rather than silence.
+  // The live UPI ID, from Settings and never from `bank_snapshot` (the 8.4 exception
+  // Phase 8 already made): a QR or an address is an instruction to send money
+  // somewhere, not a term of the invoice, and a frozen one would keep directing
+  // customers at an account the owner has since closed.
+  const liveUpiId = (s.upi_id || '').trim()
   const client = doc.client_snapshot || {}
   const items = doc.items || []
 
@@ -171,6 +217,10 @@ export default function DocumentPaper({
   // `backend/tests/test_invoices_api.py` pins that.
   const bank = doc.bank_snapshot || null
   const signatory = doc.signatory_name || s.signatory_name || 'Authorised Signatory'
+  // Deliberately omits `upi_id`, which the snapshot also carries. The UPI address is
+  // read live and printed once in the hint below: printing the frozen one here as
+  // well would print two different addresses whenever the owner has since changed
+  // theirs, and the customer would have no way to tell which to pay.
   const bankLines = bank
     ? [
         bank.account_name && { label: 'Account name', value: bank.account_name },
@@ -178,9 +228,29 @@ export default function DocumentPaper({
         bank.bank_name && { label: 'Bank', value: bank.bank_name },
         bank.branch && { label: 'Branch', value: bank.branch },
         bank.ifsc && { label: 'IFSC', value: bank.ifsc },
-        bank.upi_id && { label: 'UPI ID', value: bank.upi_id },
       ].filter(Boolean)
     : []
+
+  // FR-P8: the presentation matrix, applied to the invoice's stored choice. `cash`
+  // is the only state with no rail, so it prints the method line on its own; the
+  // `showQr` guard is what keeps a QR from appearing on a bank-transfer or cash
+  // invoice even though a UPI ID exists in Settings.
+  const presentation = paymentPresentation(isInvoice ? doc.payment_method : null)
+  const showUpi = isInvoice && presentation.showUpi && Boolean(liveUpiId)
+  const showBank = isInvoice && presentation.showBank
+  // The invoice's own QR encodes the GRAND TOTAL, never the outstanding balance.
+  // An outstanding amount is not knowable when the document is issued and moves
+  // with every payment, so encoding it would mean a reprint of the same invoice
+  // asked for a different sum - which is what §8.4 forbids of a tax document. The
+  // Balance / Payment Due document exists precisely to collect a reduced sum, and
+  // it is regenerated per collection.
+  const showQr = showUpi
+  // Only worth naming a method when the choice actually changes what is printed.
+  // "UPI + Bank transfer" is a self-describing block of two rail sections; a Cash
+  // invoice's only instruction is the word itself.
+  const showMethod = isInvoice && !presentation.showUpi && !presentation.showBank
+  const payeeName = (s.company_name || '').trim()
+  const bankRows = showBank ? bankLines : []
 
   return (
     <article className={styles.paper} data-document-paper aria-label={documentLabel}>
@@ -354,39 +424,72 @@ export default function DocumentPaper({
         </dl>
       </section>
 
-      {/* Bank / UPI details, from the snapshot taken at conversion (§8.4). */}
-      {isInvoice && (bankLines.length > 0 || showQr) ? (
-        <section className={styles.bank} data-document-bank>
-          <h2 className={styles.blockLabel}>Payment Details</h2>
-          <div className={styles.bankBody}>
-            {bankLines.length > 0 ? (
-              <dl className={styles.bankRows}>
-                {bankLines.map((line) => (
-                  <div key={line.label} className={styles.bankRow}>
-                    <dt>{line.label}</dt>
-                    <dd>{line.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
-
-            {/* §8.5 "UPI QR code" — a subsection of the payment block, not a
-                sibling of it. Read from live Settings and deliberately *not*
-                from `bank_snapshot`: the QR is a payment instruction rather
-                than a term of the invoice, so a stale snapshot could send money
-                to an account that has since been closed. Invoices only — a
-                quotation is not payable, so it never shows one. */}
+      {/* 5b. Payment (§8.5).
+       *
+       * The **original invoice carries no amount-bearing QR**. That is a
+       * deliberate reversal of the earlier decision on this sheet, and the
+       * reason is the document's own nature: an invoice is a permanent financial
+       * record, so anything derived from the payment ledger must not appear on
+       * it. A QR encoding the outstanding balance would change the moment a
+       * payment was recorded, which means reprinting the same invoice would ask a
+       * customer for a different figure - the exact behaviour §8.4 exists to
+       * prevent, and the one thing a tax document must never do.
+       *
+       * So the division of responsibility is:
+       *   - this sheet: the payment *instructions* (UPI ID, bank details) and the
+       *     current status. Static. Safe to reprint any time, forever.
+       *   - the Balance / Payment Due document: the amount-bearing QR for what is
+       *     still owed. Derived, never stored, regenerated per collection.
+       *
+       * The UPI ID and bank details are read live from Settings rather than the
+       * snapshot for the reason above; a closed account must not stay on
+       * issued documents. The *amounts* on this sheet are all the server's.
+       */}
+      {isInvoice && (showMethod || showUpi || bankRows.length > 0) ? (
+        <section className={styles.payment} data-document-payment>
+          <h2 className={styles.blockLabel}>Payment</h2>
+          <div className={styles.paymentBody}>
             {showQr ? (
-              <div className={styles.bankQr} data-document-qr>
-                <h3 className={styles.bankQrLabel}>UPI QR code</h3>
-                <img
-                  className={styles.bankQrImage}
-                  src={qrSrc}
-                  alt="UPI payment QR code"
-                  onError={() => setQrFailed(true)}
+              <div className={styles.paymentQr}>
+                <UpiQrCard
+                  variant="print"
+                  vpa={liveUpiId}
+                  payeeName={payeeName}
+                  amountPaise={doc.grand_total_paise}
+                  note={number}
                 />
               </div>
             ) : null}
+            <div className={styles.paymentDetails}>
+              {showMethod ? (
+                <p className={styles.paymentMethodLine}>
+                  <strong>Payment Method: {presentation.label}</strong>
+                </p>
+              ) : null}
+              {/*
+               * The UPI VPA and payee name are deliberately NOT repeated as rows
+               * here. `UpiQrCard`'s print variant already prints the VPA as text
+               * beneath the code — for a customer paying without a scanner — and
+               * duplicating it would print the same address twice on a document
+               * meant to be read once, carefully.
+               */}
+              {bankRows.length > 0 ? (
+                <dl className={styles.paymentRows}>
+                  {bankRows.map((line) => (
+                    <div key={line.label} className={styles.paymentRow}>
+                      <dt>{line.label}</dt>
+                      <dd>{line.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+              {showUpi ? (
+                <p className={styles.paymentHint}>
+                  Scan to Pay. Please verify the amount before paying
+                  {number ? `, and quote ${number}.` : '.'}
+                </p>
+              ) : null}
+            </div>
           </div>
         </section>
       ) : null}

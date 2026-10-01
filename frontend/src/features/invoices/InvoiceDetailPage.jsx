@@ -52,7 +52,19 @@ export default function InvoiceDetailPage() {
   const [actionError, setActionError] = useState(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [draft, setDraft] = useState({ due_date: '', notes: '', terms_text: '' })
+  // FR-P8: the invoice's payment *presentation*, chosen before issue. The empty
+  // option is 'Not selected' -> the document offers both electronic rails.
+  // Deliberately narrower than the payment ledger's method list: cheque and card are
+  // ways to be paid, not instructions to print.
+  const PAYMENT_METHOD_OPTIONS = [
+    { value: 'upi', label: 'UPI' },
+    { value: 'bank_transfer', label: 'Bank transfer' },
+    { value: 'cash', label: 'Cash' },
+  ]
+
+  const paymentMethodLabel = (m) => PAYMENT_METHOD_OPTIONS.find((o) => o.value === m)?.label || 'Not selected'
+
+  const [draft, setDraft] = useState({ due_date: '', notes: '', terms_text: '', payment_method: '' })
   const [editing, setEditing] = useState(false)
   const [savingDraft, setSavingDraft] = useState(false)
   const [paymentSheetOpen, setPaymentSheetOpen] = useState(false)
@@ -68,7 +80,12 @@ export default function InvoiceDetailPage() {
       .then((row) => {
         if (cancelled) return
         setInvoice(row)
-        setDraft({ due_date: row.due_date || '', notes: row.notes || '', terms_text: row.terms_text || '' })
+        setDraft({
+          due_date: row.due_date || '',
+          notes: row.notes || '',
+          terms_text: row.terms_text || '',
+          payment_method: row.payment_method || '',
+        })
         setLoadState('ready')
       })
       .catch(() => {
@@ -147,12 +164,17 @@ export default function InvoiceDetailPage() {
         due_date: draft.due_date || null,
         notes: draft.notes || null,
         terms_text: draft.terms_text || null,
+        // Empty string is the "Not Selected" state, which the server stores as NULL
+        // and the document renders as UPI + bank transfer. Not the same as omitting
+        // the key: the admin is clearing a choice here, not leaving it untouched.
+        payment_method: draft.payment_method || null,
       })
       setInvoice(saved)
       setDraft({
         due_date: saved.due_date || '',
         notes: saved.notes || '',
         terms_text: saved.terms_text || '',
+        payment_method: saved.payment_method || '',
       })
       setEditing(false)
     } catch (e) {
@@ -216,6 +238,22 @@ export default function InvoiceDetailPage() {
             <Button variant="ghost" size="sm" icon="printer" to={`/print/invoice/${inv.id}`}>
               Print
             </Button>
+            {/* §8.5 Balance / Payment Due. Offered only when there is something to
+                collect: a fully paid invoice has no balance to demand, and the
+                server refuses the document anyway, so the button is hidden rather
+                than shown-and-failing. Cancelled and draft invoices are excluded
+                for the same reason — neither is payable. */}
+            {inv.status === 'issued' && (inv.outstanding_paise || 0) > 0 ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon="fileText"
+                to={`/print/payment-due/${inv.id}`}
+                title="Printable reminder for the outstanding balance. Records nothing."
+              >
+                Balance invoice
+              </Button>
+            ) : null}
             {allowed.map((action) => {
               const meta = INVOICE_ACTION_META[action]
               // `duplicate` and `delete` are still advertised by the lifecycle
@@ -266,6 +304,20 @@ export default function InvoiceDetailPage() {
       {actionError ? (
         <p className={styles.message} role="alert">
           {actionError.message || 'That action could not be completed.'}
+        </p>
+      ) : null}
+
+      {/* A partially-paid invoice is the one case where the customer's copy of the
+          original document is misleading: the invoice prints its grand total, and
+          the QR on it asks for what is still owed rather than that total, so a
+          printed invoice cannot over-collect. The note says so explicitly, because
+          a customer comparing a paper invoice against a QR amount needs the
+          explanation rather than the discrepancy. */}
+      {inv.status === 'issued' && (inv.paid_paise || 0) > 0 && (inv.outstanding_paise || 0) > 0 ? (
+        <p className={styles.balanceNote}>
+          A balance invoice is available for the remaining {formatPaise(inv.outstanding_paise)}. It re-states
+          this invoice&rsquo;s figures and asks only for what is still owed &mdash; it does not create a
+          second invoice, and it records nothing on its own.
         </p>
       ) : null}
 
@@ -364,6 +416,7 @@ export default function InvoiceDetailPage() {
               {!editing ? (
                 <>
                   <p className={styles.blockText}>Due date: {formatDate(inv.due_date) || 'not set'}</p>
+                  <p className={styles.blockText}>Payment method: {paymentMethodLabel(inv.payment_method)}</p>
                   {inv.notes ? <p className={styles.blockText}>Notes: {inv.notes}</p> : null}
                   <Button variant="secondary" size="sm" icon="edit" onClick={() => setEditing(true)}>
                     Edit draft details
@@ -394,6 +447,24 @@ export default function InvoiceDetailPage() {
                     onChange={(v) => setDraft((d) => ({ ...d, terms_text: v }))}
                     hint="Shown on the invoice document"
                   />
+                  <TextField
+                    as="select"
+                    label="Payment method"
+                    value={draft.payment_method}
+                    onChange={(v) => setDraft((d) => ({ ...d, payment_method: v }))}
+                    hint={
+                      draft.payment_method
+                        ? 'Decides which payment details print on this invoice. Fixed once issued.'
+                        : 'Optional. Left unset, the invoice offers both UPI and bank transfer.'
+                    }
+                  >
+                    <option value="">Not selected</option>
+                    {PAYMENT_METHOD_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </TextField>
                   <div className={styles.draftActions}>
                     <Button
                       variant="primary"
