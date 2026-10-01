@@ -276,8 +276,15 @@ class TestInvoiceLifecycle:
         actions = get_invoice_allowed_actions(inv)
         assert actions.can_issue
         assert actions.can_cancel
-        assert actions.can_delete
-        assert actions.can_duplicate
+        # Neither `delete` nor `duplicate` is advertised for an invoice: the state
+        # machine models both, but there is no `DELETE /invoices/:id` and no
+        # `POST /invoices/:id/duplicate`, and the frontend renders its buttons
+        # straight from this list. Advertising them was a promise with nothing
+        # behind it. `test_allowed_actions.py` walks every state to keep it that
+        # way, and checks the routes for everything that *is* advertised.
+        assert not actions.can_duplicate
+        assert "duplicate" not in actions.actions
+        assert "delete" not in actions.actions
         assert not actions.can_record_payment
 
     def test_draft_issue_valid(self):
@@ -296,7 +303,9 @@ class TestInvoiceLifecycle:
         actions = get_invoice_allowed_actions(inv)
         assert actions.can_record_payment
         assert actions.can_cancel
-        assert actions.can_duplicate
+        # No route, so not advertised — see test_draft_allowed_actions.
+        assert not actions.can_duplicate
+        assert "duplicate" not in actions.actions
         assert not actions.can_issue
         assert not actions.can_delete
 
@@ -341,7 +350,10 @@ class TestInvoiceLifecycle:
     def test_cancelled_allowed_actions(self):
         inv = self._make_invoice("cancelled")
         actions = get_invoice_allowed_actions(inv)
-        assert actions.can_duplicate
+        # A cancelled invoice is terminal: nothing is advertised, because nothing
+        # has a route. See test_draft_allowed_actions.
+        assert not actions.can_duplicate
+        assert actions.actions == []
         assert not actions.can_issue
         assert not actions.can_cancel
         assert not actions.can_record_payment

@@ -263,8 +263,11 @@ export default function InvoiceDetailPage() {
             ) : null}
             {allowed.map((action) => {
               const meta = INVOICE_ACTION_META[action]
-              // `duplicate` and `delete` are still advertised by the lifecycle
-              // service with no endpoint, so they have no entry and are skipped.
+              // Unknown keys are skipped rather than rendered. The API only
+              // advertises actions that have a route (pinned by
+              // test_allowed_actions.py), so this is a guard against a label
+              // table that has fallen behind the server contract — not a place
+              // where actions are quietly dropped.
               if (!meta) return null
               const isCancel = action === 'cancel'
               return (

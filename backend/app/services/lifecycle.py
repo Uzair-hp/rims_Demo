@@ -274,20 +274,28 @@ def get_quotation_allowed_actions(quotation: Quotation) -> AllowedActions:
 def get_invoice_allowed_actions(invoice: Invoice) -> AllowedActions:
     """
     Compute allowed actions for an invoice based on its current state.
+
+    Every action returned here must have a route behind it. The frontend renders
+    its header buttons straight from this list, so an advertised action with no
+    endpoint is a contract the API does not keep — the client is entitled to
+    believe it. `duplicate` and `delete` used to be advertised for invoices with no
+    `POST /invoices/:id/duplicate` and no `DELETE /invoices/:id`; the state machine
+    modelled them, the routes were never written, and the UI was quietly skipping
+    them.
+
+    So they are not advertised. The enum members and the transition table entries
+    stay, because they are the specification of what those routes would do when
+    they are built (see §L.6 in the audit) — the guard below fails loudly if an
+    action is ever re-added to this list without a route to match.
     """
     status: InvoiceStatus = invoice.status
     actions = []
-
-    # Always available
-    actions.append(InvoiceAction.DUPLICATE.value)
-    can_duplicate = True
 
     if status == "draft":
         can_issue, _ = _can_issue_invoice(invoice)
         if can_issue:
             actions.append(InvoiceAction.ISSUE.value)
         actions.append(InvoiceAction.CANCEL.value)
-        actions.append(InvoiceAction.DELETE.value)
         can_cancel = True
         can_delete = True
         can_record_payment = False
@@ -309,6 +317,11 @@ def get_invoice_allowed_actions(invoice: Invoice) -> AllowedActions:
 
     else:
         can_issue = can_cancel = can_record_payment = can_delete = False
+
+    # Neither is reachable from any state, so the guards are constant. They stay
+    # in `AllowedActions` because the field is part of the shape every caller
+    # already reads, and a `False` here is the honest answer.
+    can_duplicate = False
 
     return AllowedActions(
         actions=actions,
