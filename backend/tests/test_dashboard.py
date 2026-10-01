@@ -126,7 +126,14 @@ def scenario(app, authed_client):
     decided by this file and not by insertion timing — a test that asserts
     ordering must not depend on how fast the fixture ran.
     """
-    today = date.today()
+    # A reference date late in the *current* month rather than the wall-clock one.
+    # The scenario places current-month rows at `month_start + 4` (quotations) and
+    # `+ 12` (payments) days; the daily series only looks at the 30 days *ending*
+    # on the reference date, so with `date.today()` those rows fell outside the
+    # window whenever the suite ran in the first ~12 days of a month. Anchoring on
+    # the 21st keeps every offset in the past and still inside the same month, so
+    # the month-offset semantics below are unchanged.
+    today = month_start(date.today()) + timedelta(days=20)
     base = datetime(2020, 1, 1, 9, 0, 0)
 
     with app.app_context():

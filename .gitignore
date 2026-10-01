@@ -40,6 +40,12 @@ instance/*.db
 # must never reach the repository. The `*.db` rule above does not catch them:
 # the name ends in `-<timestamp>`, not `.db`.
 *.db.bak*
+# Any other backup of a database or config file, e.g. the pre-migration snapshots
+# Alembic tooling leaves beside the live file as
+# `ruchita_interiors.db.pre-<revision>.bak`. Those are full copies of the SQLite
+# file and hold live business data, so they must never be committed. The rules
+# above miss this shape: the name ends in `.bak` but does not contain `.db.bak`.
+*.bak
 
 # ---------- Uploads ----------
 # Keep the directory (via .gitkeep) but not uploaded files.
