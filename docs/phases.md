@@ -487,6 +487,56 @@ so there is no second copy to fall out of date.
   overpayment warning, all six methods), a real payment history with per-row
   delete, and an explanation of why Cancel disappears once a payment exists
   (§11 forbids cancelling a paid invoice, so the action stops being advertised).
+- **`invoices.payment_method`** (FR-P8, migration `b8d5f0e2c7a1`) — the admin's
+  choice of which payment instructions the document prints, settable only while the
+  invoice is a Draft. See the FR-P8 decisions below.
+
+### FR-P8: the invoice's payment presentation
+
+Two fields that both sound like "the payment method" and are deliberately not the
+same thing:
+
+- **`invoices.payment_method`** — *how payment options are presented on the
+  document.* `NULL` (`'upi' | 'bank_transfer' | 'cash'`), frozen at issue.
+- **`payments.method`** — *how the client actually paid.* Free to differ, and free
+  to differ twice on one invoice.
+
+The document renders exactly one of four presentations, and the ledger is never
+consulted for it:
+
+| `payment_method` | printed |
+|---|---|
+| `upi` | UPI ID, payee, 26mm QR, "Scan to Pay". No bank details. |
+| `bank_transfer` | account holder, bank, account number, IFSC. No QR, no UPI ID. |
+| `cash` | `Payment Method: Cash` and nothing else. |
+| `NULL` | both electronic rails. Cash is never offered as a default. |
+
+#### Decisions
+
+- **A nullable column, not a `bank_snapshot` key.** A payment presentation is a
+  first-class document fact, so it gets a `CHECK` constraint in the database
+  (`ck_invoices_payment_method`) rather than a string in a JSON blob. `NULL` is the
+  Not-Selected state, so the migration is purely additive and needs no backfill.
+- **The existing draft-only guard is the whole freeze mechanism.**
+  `update_invoice_draft` already refuses any edit unless `status == 'draft'`, so
+  adding the field to its whitelist is sufficient; there is no second lock and no
+  ledger code path that can reach it.
+- **The invoice's QR encodes the grand total, not the outstanding balance.** An
+  outstanding amount is unknowable at issue and moves with every payment, so
+  encoding it would mean a reprint of the same document asked for a different sum —
+  the one thing §8.4 exists to prevent. Collecting a reduced figure is the Balance /
+  Payment Due document's job, and that document is regenerated per payment. The
+  sheet's "verify the amount before paying" is what makes a stale reprint safe.
+- **`latest_payment_method` is no longer printed.** It is derived from the ledger,
+  and putting it on a permanent document is exactly the confusion the split removes:
+  a sheet that silently re-presents itself in the method it was last paid by. It
+  remains in the API for the application UI.
+- **A narrower vocabulary than `payments.method`.** Cheque, card and other are real
+  ways to be paid but are not instructions to print, so the invoice's `OneOf` is
+  `upi / bank_transfer / cash` only.
+- **A misconfiguration prints nothing rather than something wrong.** A `upi` invoice
+  with no UPI ID configured prints no rail at all; it does not fall back to bank
+  details, because that would contradict the choice on the document.
 
 ### Decisions
 
@@ -614,17 +664,166 @@ Exit criteria met:
   deliberately places a payment in a different month from its invoice, so the
   `issue_date` / `paid_on` distinction is observable rather than assumed.
 
-## Phase 10 - PWA / mobile optimization
 
-Offline behaviour, install prompts, update flow, mobile performance.
+## Phase 9A - Services catalog (SERVICES_PLAN.md)
 
-## Phase 11 - Security, validation & edge cases
+Standard rate card with an "add from services" picker for the quotation editor.
+Phase 9A sits between Phase 9 and Phase 10 so the Phase 10–12 sweeps cover it.
 
-Final validation pass, hardening and the explicit edge cases in `PLAN.md` 21.
+### Implemented
 
-## Phase 12 - Full testing & production readiness
+- **Model & migration** `b1f2a3c4d5e6` — the `services` table (name, category,
+  description, unit, `default_qty_milli`, `rate_paise`, `archived_at`) with CHECK
+  constraints (rate > 0 per S3, qty ≥ 0), the `(archived_at, category, name)` list
+  index, and a **partial unique index on `lower(name) WHERE archived_at IS NULL`**
+  (FR-SV3). The same migration adds `service_id` (FK RESTRICT) and
+  `catalog_rate_paise` to `quotation_items` and `invoice_items` — nullable, **no
+  backfill**, batch mode with a *named* FK so the downgrade can drop it.
+- **API** under `/api/v1/services` (mirrors `clients`): list (search by
+  name/category/description, category filter, `include_archived`, pagination,
+  sorted category then name per FR-SV4), create, read (archived resolves), update,
+  delete (**archive**, never hard-delete, S5), restore (409 on active, 409 on a
+  name collision). Mutations are `@login_required` + `@csrf_protect`.
+- **Item provenance** (S7): `service_id` / `catalog_rate_paise` ride on quotation
+  items through PUT (unknown id → 422, archived id accepted per edge case 2), are
+  copied by duplicate and by conversion onto `invoice_items` (FR-SV8), and are
+  serialized read-only on invoices. They never enter `calculations.py` —
+  `test_calculations.py` is untouched and green, which is the proof.
+- **Frontend** — `api/endpoints/services.js`, `useServices` (shared fetch path for
+  page and future picker, the `useClients` pattern), `validateService` in
+  `lib/validation.js` mirroring the backend schema (rate > 0, caps),
+  `ServiceForm`/`ServiceFormModal` (with the FR-SV5 helper text on edit:
+  "Changes apply to new quotation lines only"), and `ServicesPage` — debounced
+  search, a category chip scroller fed by a `categories` facet on the list
+  response (the one permitted horizontal scroll, §7), archived toggle with
+  Restore, archive confirmation, rate formatted via `formatPaise`, `?new=1`
+  deep link. Category/unit suggestions come from the existing Settings →
+  Catalogue lists (S6).
+- **Navigation** — `/services` in the desktop sidebar; on mobile it rides in the
+  More sheet because the bottom bar's five slots are full (§6).
 
-End-to-end coverage, accessibility and performance audits, deployment.
+### Decisions
+
+- **Rate card, not price list (S1/S2).** The catalog stores the *standard* rate;
+  the line stores the *agreed* rate, editable per line. Editing a catalog rate can
+  never touch an existing quotation or invoice — pinned by
+  `test_editing_catalog_rate_never_changes_existing_documents` and the converted-
+  invoice variant.
+- **Archive-only (S5).** Old lines keep a RESTRICT FK to the service; a hard
+  delete is never exposed, exactly like clients (FR-C4).
+- **No seeded rates (S9).** The owner's real prices are not known; the page ships
+  empty with an empty state.
+- **No per-service GST (S4).** GST stays document-level (`gst_bp`), untouched.
+
+### Not done (deliberate, per SERVICES_PLAN §1)
+
+- `ServicePicker` and the "Add from services" button in the quotation editor —
+  SERVICES_PLAN build order 9A.3, delivered separately so the page can be reviewed
+  first.
+- The optional CSV import CLI (FR-SV9, build order 9A.4).
+
+### Exit criteria met
+
+- Backend: 42 new tests in `test_services.py` + the migration-cycle assertions in
+  `test_seed_and_migrations.py`; full suite 392 green, including an untouched
+  `test_calculations.py` (S7).
+- Frontend: `validateService` matrix + navigation contract tests.
+- Migration down/up verified on an empty database through the existing cycle test.
+
+## Phase 10 - UPI QR and the Balance / Payment Due document
+
+Delivered after Phase 9. FR-P6 amended, FR-P7 added.
+
+### What changed and why
+
+Phase 8 printed a **static** UPI QR image the owner uploaded in Settings. The
+stated reason (PLAN 12) was deliberate: a static image "cannot track amount or
+status". That reasoning is correct about *verification* and wrong about *amount*,
+and the second half turned out to matter.
+
+An uploaded QR cannot carry an amount, so a customer's own printed copy of a
+partly-paid invoice asks for the original total. They scan it, their app asks for
+1,00,000 when 60,000 is owed, and the business either collects too much or explains
+the discrepancy. The QR is now **generated** from a UPI intent URI:
+
+    upi://pay?pa=<upi_id>&pn=<payee>&am=<outstanding>&cu=INR&tn=<invoice number>
+
+- `am` is the **outstanding balance**, not the invoice total, read live from the
+  payment ledger. A printed invoice can no longer over-collect.
+- It is built in one place, `services/calculations.build_upi_uri`, and
+  `format_upi_amount` renders it with integer arithmetic only. `paise / 100` in
+  Python or JavaScript gives "6000.499999999999" for some values, and a QR that
+  asks for a fraction of a paisa less than the invoice is a collection bug nobody
+  spots by eye.
+- It returns `None` rather than a URI with an empty or zero `am` when the VPA is
+  missing or the amount is not positive, so the card falls back to showing the UPI
+  ID as text. A code that opens a payment app asking for nothing reads as broken.
+- The UPI ID and payee name stay **live from Settings, never from `bank_snapshot`**
+  (the 8.4 exception Phase 8 already made for the QR). A closed account must not
+  stay on already-issued documents.
+- The Settings upload control is gone. `upi_id` is validated for *shape* only - an
+  "@", text either side, no whitespace, 100 characters - and deliberately not
+  against a provider allow-list, because a VPA's suffix is not an enumerable set
+  and rejecting a real one would block a real payment. The rule applies on write
+  only, so an older install with a now-invalid value still starts and still reads.
+
+### The Balance / Payment Due document (FR-P7)
+
+`GET /api/v1/invoices/:id/payment-due` renders a printable reminder for an
+invoice's remaining balance. It is **a read**:
+
+- No `invoices` row, no `payments` row, no stored balance. `payment_due_document()`
+  re-derives `grand_total_paise - Σ payments` on every call and writes nothing.
+- That matters because `services/dashboard.py` and `services/clients.py` both sum
+  `invoices.grand_total_paise`. A persisted "balance invoice" would add a second
+  60,000 to revenue. `test_generating_a_balance_document_writes_nothing` counts both
+  tables and the revenue sum before and after, and fails first if that ever changes.
+- **No document number of its own.** `numbering.py` allocates per
+  `(doc_type, year)`, so a `PD-` prefix would need a new counter - and a second
+  number on a collection notice reads as a second billing document, which is the
+  confusion it exists to avoid. It is headed by the invoice it concerns.
+- Refused with 422 when the invoice is not issued (a cancelled one must never
+  produce a demand) or when nothing is outstanding (a fully paid invoice has no
+  balance, and a 200 with a zero amount would let a client render a 0 QR).
+- The QR encodes the balance **at generation time**. A later payment changes the
+  real figure and the next document reflects it; a printed copy does not, which is
+  why the sheet prints "Verify the amount before paying." rather than presenting
+  itself as authoritative.
+
+### What it deliberately is not
+
+Scanning the QR, or opening the UPI app, **records nothing**. There is no webhook,
+no reconciliation and no new status. `payment_status` stays derived from the ledger
+(unpaid / partially_paid / paid) and moves only through Record Payment. The card
+and the document both say this in words, because a rendered QR reads like a receipt
+to anyone who has not been told otherwise.
+
+`payment_due_notices` - a table recording that a reminder was sent - is future work
+and is deliberately absent. A payment reminder is a snapshot, not an accounting
+event, and nothing in 11 needs to know one was printed.
+
+### Also in this phase
+
+- `@csrf_protect` added to the four mutating `/settings` routes. They were the only
+  non-GET mutations in the app without it, and it stopped being cosmetic when this
+  blueprint started carrying the UPI ID and bank details - a cross-site request
+  could otherwise rewrite where customers are told to send money.
+- `qrcode` (npm) is the only dependency added. Pure JS, no native build, renders to
+  a canvas at any size - which is what keeps the printed code sharp instead of
+  resampling a screenshot.
+
+### Exit criteria met
+
+- `npm run verify` green: lint, format, 301 frontend tests, 342 backend tests,
+  production build.
+- The amount invariant is pinned on both sides. Backend: `am=60000.00` in the URI
+  for a 60,000 balance, and the ledger counts unchanged after generating. Frontend:
+  the displayed figure and the encoded figure come from one `amountPaise`, there is
+  a test that a re-render with a new amount never leaves the old code on screen, and
+  one that the card encodes exactly what `lib/upi.js` produces.
+- Refusal paths covered: cancelled, draft, fully paid, no UPI ID, malformed VPA,
+  overpayment (already rejected by `record_payment`, so a balance cannot go
+  negative).
 
 ## Bugfix - Client detail related data (FR-C3)
 

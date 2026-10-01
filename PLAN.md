@@ -184,7 +184,9 @@ Priority codes: **M** = must have (v1), **S** = should have (v1 if time allows),
 - FR-P3 (M) Payment status computed: Unpaid / Partially Paid / Paid (server-side; never user-set).
 - FR-P4 (M) Overpayment rejected server-side (422) with clear message; UI warns live.
 - FR-P5 (M) Delete payment with confirmation → recalculate status/outstanding.
-- FR-P6 (M) Settings-managed UPI QR code printed on invoices only, under a "UPI QR code" subsection inside the existing payment/bank block. Read live from Settings, never snapshotted (§8.4.5). A quotation is not payable and never shows one. If the image is missing or fails to load the subsection is omitted entirely rather than left blank.
+- FR-P6 (M) UPI QR code on invoices and on a Balance / Payment Due document, inside the invoice's payment block. **Generated** from a UPI intent URI built from the live `upi_id` — never snapshotted (§8.4.5) and never an uploaded image. A quotation is not payable and never shows one. Compact 26mm on both documents, with no screen chrome in print. Printed copies carry "Verify the amount before paying." because paper is a snapshot.
+- FR-P8 (M) Optional **payment method on the invoice**, chosen on the Invoice page before issue: UPI / Bank Transfer / Cash / Not Selected. It decides only *which payment instructions the document prints* — UPI → UPI ID + QR, Bank Transfer → account details and no QR, Cash → the method line alone, Not Selected → both electronic rails and never an explicit cash offer. Stored as `invoices.payment_method` (nullable, `CHECK IN ('upi','bank_transfer','cash')`) and editable only while the invoice is a Draft, so the presentation is frozen at issue by the existing draft-only guard. The invoice's own QR encodes the **grand total**, never the outstanding balance: an outstanding figure is unknowable at issue and moves with every payment, so encoding it would make a reprint ask for a different sum. The Balance / Payment Due document remains the instrument for collecting a reduced amount. This is distinct from `payments.method` (§4.5), which records how the client actually paid and may differ — recording a bank transfer payment never alters an invoice issued as UPI.
+- FR-P7 (M) Balance / Payment Due document, from `GET /invoices/:id/payment-due`. A **read**: it re-derives `original total - Σ payments` on every request and stores nothing, so it cannot add revenue (dashboard and client summaries sum `invoices.grand_total_paise`) or duplicate a payment. It carries no document number of its own — only a reference to the invoice it concerns — so it can never read as a second sale. Refused with 422 when the invoice is not issued or nothing is outstanding. Scanning its QR initiates a payment and nothing more.
 
 ### 4.6 Dashboard
 - FR-D1 (M) Metric cards with strict definitions (§9.2 field list, §11 inclusion/exclusion rules — the original "§23" cross-reference was wrong, §23 is the folder structure): quotation counts by status, total quotation value, approved value, invoiced value, received, outstanding.
@@ -381,6 +383,7 @@ Index: `(quotation_id, position)`.
 | status | TEXT | CHECK in `draft, issued, cancelled` DEFAULT `draft` |
 | Calc fields (mirror quotation) | | discount_type/bp/fixed, gst_bp, other charges, subtotal/discount/gst/grand_total_paise — recomputed & stored at conversion |
 | terms_text | TEXT | snapshot |
+| payment_method | TEXT | CHECK in `upi, bank_transfer, cash` or NULL = "Not Selected" — the invoice's payment *presentation*, draft-editable then frozen at issue (FR-P8). Distinct from `payments.method`, which records how the client actually paid |
 | bank_snapshot | JSON | `{account_name, account_number, bank_name, ifsc, branch, upi_id}` from Settings at creation — later Settings edits never alter issued invoices |
 | signatory_name | TEXT | snapshot |
 | notes | TEXT | internal |
@@ -1095,7 +1098,7 @@ Verified by 276 backend tests and 214 frontend tests, plus `npm run verify` (lin
 | Branches | Settings rows → branch table; documents already snapshot what they print |
 | Client portal / online approval | Quotation has a stable number + status machine; a public token column is additive |
 | Digital signature | Document spec reserves the signatory zone |
-| Payment gateway | Payments stay a clean manual ledger on invoices — no PSP/aggregation, no webhook reconciliation. What customers scan is a **static** UPI QR image the owner uploads in Settings (FR-P6), not a dynamic payment link: it cannot track amount or status, and only the current one is ever printed (§8.4.5) |
+| Payment gateway | Payments stay a clean manual ledger on invoices - no PSP/aggregation, no webhook reconciliation. A UPI QR is a *payment instruction*, never a confirmation: scanning it tells the application nothing, and `payment_status` moves only through Record Payment (§11). The QR is **generated** from the UPI ID (FR-P6) - a static uploaded image could not encode an amount or a payee at all. Which details it sits beside is the invoice's own `payment_method` (FR-P8), frozen at issue: on the invoice the code encodes the grand total, and the outstanding balance lives on the regenerable Balance / Payment Due document, because an invoice must not change when a payment arrives |
 | Email/WhatsApp sharing | Documents are reproducible from data; add an outbound-service module later |
 | Cloud storage for uploads | `utils/uploads.py` is the single storage seam |
 | Automated cloud backup | DB is a single file + `uploads/` dir — the backup action/runbook seam can push to cloud storage later |
