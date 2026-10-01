@@ -51,6 +51,12 @@
   color: var(--color-ink-muted);
 }
 
+.profileNote {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
 .profileActions {
   display: flex;
   gap: var(--space-2);
@@ -84,12 +90,104 @@
   margin: 0 0 var(--space-1) 0;
 }
 
+/*
+ * Money figures, not headings.
+ *
+ * These three were the only numbers in the app set in the brand serif
+ * (Cormorant Garamond), whose old-style figures made a rupee amount hard to scan
+ * and disagreed with every other money figure in the product — the dashboard
+ * tiles, the invoice rows and the quotation line totals all use the body sans.
+ * Weight, size and tabular figures carry the emphasis instead; headings still
+ * get the serif (`.sectionTitle`).
+ */
 .totalValue {
-  font-family: var(--font-display);
   font-size: var(--font-size-xl);
   font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
   color: var(--color-ink);
   margin: 0;
+}
+
+/* Money still owed. Amber, not red: an unpaid invoice is ordinary business
+   state, not an error, and §18.5 reserves danger for actual failures. Matches
+   `InvoicesPage`'s `.outstanding` so the two pages read the same. */
+.totalDue .totalValue {
+  color: var(--color-warning);
+}
+
+.counts {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+}
+
+/* ---- related records (quotations / invoices / payments) ----
+   Deliberately the same card-and-link row as `InvoicesPage` and `QuotationsPage`
+   (§18.3, one card treatment): the whole row navigates to the document. */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  text-decoration: none;
+  color: inherit;
+}
+
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.number {
+  font-weight: var(--weight-semibold);
+  color: var(--color-ink);
+  /* Truncated rather than wrapped, so a long document number cannot push the
+     money column off a narrow phone screen. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date,
+.meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.total {
+  font-weight: var(--weight-medium);
+  /* Tabular figures (§18.9) so a column of amounts stays aligned. */
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.outstanding {
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-warning);
 }
 
 .section {
@@ -106,20 +204,12 @@
   margin: 0;
 }
 
-.emptyList {
-  padding: var(--space-6) var(--space-4);
-  text-align: center;
-  color: var(--color-ink-muted);
-  background: var(--color-surface);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-sm);
-}
-
 .message {
   text-align: center;
   color: var(--color-ink-muted);
-  padding: var(--space-8) var(--space-4);
+  padding: var(--space-4);
+  margin: 0;
+  font-size: var(--font-size-sm);
 }
 
 .link {

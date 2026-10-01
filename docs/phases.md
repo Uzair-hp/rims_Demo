@@ -625,3 +625,69 @@ Final validation pass, hardening and the explicit edge cases in `PLAN.md` 21.
 ## Phase 12 - Full testing & production readiness
 
 End-to-end coverage, accessibility and performance audits, deployment.
+
+## Bugfix - Client detail related data (FR-C3)
+
+The client detail page fetched `GET /clients/:id/summary` and then read a
+response shape the service has never produced. Selecting a client therefore
+showed a profile, six zeroed totals and three placeholder lines, and never a
+single quotation, invoice or payment - the data was in memory the whole time,
+just read under keys that did not exist.
+
+### Root cause
+
+`services/clients.py` returns
+`{ client, quotations[], invoices[], payments[], totals: { billed_paise,
+received_paise, outstanding_paise } }`. The page read `quotations_count`,
+`invoices_count`, `payments_count`, `total_quotations_value`,
+`total_invoices_value` and `total_payments_value` - none of them server
+fields. `formatPaise(undefined)` is `₹0.00`, so a total of nothing looked
+exactly like a total of zero, and a fabricated defaults object at the top of
+the render stood in for the real payload and hid the mismatch rather than
+surfacing it. `clients-page.test.jsx` could not catch it: the list page never
+reads the summary.
+
+No backend change was needed. `test_clients.py::test_summary_totals_with_seeded_rows`
+already pinned the contract (billed 50000, received 20000, outstanding 30000
+paise, `partially_paid`), and the API was returning it correctly throughout.
+
+### Fixed
+
+- The page now reads the service's own field names, and the three money
+  figures come from `totals`. No figure is recomputed in the browser - derived
+  values (`paid_paise`, `outstanding_paise`, `payment_status`) stay the
+  server's (§11, D2), so a client page and an invoice page cannot disagree.
+- Quotations, invoices and payments render as real card rows reusing the
+  `InvoicesPage` pattern, linking to `/quotations/:id` and `/invoices/:id`.
+  Rows are keyed on the record ids; nothing matches on client name.
+- **Stale data on switching is closed.** The previous client's `client` and
+  `summary` are cleared when the route's id changes, before the next fetch, so
+  a slow response cannot leave the previous client's figures on screen. The
+  superseded request is also dropped by the existing `cancelled` guard.
+- The profile and the summary are now separate outcomes (`allSettled`). A
+  failed summary degrades to empty sections with an inline `role="alert"`
+  instead of blanking a client that loaded fine.
+- `useClients()` removed from this page. It was called only for `refetch()`,
+  which fired a `/clients` list request the page never read and which did not
+  refresh the summary. Archive, restore and edit now re-read this client, so
+  the archive badge and the figures cannot disagree with the server.
+- Archived clients keep their totals and history. The page previously hid the
+  whole totals strip for an archived client, which made a real balance
+  invisible on the client's own page; FR-C4 archives to hide a client from
+  lists and pickers, not to erase what they owe.
+- Loading, empty and error states use the shared `Skeleton` and `EmptyState`.
+  The quotation empty state links to `/quotations/new?client={id}`, so the new
+  quotation opens against the right client. The invoice empty state still
+  explains FR-I1 rather than pointing at a route that does not exist.
+- The profile name is no longer a second `<h1>`; `PageHeader` owns the page
+  heading (§18.2) and the profile name is an `<h2>`.
+
+### Tests
+
+New `client-detail.test.jsx` (16 tests) - the coverage whose absence let this
+ship. The figures are asserted against the same numbers the backend test
+asserts against seeded rows, so the two cannot drift. Two clients with
+near-identical names prove records are scoped by id rather than by name; a
+route change proves the first client's data is gone rather than merely
+outnumbered. Re-reading the totals under the old, wrong key names fails 3 of
+the 16, which is the regression this file exists to prevent.
