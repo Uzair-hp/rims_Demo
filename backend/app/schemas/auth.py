@@ -31,7 +31,12 @@ class LoginSchema(Schema):
 
 
 class ChangePasswordSchema(Schema):
-    current_password = fields.String(required=True)
+    # Capped like the login password. It reaches `check_password_hash`, so an
+    # uncapped string is an unbounded scrypt input on an endpoint that is
+    # authenticated but not rate limited.
+    current_password = fields.String(
+        required=True, validate=validate.Length(max=MAX_PASSWORD_LENGTH)
+    )
     new_password = fields.String(
         required=True,
         validate=validate.Length(min=settings.PASSWORD_MIN_LENGTH, max=MAX_PASSWORD_LENGTH),

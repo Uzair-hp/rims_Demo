@@ -38,6 +38,7 @@ from app.services.rate_limit import (
     get_limiter,
 )
 from app.utils.errors import ApiError, forbidden, unauthenticated, success
+from app.utils.guards import OWNER_ROLE
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -169,6 +170,13 @@ def change_password():
     """
     Change the owner's password.
 
+    Owner-only, and the one route here that says so explicitly rather than through
+    a decorator: it does not use `login_required` (it resolves the user itself so
+    it can distinguish "no session" from "wrong current password"), so the role
+    check is inline. Without it, any account that appeared in the users table could
+    take over the owner's credentials — `revoke_sessions()` kicks the real owner
+    out and leaves the caller holding the only working session.
+
     Verifies the current password first, then bumps `token_version`, which
     invalidates every other session - including this one, so the client must
     re-authenticate afterwards (§25).
@@ -176,6 +184,8 @@ def change_password():
     user = load_current_user()
     if user is None:
         raise unauthenticated()
+    if (user.role or "").strip().lower() != OWNER_ROLE:
+        raise forbidden("Only the owner can change the account password.")
 
     payload = load_or_raise(ChangePasswordSchema(), request.get_json(silent=True))
 
