@@ -46,6 +46,15 @@ instance/*.db
 # file and hold live business data, so they must never be committed. The rules
 # above miss this shape: the name ends in `.bak` but does not contain `.db.bak`.
 *.bak
+# The WAL sidecars that belong to one of those `.bak` copies, e.g.
+# `ruchita_interiors.db.pre-<revision>.bak-shm`. The `*.db-shm` / `*.db-wal`
+# rules above do not match this shape either: the name ends in `-shm` / `-wal`,
+# not `.db-shm`. They appear whenever a backup is opened with SQLite and they
+# hold pages from the same live database, so they are as sensitive as the
+# `.bak` file itself.
+*.bak-shm
+*.bak-wal
+*.bak-journal
 
 # ---------- Uploads ----------
 # Keep the directory (via .gitkeep) but not uploaded files.
