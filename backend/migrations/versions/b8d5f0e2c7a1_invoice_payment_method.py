@@ -133,6 +133,11 @@ def _rebuild_invoices_without_payment_method() -> None:
     Both are restored in a `finally`, and `PRAGMA foreign_key_check` runs while
     enforcement is still off so a botched rebuild fails loudly here rather than
     surfacing as corrupt data later.
+
+    Autocommit is what makes the pragmas possible and is also what makes the
+    rebuild dangerous, so the statements themselves are wrapped in an explicit
+    transaction - see `_swap_invoices_table`'s caller for why that is not
+    optional.
     """
     dbapi = op.get_bind().connection.driver_connection
 
@@ -141,50 +146,51 @@ def _rebuild_invoices_without_payment_method() -> None:
     try:
         cursor = dbapi.cursor()
         try:
+            # Set before any transaction is open, because `PRAGMA foreign_keys` is
+            # a no-op once one exists.
             cursor.execute("PRAGMA foreign_keys=OFF")
             cursor.execute("PRAGMA legacy_alter_table=ON")
 
-            old_ddl = cursor.execute(
-                "SELECT sql FROM sqlite_master WHERE type='table' AND name='invoices'"
-            ).fetchone()[0]
+            # The rename and the CREATE that replaces it cannot both succeed, and
+            # the rename is not the last: between them there is a point where
+            # `invoices` does not exist at all. Under autocommit that window is
+            # permanent, so a failure inside it - a full disk, a lock, an
+            # interruption - leaves a database whose `alembic_version` still claims
+            # a revision whose schema has been dropped, and every page 500s on
+            # "no such table".
+            #
+            # That is not hypothetical. It is how the development database was
+            # lost during the audit remediation, and recovering it required a
+            # month-old backup. Alembic logs "Will assume non-transactional DDL"
+            # for SQLite, so nothing above this function supplies the transaction
+            # either. `BEGIN` here makes the rename, the create, the copy, the drop
+            # and every index replay roll back together, so the table is either the
+            # old one or the new one and never neither.
+            cursor.execute("BEGIN")
+            try:
+                _swap_invoices_table(cursor)
 
-            # Remove the column definition *and* any CHECK constraint naming it,
-            # in one pass, so this works whether the constraint is still the
-            # anonymous inline one from the upgrade above or the named one that
-            # c3d7e9f1a2b4 introduced.
-            new_ddl = strip_table_constraint(old_ddl, "ck_invoices_payment_method")
-            new_ddl = strip_inline_column(new_ddl, "payment_method")
-            if new_ddl == old_ddl:
-                raise RuntimeError(
-                    "b8d5f0e2c7a1: could not find payment_method in the invoices "
-                    "DDL; the table shape has changed since this migration was "
-                    "written."
-                )
-
-            # Copy the surviving columns by name rather than with SELECT *, so a
-            # column that no longer exists on one side cannot shift into another.
-            columns = [c for c in table_column_names(cursor, "invoices") if c != "payment_method"]
-            column_list = ", ".join(columns)
-
-            # Captured before the rename, which moves every index onto
-            # `invoices_old` for `DROP TABLE` to take with it.
-            index_ddl = index_ddl_for(cursor, "invoices")
-
-            cursor.execute("ALTER TABLE invoices RENAME TO invoices_old")
-            cursor.execute(new_ddl)
-            cursor.execute(
-                f"INSERT INTO invoices ({column_list}) SELECT {column_list} FROM invoices_old"
-            )
-            cursor.execute("DROP TABLE invoices_old")
-            for statement in index_ddl:
-                cursor.execute(statement)
-
-            violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
-            if violations:
-                raise RuntimeError(
-                    f"b8d5f0e2c7a1: rebuilding invoices left {len(violations)} "
-                    f"foreign key violation(s): {violations[:5]}"
-                )
+                # Prove the rebuild orphaned nothing, while enforcement is still
+                # off and `foreign_key_check` is the only thing that would notice.
+                # Checked before COMMIT: afterwards the violations would be
+                # somebody else's problem, and this migration would have stamped.
+                violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
+                if violations:
+                    raise RuntimeError(
+                        f"b8d5f0e2c7a1: rebuilding invoices left {len(violations)} "
+                        f"foreign key violation(s): {violations[:5]}"
+                    )
+                cursor.execute("COMMIT")
+            except BaseException:
+                # ROLLBACK before re-raising, and the rename with it: the table goes
+                # back to being called `invoices` with its original definition,
+                # indexes and rows. Best-effort, because a failure here must not
+                # mask the error that caused it.
+                try:
+                    cursor.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
         finally:
             cursor.close()
     finally:
@@ -195,3 +201,47 @@ def _rebuild_invoices_without_payment_method() -> None:
             cursor.execute("PRAGMA legacy_alter_table=OFF")
         finally:
             cursor.close()
+
+
+def _swap_invoices_table(cursor) -> None:
+    """
+    Replace `invoices` with a copy that has no `payment_method`, keeping every row.
+
+    Runs entirely inside the transaction opened by the caller. Every statement
+    here is individually reversible by SQLite, which is what makes the
+    surrounding ROLLBACK sufficient: if any of them fails, the rename is undone
+    with them.
+    """
+    old_ddl = cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='invoices'"
+    ).fetchone()[0]
+
+    # Remove the column definition *and* any CHECK constraint naming it, in one
+    # pass, so this works whether the constraint is still the anonymous inline one
+    # from this migration's upgrade or the named one that c3d7e9f1a2b4 introduced.
+    new_ddl = strip_table_constraint(old_ddl, "ck_invoices_payment_method")
+    new_ddl = strip_inline_column(new_ddl, "payment_method")
+    if new_ddl == old_ddl:
+        raise RuntimeError(
+            "b8d5f0e2c7a1: could not find payment_method in the invoices "
+            "DDL; the table shape has changed since this migration was "
+            "written."
+        )
+
+    # Copy the surviving columns by name rather than with SELECT *, so a
+    # column that no longer exists on one side cannot shift into another.
+    columns = [c for c in table_column_names(cursor, "invoices") if c != "payment_method"]
+    column_list = ", ".join(columns)
+
+    # Captured before the rename, which moves every index onto `invoices_old`
+    # for `DROP TABLE` to take with it.
+    index_ddl = index_ddl_for(cursor, "invoices")
+
+    cursor.execute("ALTER TABLE invoices RENAME TO invoices_old")
+    cursor.execute(new_ddl)
+    cursor.execute(
+        f"INSERT INTO invoices ({column_list}) SELECT {column_list} FROM invoices_old"
+    )
+    cursor.execute("DROP TABLE invoices_old")
+    for statement in index_ddl:
+        cursor.execute(statement)

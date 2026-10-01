@@ -137,7 +137,7 @@ reveal toggle itself was already present.
 | 9 | `sent` quotation re-pricing | `PUT` allowed in `sent`; a quotation the customer has seen can be changed. |
 | 10 | Phase 12 production readiness | Playwright suite, coverage report, bundle budget, backup runbook, version tag. |
 | 11 | Documentation | `docs/api.md` business endpoints; `README.md` status. |
-| 12 | `b8d5f0e2c7a1.downgrade()` is not atomic | Confirmed in `full audit.md` §M1. A failure mid-rebuild leaves the schema gutted, exactly as happened to the development database. |
+| 12 | ~~`b8d5f0e2c7a1.downgrade()` is not atomic~~ | **Resolved.** Both hand-rolled rebuilds now open their own transaction and roll back together; each has a test that sabotages the `CREATE` and asserts the table is untouched. |
 
 ### FUTURE / OPTIONAL
 

@@ -23,10 +23,10 @@ audit remediation work, which is now in the working tree.
 
 | | Count |
 |---|---|
-| **RESOLVED** | 20 |
+| **RESOLVED** | 21 |
 | **PARTIAL** | 4 |
 | **OUTSTANDING** | 24 |
-| **CONFIRMED DEFECT (new, §M)** | 2 |
+| **Newly confirmed during remediation, since fixed (§M)** | 2 |
 
 Test results have moved from *27 files / 463 frontend, 432 backend* to
 ***29 files / 504 frontend, 496 backend*** — see §G.
@@ -71,10 +71,11 @@ What is still true: this is a single-user product (§1.3), several business-logi
 data-integrity findings were never in scope for this pass, and the dead-code and
 documentation debt is untouched. See §L.
 
-**Two confirmed defects were found during remediation and are not fixed** (§M): a
-non-atomic table rebuild in `b8d5f0e2c7a1.downgrade()`, and the fact that the
-development database was destroyed twice — once by that class of failure and once by
-a test that opened the real database and called `drop_all()`.
+**Two defects were confirmed during remediation** (§M): a non-atomic table rebuild in
+`b8d5f0e2c7a1.downgrade()`, and the fact that the development database was destroyed
+twice — once by that class of failure and once by a test that opened the real database
+and called `drop_all()`. **Both are now fixed**, the first by making the downgrade
+rebuild transactional and the second by isolating every test's database.
 
 ---
 
@@ -695,7 +696,11 @@ configuration, not a live ledger. 🔴 Unchanged by this pass.
 11. 🔴 **`README.md` "Current Status" is stale** — it still says "Phases 1, 2 and 3 are
     complete" while `docs/phases.md` records Phases 1–10 as done. *(`PLAN.md`'s status
     line has been corrected to 1–10 for this pass; `README.md` has not.)*
-12. 🔴 **One migration rebuild is hand-rolled and unatomic** — see §M1.
+12. ✅ **Migration rebuilds are now atomic.** Both hand-rolled rebuilds
+    (`b8d5f0e2c7a1`, `c3d7e9f1a2b4`) open their own transaction and roll back
+    together; each has a test that sabotages the `CREATE` and asserts the table is
+    untouched. The standing rule is recorded in both migration files: a hand-rolled
+    SQLite rebuild must never run under bare autocommit.
 
 ---
 
@@ -727,13 +732,14 @@ Replaces the original "Recommended next work". Items 1–6 of the original list 
 ~~4. security headers and secret enforcement (C6, C7)~~ · ~~5. add authorization (C4)~~ ·
 ~~6. reconcile `allowed_actions` with the routes (C8)~~.
 
-### 1. Fix §M1 — make the `b8d5f0e2c7a1` downgrade rebuild atomic
+### 1. ~~Fix §M1 — make the `b8d5f0e2c7a1` downgrade rebuild atomic~~ ✅ DONE
 
-Highest priority, and the only confirmed data-loss defect left. It is the same failure
-mode that destroyed the development database. The sibling revision
-`c3d7e9f1a2b4` was fixed by wrapping its rebuild in `BEGIN`/`COMMIT` with a
-`ROLLBACK`; the same treatment belongs here, with a test that sabotages the `CREATE`
-and asserts the table is untouched.
+Highest priority, and the only confirmed data-loss defect. It is the same failure
+mode that destroyed the development database. Now that `c3d7e9f1a2b4` and
+`b8d5f0e2c7a1` are both transactional, the rule is: **any hand-rolled SQLite table
+rebuild opens its own transaction** — autocommit is required for the `foreign_keys`
+pragma and is exactly what makes the rename window dangerous. Both rebuilds have a
+test that sabotages the `CREATE` and asserts the table comes back untouched.
 
 ### 2. Close the environment fragility
 
@@ -797,9 +803,9 @@ fixed; both are recorded because they are real.
 
 ### M1. `b8d5f0e2c7a1.downgrade()` rebuilds `invoices` without a transaction
 
-**🔴 CONFIRMED DEFECT — data loss. NOT FIXED.**
+**✅ RESOLVED — was confirmed and data-losing.**
 
-The replacement for the FK-broken batch mode (§B3) does the rename/create/copy/drop
+The replacement for the FK-broken batch mode (§B3) did the rename/create/copy/drop
 sequence correctly, but under **autocommit**:
 
 ```python
@@ -808,30 +814,46 @@ dbapi.isolation_level = None  # autocommit: the pragmas need this
 ...
 cursor.execute("ALTER TABLE invoices RENAME TO invoices_old")   # commits here
 cursor.execute(new_ddl)                                          # ...and dies here
-cursor.execute("INSERT INTO invoices SELECT * FROM invoices_old")
-cursor.execute("DROP TABLE invoices_old")
 ```
 
-Alembic logs *"Will assume non-transactional DDL"* for SQLite, so nothing above this
-function supplies a transaction either. Any failure between the rename and the `CREATE`
-— a full disk, a lock, an interruption — therefore commits the rename and leaves a
-database where `invoices` does not exist, `alembic_version` still claims the revision,
-and every page 500s on `no such table`.
+Any failure between the rename and the `CREATE` — a full disk, a lock, an
+interruption — therefore committed the rename and left a database where `invoices` does
+not exist, `alembic_version` still claims the revision, and every page 500s on
+`no such table`.
 
-**This is not theoretical. It happened.** The development database was lost to exactly
+**This was not theoretical. It happened.** The development database was lost to exactly
 this window during the remediation work; the file was recovered with only `alembic_version`
 and a leftover temp table, and all business data had to be restored from a September
 backup. A probe of the 4.1 MB write-ahead log at 15 frame boundaries confirmed nothing
 was recoverable from it.
 
-The sibling revision `c3d7e9f1a2b4` performs the same kind of rebuild and **has** been
-made atomic — an explicit `BEGIN`/`COMMIT` with `ROLLBACK` on any failure, verified by a
-test that deliberately breaks the `CREATE` and asserts the table survives byte-identical
-with its rows, indexes and version intact. The same treatment is needed here, and it
-should be applied to any future hand-rolled SQLite table rebuild.
+**Fix.** The rebuild now runs inside an explicit `BEGIN`/`COMMIT`, with `ROLLBACK` on any
+failure, matching what `c3d7e9f1a2b4` already does. The statements moved into
+`_swap_invoices_table` so the transaction boundary is the only thing the caller owns, and
+`foreign_key_check` is asserted *before* `COMMIT` — afterwards the violations would have
+been somebody else's problem and the migration would have stamped. The pragmas are still
+set before the transaction opens, because `PRAGMA foreign_keys` is a no-op inside one.
 
-**Not fixed in this pass by design** — this task was documentation and commit
-organisation only.
+**Regression test:**
+`test_seed_and_migrations.py::test_payment_method_downgrade_rolls_back_when_it_fails_midway`
+breaks the `CREATE` that replaces the rename and asserts the database is untouched —
+table present under its own name, DDL byte-identical, `payment_method` still there with
+its value, row counts intact, indexes unchanged, FK check clean, version **not** stepped
+over the failed revision, and a retry then succeeding normally.
+
+It is deliberately a *separate* test from the `c3d7e9f1a2b4` one rather than a shared
+helper: the two functions are separate copies of the same technique, so one being atomic
+is no evidence about the other. Negative control confirmed — with the transaction
+removed, the test fails with the database left holding `invoices_old` and **no `invoices`
+table at all**, reproducing the original loss.
+
+Also verified end-to-end on a copy of the real development database: downgrade to
+`a7c4e19b2d80` and back to head preserves all 4 invoices, 5 clients and every index, with
+no `invoices_old` leftover and `foreign_key_check` clean at each step.
+
+**The general lesson is now recorded in both files:** any hand-rolled SQLite table
+rebuild must open its own transaction. Autocommit is required for the `foreign_keys`
+pragma and is precisely what makes the rename window dangerous.
 
 ### M2. A test was opening and `drop_all()`-ing the real development database
 

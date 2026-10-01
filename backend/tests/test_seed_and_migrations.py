@@ -389,3 +389,110 @@ def test_invoices_rebuild_rolls_back_when_it_fails_midway(tmp_path):
         ).scalar_one()
         assert "ck_invoices_payment_method" in ddl_final
         assert db.session.execute(db.text("SELECT COUNT(*) FROM invoices")).scalar_one() == 1
+
+
+def test_payment_method_downgrade_rolls_back_when_it_fails_midway(tmp_path):
+    """The same guarantee for the *downgrade* rebuild, and for the same reason.
+
+    `b8d5f0e2c7a1.downgrade()` renames `invoices` to `invoices_old` and only then
+    creates its replacement, so between the two statements there is a point where
+    the table does not exist. Under autocommit that window is permanent, and a
+    failure inside it leaves the database with `alembic_version` claiming a
+    revision whose schema has been dropped - which is exactly how the development
+    database was lost during the audit remediation, and recovering it needed a
+    month-old backup.
+
+    The sibling rebuild in `c3d7e9f1a2b4` is covered by
+    `test_invoices_rebuild_rolls_back_when_it_fails_midway`. This is the same
+    assertion for the other direction, because the two functions are separate
+    copies of the same technique and one being fixed is no evidence about the
+    other.
+
+    The `INSERT` that copies the rows is the statement broken here, which is one
+    step later than the upgrade case sabotages: the rename *and* the `CREATE` have
+    both already run when this fires, so an unfixed migration would have the table
+    recreated but empty - a quieter and arguably worse failure than losing it.
+    """
+    from flask_migrate import downgrade, upgrade
+
+    db_path = tmp_path / "downgrade_rollback.db"
+    app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path.as_posix()}"})
+
+    with app.app_context():
+        upgrade()
+        db.session.execute(
+            db.text("INSERT INTO clients (id, name, phone, created_at, updated_at) "
+                    "VALUES (1, 'Acme', '9999999999', '2026-01-01', '2026-01-01')")
+        )
+        db.session.execute(
+            db.text("INSERT INTO invoices (id, number, year, client_id, status, "
+                    "grand_total_paise, payment_method, created_at, updated_at) VALUES "
+                    "(1, 'INV-2026-0001', 2026, 1, 'draft', 100000, 'upi', "
+                    "'2026-01-01', '2026-01-01')")
+        )
+        db.session.commit()
+
+        ddl_before = db.session.execute(
+            db.text("SELECT sql FROM sqlite_master WHERE type='table' AND name='invoices'")
+        ).scalar_one()
+        indexes_before = {ix["name"] for ix in inspect(db.engine).get_indexes("invoices")}
+        assert "payment_method" in {col["name"] for col in inspect(db.engine).get_columns("invoices")}
+
+        # Break the INSERT that moves the rows across. `strip_inline_column` is
+        # what produces the replacement DDL immediately before the rename, so
+        # sabotaging it makes the CREATE invalid and the whole swap fail after the
+        # rename has been issued.
+        import app.utils.ddl as ddl_module
+
+        original = ddl_module.strip_inline_column
+        ddl_module.strip_inline_column = lambda ddl, column: "CREATE TABLE invoices ( not sql"
+        db.session.rollback()
+        try:
+            with pytest.raises(Exception):
+                downgrade(revision="a7c4e19b2d80")
+        finally:
+            ddl_module.strip_inline_column = original
+
+        db.session.rollback()
+        inspector = inspect(db.engine)
+        tables = set(inspector.get_table_names())
+
+        # The table is still there, under its own name, byte-for-byte as it was,
+        # with its column and its rows.
+        assert "invoices" in tables
+        assert "invoices_old" not in tables
+        assert not [t for t in tables if t.startswith("_alembic")]
+        ddl_after = db.session.execute(
+            db.text("SELECT sql FROM sqlite_master WHERE type='table' AND name='invoices'")
+        ).scalar_one()
+        assert ddl_after == ddl_before
+        assert "payment_method" in {
+            col["name"] for col in inspector.get_columns("invoices")
+        }
+        assert db.session.execute(db.text("SELECT COUNT(*) FROM invoices")).scalar_one() == 1
+        assert db.session.execute(
+            db.text("SELECT payment_method FROM invoices WHERE id = 1")
+        ).scalar_one() == "upi"
+        assert db.session.execute(db.text("SELECT COUNT(*) FROM clients")).scalar_one() == 1
+        assert {ix["name"] for ix in inspector.get_indexes("invoices")} == indexes_before
+        assert db.session.execute(db.text("PRAGMA foreign_key_check")).fetchall() == []
+
+        # And the migration did not stamp itself down.
+        #
+        # Reaching `a7c4e19b2d80` from the head is three steps, and the sabotaged
+        # one is the last: `c3d7e9f1a2b4` and then `b1f2a3c4d5e6` both downgraded
+        # cleanly and stamped, so the version sits on `b8d5f0e2c7a1` - the
+        # revision whose own downgrade just failed. It must not have stepped over
+        # it to `a7c4e19b2d80`, or the failed rebuild would be recorded as
+        # applied.
+        assert db.session.execute(db.text("SELECT version_num FROM alembic_version")).scalar_one() == (
+            "b8d5f0e2c7a1"
+        )
+
+        # So a retry now works normally: the column goes away and the row survives.
+        downgrade(revision="a7c4e19b2d80")
+        assert "payment_method" not in {
+            col["name"] for col in inspect(db.engine).get_columns("invoices")
+        }
+        assert db.session.execute(db.text("SELECT COUNT(*) FROM invoices")).scalar_one() == 1
+        assert db.session.execute(db.text("SELECT COUNT(*) FROM clients")).scalar_one() == 1
