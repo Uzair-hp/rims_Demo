@@ -19,10 +19,11 @@ from pathlib import Path
 
 from flask import current_app
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions.database import db
 from app.models import CompanySettings, TermsConditions
-from app.utils.errors import not_found, validation_error
+from app.utils.errors import ApiError, not_found, validation_error
 
 #: Longest accepted UPI ID, matching the column width (§8.5).
 MAX_UPI_ID_LENGTH = 100
@@ -111,9 +112,50 @@ def save_settings(payload: dict) -> CompanySettings:
     Unknown keys are ignored rather than rejected: the UI posts the union of all
     section forms, and a section that has not been opened yet simply contributes
     nothing new.
+
+    Two rules make this safe to fail:
+
+    - **Validate a plain dict before touching the row.** Every check below used to
+      read back off the ORM object, which meant the row was mutated by `setattr`
+      and only then rejected. A raised `ApiError` is *handled*, so the
+      `teardown_request` rollback does not fire for it — the dirty state survived
+      on the session and was flushed by the next request's context teardown,
+      committing a rejected change. Validating the merged values first means a
+      rejection cannot have written anything.
+
+    - **Roll back on any failure, including a database one.** A commit that raises
+      leaves the session unusable; without an explicit rollback the next request on
+      the same scoped session inherits it.
     """
     row = get_settings()
 
+    # The prospective state: the payload layered over the current row, with the
+    # same normalization applied. Validation reads this, never `row`.
+    candidate = _normalized_candidate(row, payload)
+    _validate_candidate(candidate, row)
+
+    try:
+        for field, value in candidate.items():
+            setattr(row, field, value)
+        db.session.commit()
+    except ApiError:
+        db.session.rollback()
+        raise
+    except SQLAlchemyError:
+        db.session.rollback()
+        raise
+    return row
+
+
+def _normalized_candidate(row: CompanySettings, payload: dict) -> dict:
+    """
+    The values a save *would* produce, as a plain dict.
+
+    Includes only the fields the payload actually carries, so a partial save
+    leaves everything else alone, and applies the same string normalization
+    `setattr` would have: trimmed, with an empty string meaning "clear".
+    """
+    candidate: dict = {}
     for field in EDITABLE_FIELDS:
         if field not in payload:
             continue
@@ -122,18 +164,48 @@ def save_settings(payload: dict) -> CompanySettings:
             value = value.strip()
             # Empty string means "clear this field" for every text column.
             value = value or None
-        setattr(row, field, value)
+        candidate[field] = value
+    return candidate
+
+
+def _validate_candidate(candidate: dict, row: CompanySettings) -> None:
+    """
+    Every §15/§16 rule for the settings row, checked against proposed values.
+
+    A pure function of `candidate` and the untouched row, so it runs before
+    anything is written. A field the payload did not carry resolves to the row's
+    *current* value, which is what makes a partial save validate the row that would
+    result rather than only the submitted fragment — a save carrying just
+    `bank_ifsc` must not be judged on an absent `quotation_prefix`.
+
+    `candidate` is mutated in place for the two list fields, whose cleaned form is
+    what should be stored.
+    """
+
+    def value_of(field: str):
+        """The value this save would leave in `field`."""
+        if field in candidate:
+            return candidate[field]
+        return getattr(row, field)
 
     # §8.1 primitives: GST in basis points (0–2800), validity in whole days.
-    if row.default_gst_bp is not None and not 0 <= row.default_gst_bp <= 2800:
-        raise validation_error("Default GST must be between 0% and 28%.", [{"field": "default_gst_bp", "message": "GST must be between 0 and 2800 basis points."}])
-    if row.default_validity_days is not None and not 0 <= row.default_validity_days <= 365:
-        raise validation_error("Validity must be between 0 and 365 days.", [{"field": "default_validity_days", "message": "Validity must be between 0 and 365 days."}])
+    gst_bp = value_of("default_gst_bp")
+    if gst_bp is not None and not 0 <= gst_bp <= 2800:
+        raise validation_error(
+            "Default GST must be between 0% and 28%.",
+            [{"field": "default_gst_bp", "message": "GST must be between 0 and 2800 basis points."}],
+        )
+    validity_days = value_of("default_validity_days")
+    if validity_days is not None and not 0 <= validity_days <= 365:
+        raise validation_error(
+            "Validity must be between 0 and 365 days.",
+            [{"field": "default_validity_days", "message": "Validity must be between 0 and 365 days."}],
+        )
 
     # A prefix becomes part of every future document number (§12), so it must be
     # short, uppercase-alphanumeric and never contain a separator.
     for field in ("quotation_prefix", "invoice_prefix"):
-        prefix = getattr(row, field)
+        prefix = value_of(field)
         if not prefix or not 1 <= len(prefix) <= 12 or not prefix.replace("-", "").isalnum():
             raise validation_error(
                 "Prefixes must be 1–12 letters, digits or dashes.",
@@ -142,7 +214,8 @@ def save_settings(payload: dict) -> CompanySettings:
 
     # IFSC is the one bank field with a fixed shape: 11 characters exactly,
     # whenever it is filled in at all.
-    if row.bank_ifsc and len(row.bank_ifsc) != 11:
+    ifsc = value_of("bank_ifsc")
+    if ifsc and len(ifsc) != 11:
         raise validation_error(
             "IFSC must be exactly 11 characters.",
             [{"field": "bank_ifsc", "message": "IFSC must be exactly 11 characters."}],
@@ -155,17 +228,22 @@ def save_settings(payload: dict) -> CompanySettings:
     # provider suffix. Deliberately not a provider allow-list — a VPA's suffix is not
     # an enumerable set, and rejecting a legitimate one (`name@okaxis`, `name@paytm`,
     # a bank's own handle) would block a real payment to fix a cosmetic problem.
-    if row.upi_id:
-        problem = validate_upi_id(row.upi_id)
+    upi_id = value_of("upi_id")
+    if upi_id:
+        problem = validate_upi_id(upi_id)
         if problem:
             raise validation_error(
                 problem, [{"field": "upi_id", "message": "Check the UPI ID format."}]
             )
 
     for field in ("item_categories", "units"):
-        value = getattr(row, field)
+        # Only normalize what this save actually carries; the rest is already in
+        # the row's stored, cleaned form.
+        if field not in candidate:
+            continue
+        value = candidate[field]
         if value is None:
-            setattr(row, field, [])
+            candidate[field] = []
             continue
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise validation_error(
@@ -180,10 +258,7 @@ def save_settings(payload: dict) -> CompanySettings:
                 f"{field} is too long.",
                 [{"field": field, "message": "Use at most 50 labels of 100 characters each."}],
             )
-        setattr(row, field, cleaned)
-
-    db.session.commit()
-    return row
+        candidate[field] = cleaned
 
 
 # --------------------------------------------------------------------- terms
