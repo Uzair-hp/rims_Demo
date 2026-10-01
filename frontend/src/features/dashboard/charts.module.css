@@ -41,14 +41,15 @@
 /* ------------------------------------------------------------------
    Range filter (7 / 14 / 30 days, or 12 months)
 
-   `flex-wrap` is what keeps it inside a 360 px viewport: the four options are
-   allowed to fall onto a second line rather than forcing a horizontal scroll
-   (§19, and the Phase 10 360 px gate).
+   One line, always. Wrapping was what pushed the trend chart down on a
+   phone and broke the grid alignment beside the quotation chart, so the
+   pills are sized to fit instead: no wrap, even gaps from a single `gap`,
+   and a narrower type scale at the 360 px gate (§19).
    ------------------------------------------------------------------ */
 
 .range {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-1);
   min-inline-size: 0;
 }
@@ -56,6 +57,9 @@
 .rangeOption {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-inline-size: 0;
   /* 44 px touch target on a control that is otherwise a few pixels tall (§19). */
   min-block-size: var(--touch-target-min);
   padding-inline: var(--space-3);
@@ -65,10 +69,26 @@
   color: var(--color-ink-muted);
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out);
+}
+
+/* Reserved row under the second caption. The trend figure carries the range
+   filter there and the status figure carries this, so both plots start on the
+   same line and the two charts are the same height side by side. Hidden while
+   the charts are stacked, where there is nothing to line up with. */
+.rangeSpacer {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .rangeSpacer {
+    display: block;
+    block-size: var(--touch-target-min);
+  }
 }
 
 .rangeOption:hover {
@@ -102,9 +122,22 @@
 }
 
 /* On a 360 px screen the two series overlap visually at this size, and the
-   legend below the plot needs room of its own rather than sitting on the axis. */
+   legend below the plot needs room of its own rather than sitting on the axis.
+   The pills also drop a type step and their inline padding, which is what keeps
+   all four ranges on one line at this width instead of wrapping. */
 @media (max-width: 480px) {
   .plot {
     block-size: 13rem;
+  }
+
+  .rangeOption {
+    padding-inline: var(--space-2);
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (max-width: 360px) {
+  .rangeOption {
+    padding-inline: var(--space-1);
   }
 }

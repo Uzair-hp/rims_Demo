@@ -232,6 +232,11 @@ export function StatusBreakdownChart({ counts, width, height }) {
       <figcaption className={styles.caption}>
         Quotations by status <span className={styles.captionHint}>all quotations</span>
       </figcaption>
+
+      {/* Holds the plot on the same line as the trend chart's, which has the
+          range filter in this row. Without it the bar chart rides higher. */}
+      <div className={styles.rangeSpacer} aria-hidden="true" />
+
       <div className={styles.plot} data-chart="status-breakdown">
         {sized(
           (w, h) => (
