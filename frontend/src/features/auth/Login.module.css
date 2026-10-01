@@ -287,6 +287,20 @@
   display: flex;
 }
 
+/* Vertically centres the lock.
+   `.inputIcon` is absolutely positioned with no `top`, so it sits wherever its
+   static position resolves to. In `.inputWrap` (email) that resolves centred,
+   because that wrapper sets `align-items: center`. `.passwordWrap` does not, so
+   the icon fell to the top of the row — visibly off-centre beside the taller
+   reveal toggle. Pinning it to 50% and pulling it back by half its own height
+   removes the dependency on the wrapper's alignment entirely. */
+.passwordIcon {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 14px;
+  transform: translateY(-50%);
+}
+
 .passwordInput {
   flex: 1 1 auto;
   min-inline-size: 0;
