@@ -142,8 +142,28 @@ export const ICON_PATHS = {
   mail: {
     paths: ['M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z', 'M4 8l8 5 8-6'],
   },
+  /**
+   * Padlock: a rounded body under a shackle, with a keyhole.
+   *
+   * The previous version was malformed — it had no body rectangle at all, an
+   * asymmetric shackle (the two legs sat at x=7 and x=17, so it read as a lopsided
+   * arc rather than a lock), and a bare dot floating below. Rebuilt on the same
+   * three-part grammar as every other glyph here: body, shackle, detail, each a
+   * closed path with 2px corner radii.
+   *
+   * The shackle meets the body at y=10.4 so the two strokes join instead of
+   * overlapping, and the whole glyph stays inside the 24x24 box with the same
+   * optical inset as `fileText` and `receipt`.
+   */
   lock: {
-    paths: ['M12 20.5v-5', 'M10 15.5H7a5 5 0 0 1 10 0h-3', 'M12 17h.01'],
+    paths: [
+      // Body: a 14.8 x 10.2 rounded rectangle.
+      'M6.6 10.4h10.8a2 2 0 0 1 2 2v6.2a2 2 0 0 1-2 2H6.6a2 2 0 0 1-2-2v-6.2a2 2 0 0 1 2-2z',
+      // Shackle: a 4.4-radius arch, legs landing exactly on the body's top edge.
+      'M8 10.4V7.6a4 4 0 0 1 8 0v2.8',
+      // Keyhole: a slot centred in the body.
+      'M12 14.6v2.2',
+    ],
   },
   mapPin: {
     paths: [
@@ -188,6 +208,29 @@ export const ICON_PATHS = {
       'M14 19h2v2h-2z',
       'M11 5h2',
       'M5 11v2',
+    ],
+  },
+  /**
+   * Terms & conditions: a document with lines and a rolled lower edge. Distinct from
+   * `fileText` (a sheet with a folded corner) because the two sit on the same printed
+   * sheet as separate section labels, and the same glyph twice reads as a mistake.
+   */
+  scrollText: {
+    paths: [
+      'M6.4 3.4h11.2a1.4 1.4 0 0 1 1.4 1.4v13.4a2.4 2.4 0 0 1-2.4 2.4H7.8a2.4 2.4 0 0 1-2.4-2.4V4.8a1.4 1.4 0 0 1 1-1.4z',
+      'M9 8.2h6.4',
+      'M9 11.8h6.4',
+      'M9 15.4h4',
+    ],
+  },
+  /**
+   * GSTIN: a seal over a document. `building` reads as a registered-office icon, which
+   * is wrong for a tax registration number on a customer's paper.
+   */
+  badgeCheck: {
+    paths: [
+      'M12 2.8 14.4 5l3.1-.3.7 3 2.7 1.6-1.5 2.8 1.5 2.8-2.7 1.6-.7 3-3.1-.3L12 21.2 9.6 19l-3.1.3-.7-3-2.7-1.6L4.6 12 3.1 9.2l2.7-1.6.7-3L9.6 5z',
+      'm8.7 12 2.2 2.2 4.4-4.4',
     ],
   },
 }

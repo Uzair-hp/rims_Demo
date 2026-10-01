@@ -1,0 +1,127 @@
+/*
+ * Ruchita Interiors — shared document header styles (§14.3).
+ *
+ * Measured in mm/pt rather than rem so the printed A4 layout matches the on-screen
+ * preview (R1, D3: the browser print pipeline is the renderer). Colour comes entirely
+ * from tokens — no raw value here, and none in the component.
+ *
+ * The gold used on the sheet is the soft/ink pair rather than --color-gold. Appendix B6
+ * defers retuning the brand gold to the Phase 11 contrast pass, and mid-tone gold on a
+ * light surface is exactly the AA failure §18.4 warns about — so a header icon uses
+ * --color-gold-ink, the brown gold that passes 4.5:1 on white paper.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Header band
+ * ------------------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6mm;
+  padding-block-end: 3mm;
+  border-block-end: 0.6mm solid var(--color-gold);
+}
+
+.brand {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+}
+
+/*
+ * Printed under the mark, never instead of it. The company name is the document's
+ * strongest hierarchy cue, so it is the largest type on the sheet — above the
+ * "QUOTATION"/"TAX INVOICE" title, which is deliberately calmer.
+ */
+.companyName {
+  margin: 2mm 0 0;
+  font-family: var(--font-display);
+  font-size: 18pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-ink);
+}
+
+/*
+ * Height-capped, width-auto: the bundled lockup is 1424x772.5 (~1.84:1), so this
+ * scales it proportionally and never distorts it. `block-size: auto` is deliberately
+ * absent — it would override the max-height and let the SVG fall back to its intrinsic
+ * height. `max-inline-size` keeps it inside narrow rails.
+ */
+.logo {
+  display: block;
+  max-block-size: 16mm;
+  inline-size: auto;
+  max-inline-size: 62mm;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 18pt;
+  font-weight: var(--weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-ink);
+}
+
+.company {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  /* Pushes the block to the right edge while its own rows stay left-aligned. */
+  text-align: end;
+}
+
+.tagline {
+  margin: 0;
+  font-size: 8.5pt;
+  font-style: italic;
+  color: var(--color-ink-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Contact block
+ * ------------------------------------------------------------------ */
+
+/*
+ * A stack of identically-shaped rows, not one shared grid.
+ *
+ * Each row is its own `auto 1fr` grid with the icon column pinned to 15px — the icon's
+ * own size. That fixed width is what puts every icon in one aligned column: with a shared
+ * grid the column is sized by the widest item, and with per-row `auto` columns a row
+ * carrying only a short phone number gives its icon a narrower box than the row above it
+ * carrying a two-line address, so the icons visibly drift. A constant cannot drift.
+ *
+ * `display: contents` on a shared grid would express the same intent, but it silently
+ * collapses to an inline stack in any engine that does not support it, which is a broken
+ * letterhead rather than a slightly loose one. A hard number cannot fail that way.
+ */
+.companyMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8mm;
+  font-style: normal;
+  font-size: 8pt;
+  line-height: 1.35;
+  color: var(--color-ink-muted);
+}
+
+.metaLine {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 1.5mm;
+}
+
+/*
+ * The icon is column 1 and the text column 2 in every row. `text-align: start` is what
+ * makes a long address wrap *under the text* rather than running back toward the icon.
+ */
+.metaIcon {
+  color: var(--color-gold-ink);
+  margin-block-start: 0.15mm;
+}
+
+.metaText {
+  text-align: start;
+  overflow-wrap: anywhere;
+}

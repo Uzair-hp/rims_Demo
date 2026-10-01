@@ -88,6 +88,9 @@ describe('UpiQrCard', () => {
   })
 
   it('shows the VPA and payee name so a customer can pay without scanning', () => {
+    // The screen card is the only place these three lines appear: the printed tile
+    // deliberately drops them because the enclosing Payment Details card prints the
+    // UPI address once in its grid.
     render(<UpiQrCard amountPaise={2500000} vpa={VPA} payeeName="Ruchita Interiors" note="INV-2026-0001" />)
 
     expect(screen.getByText(VPA)).toBeInTheDocument()
@@ -198,20 +201,20 @@ describe('UpiQrCard and lib/upi.js agree', () => {
   })
 })
 
-describe('print variant', () => {
-  it('renders a compact horizontal block, not the screen card', () => {
-    // The whole regression this exists for. Before `variant="print"` existed, the
-    // A4 documents styled the card from *their* modules (`.bankQr .card`,
+describe('tile variant', () => {
+  it('renders a compact tile, not the screen card', () => {
+    // The regression this exists for. Before a dedicated variant existed, the A4
+    // documents styled the card from *their* modules (`.bankQr .card`,
     // `.qrCard .actions`), which CSS Modules compiled to the parent's own hash and
     // therefore never matched an element carrying this module's hash. Both documents
     // shipped rendering the full screen card, buttons and disclaimer included.
-    render(<UpiQrCard amountPaise={6000000} vpa={VPA} payeeName="Ruchita Interiors" variant="print" />)
+    render(<UpiQrCard amountPaise={6000000} vpa={VPA} payeeName="Ruchita Interiors" variant="tile" />)
 
-    expect(document.querySelector('[data-variant="print"]')).toBeTruthy()
+    expect(document.querySelector('[data-variant="tile"]')).toBeTruthy()
   })
 
   it('drops the interactive chrome nobody can use on paper', () => {
-    render(<UpiQrCard amountPaise={6000000} vpa={VPA} variant="print" />)
+    render(<UpiQrCard amountPaise={6000000} vpa={VPA} variant="tile" />)
 
     // No buttons, no disclaimer, no copy-failure note. A 44px touch target is a
     // large share of a compact payment block, and the disclaimer explains a screen
@@ -222,33 +225,48 @@ describe('print variant', () => {
   })
 
   it('drops the display-serif title, so it does not compete with the totals block', () => {
-    render(<UpiQrCard amountPaise={6000000} vpa={VPA} title="Scan to pay the balance" variant="print" />)
-    // The screen variant renders this at --font-size-lg display serif, which is what
-    // made the payment area read as a second document.
+    render(<UpiQrCard amountPaise={6000000} vpa={VPA} title="Scan to pay the balance" variant="tile" />)
     expect(screen.queryByText('Scan to pay the balance')).toBeNull()
   })
 
-  it('keeps what a customer without a scanner needs', () => {
+  it('prints the amount and reference, which is what the card shows under the code', () => {
     render(
       <UpiQrCard
         amountPaise={6000000}
         vpa={VPA}
         payeeName="Ruchita Interiors"
         note="INV-2026-0001"
-        variant="print"
+        variant="tile"
       />,
     )
-    expect(screen.getByText(VPA)).toBeInTheDocument()
     // Escaped rather than typed: the rupee sign is a literal that authoring from
     // PowerShell mangles, and a mangled assertion fails for the wrong reason.
     expect(screen.getByText('\u20b960,000.00')).toBeInTheDocument()
     expect(screen.getByText(/Ref INV-2026-0001/)).toBeInTheDocument()
   })
 
+  it('does not repeat the UPI ID, which the enclosing card prints once in its grid', () => {
+    // The VPA printed under the code as well as in the bank grid is the duplication the
+    // shared Payment Details card exists to remove: one address, once, per document.
+    render(<UpiQrCard amountPaise={6000000} vpa={VPA} payeeName="Ruchita Interiors" variant="tile" />)
+
+    expect(screen.queryByText(VPA)).toBeNull()
+    expect(screen.queryByText('Ruchita Interiors')).toBeNull()
+  })
+
   it('still encodes the amount, which is the point of the balance document', async () => {
-    render(<UpiQrCard amountPaise={6000000} vpa={VPA} variant="print" />)
+    render(<UpiQrCard amountPaise={6000000} vpa={VPA} variant="tile" />)
     await waitFor(() => expect(toDataURL).toHaveBeenCalled())
     expect(encodedParam('am')).toBe('60000.00')
+  })
+
+  it('keeps the amount a customer without a scanner needs when the VPA is unusable', () => {
+    // The tile drops the VPA line, so the fallback is the only place the address can
+    // still reach the reader. It must not regress to a silent blank.
+    render(<UpiQrCard amountPaise={6000000} vpa="not-a-vpa" variant="tile" />)
+
+    expect(screen.getByText(/no qr code can be made/i)).toBeInTheDocument()
+    expect(screen.getByText('\u20b960,000.00')).toBeInTheDocument()
   })
 
   it('is screen by default, so no existing caller changes behaviour', () => {

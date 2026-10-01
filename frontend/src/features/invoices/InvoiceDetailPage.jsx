@@ -32,6 +32,7 @@ import { deletePayment, recordPayment } from '../../api/endpoints/payments.js'
 import { calcLineTotal } from '../../lib/calc.js'
 import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
+import { formatPhone } from '../../lib/phone.js'
 import TotalsPanel from '../quotations/TotalsPanel.jsx'
 import PaymentSheet from './PaymentSheet.jsx'
 import {
@@ -238,20 +239,26 @@ export default function InvoiceDetailPage() {
             <Button variant="ghost" size="sm" icon="printer" to={`/print/invoice/${inv.id}`}>
               Print
             </Button>
-            {/* §8.5 Balance / Payment Due. Offered only when there is something to
-                collect: a fully paid invoice has no balance to demand, and the
-                server refuses the document anyway, so the button is hidden rather
-                than shown-and-failing. Cancelled and draft invoices are excluded
-                for the same reason — neither is payable. */}
-            {inv.status === 'issued' && (inv.outstanding_paise || 0) > 0 ? (
+            {/* §8.5 Balance / Payment Due. Offered for **every issued invoice**, settled or not.
+                With something outstanding it is a collection notice; once the invoice is
+                paid the same sheet becomes the settlement statement the customer wants
+                as their receipt — full reconciliation, no QR, no bank details — so
+                hiding it would remove the only printable proof of payment from the one
+                screen that knows it exists. Draft and cancelled invoices are excluded:
+                neither is payable, and the server refuses the document for both. */}
+            {inv.status === 'issued' ? (
               <Button
                 variant="secondary"
                 size="sm"
                 icon="fileText"
                 to={`/print/payment-due/${inv.id}`}
-                title="Printable reminder for the outstanding balance. Records nothing."
+                title={
+                  (inv.outstanding_paise || 0) > 0
+                    ? 'Printable reminder for the outstanding balance. Records nothing.'
+                    : 'Fully paid — printable statement of the settled balance. Records nothing.'
+                }
               >
-                Balance invoice
+                Balance bill
               </Button>
             ) : null}
             {allowed.map((action) => {
@@ -308,16 +315,17 @@ export default function InvoiceDetailPage() {
       ) : null}
 
       {/* A partially-paid invoice is the one case where the customer's copy of the
-          original document is misleading: the invoice prints its grand total, and
-          the QR on it asks for what is still owed rather than that total, so a
-          printed invoice cannot over-collect. The note says so explicitly, because
-          a customer comparing a paper invoice against a QR amount needs the
-          explanation rather than the discrepancy. */}
+           original document needs an explanation: the tax invoice prints — and its QR
+           asks for — the grand total, because a fixed legal document cannot change
+           when a payment lands. The balance sheet is what asks for the remainder. A
+           customer comparing the two needs that said to them rather than left to infer
+           a discrepancy between two documents that are both correct. */}
       {inv.status === 'issued' && (inv.paid_paise || 0) > 0 && (inv.outstanding_paise || 0) > 0 ? (
         <p className={styles.balanceNote}>
-          A balance invoice is available for the remaining {formatPaise(inv.outstanding_paise)}. It re-states
-          this invoice&rsquo;s figures and asks only for what is still owed &mdash; it does not create a
-          second invoice, and it records nothing on its own.
+          A balance bill is available for the remaining {formatPaise(inv.outstanding_paise)}. The tax invoice
+          still shows its full grand total and its QR asks for that same total &mdash; an issued invoice does
+          not change when a payment is recorded. The balance bill asks only for what is still owed, and it
+          does not create a second invoice or record anything on its own.
         </p>
       ) : null}
 
@@ -490,7 +498,7 @@ export default function InvoiceDetailPage() {
             <h2 className={styles.cardTitle}>Client</h2>
             <p className={styles.clientName}>{inv.client_snapshot?.name || '—'}</p>
             {inv.client_snapshot?.phone ? (
-              <p className={styles.clientMeta}>{inv.client_snapshot.phone}</p>
+              <p className={styles.clientMeta}>{formatPhone(inv.client_snapshot.phone)}</p>
             ) : null}
             {inv.client_snapshot?.email ? (
               <p className={styles.clientMeta}>{inv.client_snapshot.email}</p>

@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import DocumentPaper, { groupItemsByCategory } from '../documents/DocumentPaper.jsx'
@@ -24,6 +24,23 @@ import {
   PAYMENT_METHOD_OPTIONS,
 } from './status.js'
 import { PAGE_SIZE } from './useInvoices.js'
+
+/**
+ * The QR encoder is mocked, exactly as in `UpiQrCard.test.jsx`, so a test can read the
+ * UPI intent the sheet would have produced. The encoding itself is proven in
+ * `lib/upi.test.js`; what matters here is *which amount the invoice hands it*.
+ */
+const toDataURL = vi.fn(async (uri) => `data:image/png;base64,${btoa(uri)}`)
+
+vi.mock('qrcode', () => ({
+  default: { toDataURL: (...args) => toDataURL(...args) },
+}))
+
+/** The `am` parameter of the most recent URI handed to the encoder. */
+function encodedAmount() {
+  const uri = String(toDataURL.mock.calls.at(-1)?.[0] ?? '')
+  return new URLSearchParams(uri.slice(uri.indexOf('?') + 1)).get('am')
+}
 
 const SETTINGS = {
   company_name: 'Ruchita Interiors',
@@ -217,23 +234,66 @@ describe('DocumentPaper — invoice variant', () => {
     expect(screen.getByText('INV-2026-0001')).toBeInTheDocument()
   })
 
-  it('shows Amount Paid and Balance Due from the server figures', () => {
-    // No UPI ID, so the only place the outstanding appears is the Balance Due row.
-    // With a QR configured the figure appears twice by design — the row states what
-    // is owed and the QR asks for it — and the QR block has its own test below.
-    render(<DocumentPaper document={invoice()} settings={{ ...SETTINGS, upi_id: '' }} docKind="invoice" />)
-    expect(screen.getByText('Amount Paid')).toBeInTheDocument()
-    expect(screen.getByText('Balance Due')).toBeInTheDocument()
-    expect(screen.getByText('−₹4,000.00')).toBeInTheDocument()
-    expect(screen.getByText('₹7,710.00')).toBeInTheDocument()
+  it('is static: it shows no Amount Paid and no Balance Due, whatever the ledger says', () => {
+    // A tax invoice is a fixed legal document of what was billed. The ledger figures are
+    // sent on this very payload, and nothing on the sheet may read them — otherwise a
+    // reprint after a payment would be a *different document* for the same billing, and
+    // the customer's filed copy would no longer match what they were handed.
+    renderInvoice()
+    expect(screen.queryByText('Amount Paid')).not.toBeInTheDocument()
+    expect(screen.queryByText('Balance Due')).not.toBeInTheDocument()
   })
 
-  it('omits the Amount Paid row until money has been recorded', () => {
-    renderInvoice({ paid_paise: 0, outstanding_paise: 1171000, payment_status: 'unpaid' })
-    // Balance Due still applies (it is the amount due); the paid row does not.
-    expect(screen.getByText('Balance Due')).toBeInTheDocument()
-    expect(screen.queryByText('Amount Paid')).not.toBeInTheDocument()
+  it('ends its totals at Grand Total, which is the amount billed', () => {
+    renderInvoice()
+    const totals = document.querySelector('[data-document-totals]')
+    expect(within(totals).getByText('Grand Total')).toBeInTheDocument()
+    // The last row is the grand total, so nothing payment-derived is printed after it.
+    const rows = [...totals.querySelectorAll('dt')].map((dt) => dt.textContent)
+    expect(rows.at(-1)).toBe('Grand Total')
   })
+
+  it('prints identically before any payment and after the ledger is full', () => {
+    // The load-bearing statement of §8.4. Same document, two very different ledger
+    // states, byte-identical output — which is only possible if no payment-derived
+    // field is read anywhere on the sheet.
+    const unpaid = renderInvoice({ paid_paise: 0, outstanding_paise: 1171000, payment_status: 'unpaid' })
+    const unpaidText = document.querySelector('[data-document-paper]').textContent
+    unpaid.unmount()
+
+    renderInvoice({ paid_paise: 1171000, outstanding_paise: 0, payment_status: 'paid' })
+    expect(document.querySelector('[data-document-paper]').textContent).toBe(unpaidText)
+  })
+
+  it('encodes the grand total in its QR, never the outstanding balance', async () => {
+    // The prompt warns about exactly this: an invoice whose code asked for the live
+    // balance would quietly depend on the ledger, and a reprint would ask for a
+    // different sum. The amount comes from the invoice's own saved total — checked here
+    // on a *fully paid* payload, where the balance is ₹0 and a balance-derived code
+    // would ask for nothing at all.
+    toDataURL.mockClear()
+    renderInvoice({ paid_paise: 1171000, outstanding_paise: 0, payment_status: 'paid' })
+    await waitFor(() => expect(toDataURL).toHaveBeenCalled())
+
+    // ₹11,710.00 is the grand total; ₹0.00 is what a balance-derived code would ask for.
+    expect(encodedAmount()).toBe('11710.00')
+  })
+
+  it('encodes the same grand total whatever the ledger says', async () => {
+    // The stronger form of the same property: two very different payment states must
+    // produce the identical `am`, or the invoice still depends on the ledger.
+    toDataURL.mockClear()
+    renderInvoice({ paid_paise: 0, outstanding_paise: 1171000, payment_status: 'unpaid' })
+    await waitFor(() => expect(toDataURL).toHaveBeenCalled())
+    const unpaidAmount = encodedAmount()
+
+    toDataURL.mockClear()
+    renderInvoice({ paid_paise: 1171000, outstanding_paise: 0, payment_status: 'paid' })
+    await waitFor(() => expect(toDataURL).toHaveBeenCalled())
+
+    expect(encodedAmount()).toBe(unpaidAmount)
+  })
+
   it('renders the bank details from the snapshot', () => {
     renderInvoice()
     const payment = document.querySelector('[data-document-payment]')
@@ -241,6 +301,16 @@ describe('DocumentPaper — invoice variant', () => {
     expect(within(payment).getByText('HDFC Bank')).toBeInTheDocument()
     expect(within(payment).getByText('00123456789')).toBeInTheDocument()
     expect(within(payment).getByText('HDFC0001234')).toBeInTheDocument()
+  })
+
+  it('prints the bank details exactly once, inside the Payment Details card', () => {
+    // The account number used to be printed in the payment section *and* again beneath
+    // the QR, in two different styles on the same page. It is now one row in one card.
+    renderInvoice()
+    const card = document.querySelector('[data-payment-card]')
+    expect(card).toBeTruthy()
+    expect(within(card).getAllByText('00123456789')).toHaveLength(1)
+    expect(within(card).getAllByText('HDFC0001234')).toHaveLength(1)
   })
 
   // ------------------------------------------- FR-P8: the payment presentation (§8.5)
@@ -262,16 +332,20 @@ describe('DocumentPaper — invoice variant', () => {
 
       const payment = document.querySelector('[data-document-payment]')
       expect(payment).toBeTruthy()
-      expect(within(payment).getByText('Payment')).toBeInTheDocument()
+      // The block's own heading is "PAYMENT DETAILS" (set by the shared card); the
+      // invoice no longer adds a second "Payment" label above it.
+      expect(within(payment).getByText('Payment Details')).toBeInTheDocument()
+      expect(within(payment).queryByText('Payment')).not.toBeInTheDocument()
     })
 
     it('UPI selected: UPI details and a QR, and no bank details at all', () => {
       renderInvoice({ payment_method: 'upi' })
       const payment = document.querySelector('[data-document-payment]')
 
+      // The UPI ID is a row in the card's grid, so it appears exactly once.
+      expect(within(payment).getByText('UPI ID')).toBeInTheDocument()
       expect(within(payment).getByText('ruchitainteriors@upi')).toBeInTheDocument()
-      expect(within(payment).getByText('Ruchita Interiors')).toBeInTheDocument()
-      expect(within(payment).getByText(/Scan to Pay/)).toBeInTheDocument()
+      expect(within(payment).getByText(/Scan to Pay/i)).toBeInTheDocument()
       expect(within(payment).getByText(/verify the amount before paying/i)).toBeInTheDocument()
       expect(document.querySelector('[data-upi-qr]')).toBeTruthy()
 

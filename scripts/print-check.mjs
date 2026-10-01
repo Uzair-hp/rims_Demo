@@ -81,12 +81,18 @@ function cls(name, label) {
  * ignore its failures.
  *
  * Each anchor below is verified to be unique to one module, which is what actually
- * disambiguates: `.paper` and `.blockLabel` each exist in two of the three modules.
+ * disambiguates: `.paper` and `.blockLabel` each exist in two modules.
+ *
+ * The anchors were re-picked when the payment block became a shared component: the
+ * old ones (`_paymentQr`, `_qrCard`) belonged to rules that no longer exist, and an
+ * anchor pointing at a deleted class fails the whole run loudly rather than measuring
+ * the wrong thing quietly.
  */
 const MODULE_ANCHORS = {
-  doc: '_paymentQr', // only DocumentPaper has the QR gutter
-  due: '_qrCard', // only PaymentDuePaper wraps the reminder card
+  doc: '_colEmpty', // only DocumentPaper marks the empty category cell
+  due: '_paidStamp', // only PaymentDuePaper renders the settled stamp
   card: '_qrColumn', // only UpiQrCard has a QR column
+  pay: '_scanLabel', // only PaymentDetailsCard labels the code "Scan to Pay"
 }
 
 /** The CSS Modules hash for the module that owns `anchor`, resolved from the bundle. */
@@ -107,31 +113,35 @@ const MODULES = Object.fromEntries(
 )
 
 const C = {
-  // Resolved within a single module rather than matched loosely. Two of the three
-  // modules here define a `.blockLabel` and a `.paper`, and `InvoiceDetailPage` also
+  // Resolved within a single module rather than matched loosely. Two of the modules
+  // here define a `.blockLabel` and a `.paper`, and `InvoiceDetailPage` also
   // has a `.paymentRow` - so an unpinned `[a-z0-9]+` pattern can resolve to the wrong
   // sheet and quietly measure the wrong thing.
   paper: cls('_paper', 'doc'),
   payment: cls('_payment', 'doc'),
-  paymentBody: cls('_paymentBody', 'doc'),
-  paymentQr: cls('_paymentQr', 'doc'),
-  paymentDetails: cls('_paymentDetails', 'doc'),
-  paymentMethodLine: cls('_paymentMethodLine', 'doc'),
-  paymentRows: cls('_paymentRows', 'doc'),
-  paymentRow: cls('_paymentRow', 'doc'),
-  paymentHint: cls('_paymentHint', 'doc'),
   blockLabel: cls('_blockLabel', 'doc'),
-  bank: cls('_bank', 'due'),
-  qrCard: cls('_qrCard', 'due'),
+  duePaper: cls('_paper', 'due'),
+  summary: cls('_summary', 'due'),
+  summaryRow: cls('_summaryRow', 'due'),
+  paidStamp: cls('_paidStamp', 'due'),
+  // The shared Payment Details card, printed once per document on both sheets.
+  paymentCard: cls('_card', 'pay'),
+  payHeader: cls('_header', 'pay'),
+  payBody: cls('_body', 'pay'),
+  payDetails: cls('_details', 'pay'),
+  payTile: cls('_tile', 'pay'),
+  payRows: cls('_rows', 'pay'),
+  payRow: cls('_row', 'pay'),
+  payHint: cls('_hint', 'pay'),
   card: cls('_card', 'card'),
   body: cls('_body', 'card'),
   qrColumn: cls('_qrColumn', 'card'),
   qr: cls('_qr', 'card'),
-  details: cls('_details', 'card'),
+  detailsTile: cls('_details', 'card'),
   amount: cls('_amount', 'card'),
-  payee: cls('_payee', 'card'),
-  vpa: cls('_vpa', 'card'),
   note: cls('_note', 'card'),
+  payHeading: cls('_heading', 'pay'),
+  payScan: cls('_scanLabel', 'pay'),
 }
 
 /** A QR as a real <img> at true physical size, so the browser lays it out. */
@@ -152,19 +162,50 @@ const inr = (paise) =>
 const style = (extra = '') =>
   `<style>${css}</style><style>body{margin:0;background:#f1efe9}${extra}</style>`
 
-/** The compact print form of the scan card, as `variant="print"` renders it. */
-const upiPrint = (amountPaise, vpa, note) => `
-<section class="${C.card}" data-variant="print" data-upi-qr>
+/** The compact QR tile, as `variant="tile"` renders it. */
+const upiTile = (amountPaise, note) => `
+<section class="${C.card}" data-variant="tile" data-upi-qr>
   <div class="${C.body}">
     <div class="${C.qrColumn}">
-      <img class="${C.qr}" src="${QR_SRC}" width="98" height="98" alt="UPI QR code to pay ${inr(amountPaise)}">
+      <img class="${C.qr}" src="${QR_SRC}" alt="UPI QR code to pay ${inr(amountPaise)}">
     </div>
-    <div class="${C.details}">
+    <div class="${C.detailsTile}">
       <p class="${C.amount}">${inr(amountPaise)}</p>
-      <p class="${C.payee}">Ruchita Interiors</p>
-      <p class="${C.vpa}">${vpa}</p>
       <p class="${C.note}">Ref ${note}</p>
     </div>
+  </div>
+</section>`
+
+/**
+ * The shared Payment Details card, in the layout both documents print.
+ *
+ * `withQr` is what distinguishes the four FR-P8 invoice presentations and the two
+ * Balance Bill states, so each is rendered rather than inferred.
+ */
+const paymentCard = ({ withQr, withBank, withUpiRow = true, hint = '' }) => `
+<section class="${C.paymentCard}" data-payment-card>
+  <div class="${C.payHeader}">
+    <p class="${C.payHeading}"><span>Payment Details</span></p>
+    ${withQr ? `<p class="${C.payScan}"><span>Scan to Pay</span></p>` : ''}
+  </div>
+  <div class="${C.payBody}">
+    <div class="${C.payDetails}">
+      ${withBank ? `<dl class="${C.payRows}">${[
+        ['Account Name', 'Ruchita Interiors LLP'],
+        ['Account Number', '00123456789'],
+        ['Bank', 'HDFC Bank'],
+        ['Branch', 'Vijay Nagar'],
+        ['IFSC', 'HDFC0001234'],
+      ]
+        .map(
+          ([label, value]) =>
+            `<div class="${C.payRow}"><dt>${label}</dt><dd>${value}</dd></div>`,
+        )
+        .join('')}</dl>` : ''}
+      ${withUpiRow ? `<div class="${C.payRow}"><dt>UPI ID</dt><dd>ruchitainteriors@upi</dd></div>` : ''}
+      ${hint ? `<p class="${C.payHint}">${hint}</p>` : ''}
+    </div>
+    ${withQr ? `<div class="${C.payTile}">${upiTile(5000000, 'INV-2026-0001')}</div>` : ''}
   </div>
 </section>`
 
@@ -196,7 +237,7 @@ const header = `
 const terms = `
 <section style="margin-block-start:5mm;padding-block-start:3mm;border-block-start:1px solid #e4e0d5">
   <h2 class="${C.blockLabel}">Terms &amp; Conditions</h2>
-  <ol style="margin:0;padding-inline-start:4mm;font-size:8.5pt;color:#5a564c;line-height:1.5">
+  <ol style="margin:0;padding-inline-start:4mm;font-size:8.5pt;color:#1d1b16;line-height:1.5">
     <li>50% advance is required to begin work.</li>
     <li>Prices are valid for the stated validity period.</li>
     <li>Delivery timelines start from advance receipt and material confirmation.</li>
@@ -209,17 +250,6 @@ const terms = `
   <p style="margin:0">Modular Kitchen &middot; Wardrobes &middot; Turnkey Interiors</p>
 </footer>`
 
-const bankRows = `
-<dl class="${C.paymentRows}">
-  <div class="${C.paymentRow}"><dt>Account name</dt><dd>Ruchita Interiors LLP</dd></div>
-  <div class="${C.paymentRow}"><dt>Account number</dt><dd>00123456789</dd></div>
-  <div class="${C.paymentRow}"><dt>Bank</dt><dd>HDFC Bank</dd></div>
-  <div class="${C.paymentRow}"><dt>Branch</dt><dd>Vijay Nagar</dd></div>
-  <div class="${C.paymentRow}"><dt>IFSC</dt><dd>HDFC0001234</dd></div>
-</dl>`
-
-const verifyNote = `<p class="${C.paymentHint}">Scan to Pay. Please verify the amount before paying, and quote INV-2026-0001.</p>`
-
 /**
  * The four FR-P8 presentations of the invoice's payment block, as separate strings
  * so each can be measured rather than reasoned about.
@@ -229,29 +259,38 @@ const verifyNote = `<p class="${C.paymentHint}">Scan to Pay. Please verify the a
  * ask for a different sum.
  */
 const paymentSection = (inner) => `
-  <section class="${C.payment}" data-document-payment>
-    <h2 class="${C.blockLabel}">Payment</h2>
-    <div class="${C.paymentBody}">${inner}</div>
-  </section>`
+  <section class="${C.payment}" data-document-payment>${inner}</section>`
 
 /** `payment_method = NULL` — both electronic rails, the tallest of the four. */
-const invoicePayment = paymentSection(`
-      <div class="${C.paymentQr}">${upiPrint(5000000, 'ruchitainteriors@upi', 'INV-2026-0001')}</div>
-      <div class="${C.paymentDetails}">${bankRows}${verifyNote}</div>`)
+const invoicePayment = paymentSection(
+  paymentCard({
+    withQr: true,
+    withBank: true,
+    hint: 'Please verify the amount before paying, and quote INV-2026-0001.',
+  }),
+)
 
-/** `payment_method = 'upi'` — the code, and no bank details at all. */
-const invoicePaymentUpi = paymentSection(`
-      <div class="${C.paymentQr}">${upiPrint(5000000, 'ruchitainteriors@upi', 'INV-2026-0001')}</div>`)
+/** `payment_method = 'upi'` — the code and the UPI ID, and no bank details at all. */
+const invoicePaymentUpi = paymentSection(
+  paymentCard({
+    withQr: true,
+    withBank: false,
+    hint: 'Please verify the amount before paying, and quote INV-2026-0001.',
+  }),
+)
 
 /** `payment_method = 'bank_transfer'` — rows only, so they get the full width. */
-const invoicePaymentBank = paymentSection(`
-      <div class="${C.paymentDetails}">${bankRows}</div>`)
+const invoicePaymentBank = paymentSection(paymentCard({ withQr: false, withBank: true }))
 
 /** `payment_method = 'cash'` — the method line is the whole instruction. */
-const invoicePaymentCash = paymentSection(`
-      <div class="${C.paymentDetails}">
-        <p class="${C.paymentMethodLine}"><strong>Payment Method: Cash</strong></p>
-      </div>`)
+const invoicePaymentCash = paymentSection(
+  `<section class="${C.paymentCard}" data-payment-card>
+     <div class="${C.payHeader}"><p class="${C.payHeading}"><span>Payment Details</span></p></div>
+     <div class="${C.payBody}"><div class="${C.payDetails}">
+       <p style="margin:0 0 1.5mm;font-size:9pt"><strong>Payment Method: Cash</strong></p>
+     </div></div>
+   </section>`,
+)
 
 /**
  * The invoice, in the `payment_method = NULL` presentation (FR-P8): both electronic
@@ -291,55 +330,67 @@ const invoiceHtml = `<!doctype html><html><head><meta charset="utf-8">
       <div style="display:flex;justify-content:space-between;padding:1.2mm 0"><dt>Discount</dt><dd>&minus;${inr(1000000)}</dd></div>
       <div style="display:flex;justify-content:space-between;margin-block-start:1mm;padding:2mm 2.5mm;background:#f5edda;border-inline-start:.7mm solid #c9a24b">
         <dt style="font-weight:700">Grand Total</dt><dd style="font-weight:700">${inr(5000000)}</dd></div>
-      <div style="display:flex;justify-content:space-between;margin-block-start:1mm;padding-block-start:1.5mm;border-block-start:1px solid #cfc9ba">
-        <dt>Balance Due</dt><dd>${inr(5000000)}</dd></div>
     </dl>
   </section>
   ${invoicePayment}
   ${terms}
 </article></body></html>`
 
-/** The balance document: the amount-bearing QR, in the compact print form. */
-const balanceHtml = `<!doctype html><html><head><meta charset="utf-8">
+/**
+ * The balance document: the amount-bearing QR, in the shared Payment Details card.
+ *
+ * Rendered from a function so the outstanding and the settled states are the *same*
+ * markup with the card present or absent, which is exactly how the component behaves -
+ * there is no second settled layout to keep in step.
+ */
+const balanceHtml = (settled = false) => `<!doctype html><html><head><meta charset="utf-8">
 <title>Payment due print check</title>${style()}</head><body>
-<article class="${C.paper}" data-document-paper data-payment-due>
+<article class="${settled ? C.duePaper + ' ' + cls('_paperSettled', 'due') : C.duePaper}" data-document-paper data-payment-due data-fully-paid="${settled}">
   ${header}
-  <div style="display:flex;align-items:flex-end;justify-content:space-between;padding-block:4mm">
-    <h1 style="margin:0;font-size:16pt;text-transform:uppercase">PAYMENT DUE</h1>
-    <p style="margin:0;text-align:end">
-      <span style="display:block;font-size:7.5pt;text-transform:uppercase;color:#8a8578">Reference</span>
-      <span style="font-size:11pt;font-weight:600">INV-2026-0001</span>
-    </p>
+  <div class="${settled ? '' : ''}" style="display:flex;align-items:flex-end;justify-content:space-between;padding-block:4mm">
+    <div><h1 style="margin:0;font-size:16pt;text-transform:uppercase">PAYMENT DUE</h1></div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2mm;text-align:end">
+      ${settled ? `<p class="${C.paidStamp}" data-paid-stamp="true">Fully Paid</p>` : ''}
+      <p style="margin:0"><span style="display:block;font-size:7.5pt;text-transform:uppercase;color:#8a8578">Reference</span>
+      <span style="font-size:11pt;font-weight:600">INV-2026-0001</span></p>
+    </div>
   </div>
-  <section style="padding-block:3mm;border-block:1px solid #e4e0d5">
-    <h2 class="${C.blockLabel}">Billed to</h2>
-    <p style="margin:0 0 1mm;font-size:11pt;font-weight:600">Meera Iyer</p>
-    <p style="margin:0;font-size:9pt;color:#5a564c">22, Green Meadows, Indore</p>
+  <section style="display:grid;grid-template-columns:1fr 1fr;gap:4mm;padding-block:3mm;border-block:1px solid #e4e0d5">
+    <div>
+      <h2 class="${C.blockLabel}">Bill To</h2>
+      <p style="margin:0 0 1mm;font-size:11pt;font-weight:600">Meera Iyer</p>
+      <p style="margin:0;font-size:9pt;color:#5a564c">22, Green Meadows, Indore</p>
+    </div>
+    <div>
+      <h2 class="${C.blockLabel}">Project / Site Address</h2>
+      <p style="margin:0;font-size:9pt;color:#5a564c">Plot 14, Indore</p>
+    </div>
   </section>
-  <section style="margin-block-start:4mm">
-    <h2 class="${C.blockLabel}">Balance summary</h2>
+  <section class="${C.summary}">
+    <h2 class="${C.blockLabel}">Balance Summary</h2>
     <dl style="margin:0;display:flex;flex-direction:column;border-block-end:1px solid #e4e0d5">
-      <div style="display:flex;justify-content:space-between;padding-block:1.5mm;border-block-start:1px solid #e4e0d5"><dt style="font-size:9.5pt;color:#5a564c">Original invoice total</dt><dd style="margin:0;font-size:10.5pt">${inr(5000000)}</dd></div>
-      <div style="display:flex;justify-content:space-between;padding-block:1.5mm;border-block-start:1px solid #e4e0d5"><dt style="font-size:9.5pt;color:#5a564c">Total received</dt><dd style="margin:0;font-size:10.5pt">${inr(2000000)}</dd></div>
-      <div style="display:flex;justify-content:space-between;padding-block:1.5mm;border-block-start:1px solid #e4e0d5"><dt style="font-size:9.5pt;color:#5a564c">Outstanding balance</dt><dd style="margin:0;font-size:10.5pt">${inr(3000000)}</dd></div>
-      <div style="display:flex;justify-content:space-between;margin-block-start:1mm;padding:2mm 2.5mm;background:#f5edda;border-inline-start:.7mm solid #c9a24b">
-        <dt style="font-weight:700">Amount due now</dt><dd style="margin:0;font-size:12pt;font-weight:700">${inr(3000000)}</dd></div>
+      <div class="${C.summaryRow}"><dt style="font-size:9.5pt;color:#5a564c">Original invoice total</dt><dd style="margin:0;font-size:10.5pt">${inr(5000000)}</dd></div>
+      <div class="${C.summaryRow}"><dt style="font-size:9.5pt;color:#5a564c">Total received</dt><dd style="margin:0;font-size:10.5pt">${inr(settled ? 5000000 : 2000000)}</dd></div>
+      <div class="${C.summaryRow}"><dt style="font-size:9.5pt;color:#5a564c">Outstanding balance</dt><dd style="margin:0;font-size:10.5pt">${inr(settled ? 0 : 3000000)}</dd></div>
+      <div class="${C.summaryRow}" style="${settled ? 'margin-block-start:1mm;padding:2mm 2.5mm;background:#e4f3ea;border-inline-start:.7mm solid #177245' : 'margin-block-start:1mm;padding:2mm 2.5mm;background:#f5edda;border-inline-start:.7mm solid #c9a24b'}"><dt style="font-weight:700;color:${settled ? '#177245' : '#6e5620'}">Amount due now</dt><dd style="margin:0;font-size:12pt;font-weight:700;color:${settled ? '#177245' : '#6e5620'}">${inr(settled ? 0 : 3000000)}</dd></div>
     </dl>
   </section>
-  <div class="${C.qrCard}">${upiPrint(3000000, 'ruchitainteriors@upi', 'INV-2026-0001')}</div>
-  <section class="${C.bank}" data-document-bank>
-    <h2 class="${C.blockLabel}">Or pay by bank transfer</h2>
-    <dl style="display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;margin:0;font-size:8.5pt">
-      <div style="display:flex;gap:2mm"><dt style="flex:0 0 26mm;color:#5a564c">Account name</dt><dd style="margin:0">Ruchita Interiors LLP</dd></div>
-      <div style="display:flex;gap:2mm"><dt style="flex:0 0 26mm;color:#5a564c">Account number</dt><dd style="margin:0">00123456789</dd></div>
-      <div style="display:flex;gap:2mm"><dt style="flex:0 0 26mm;color:#5a564c">Bank</dt><dd style="margin:0">HDFC Bank</dd></div>
-      <div style="display:flex;gap:2mm"><dt style="flex:0 0 26mm;color:#5a564c">IFSC</dt><dd style="margin:0">HDFC0001234</dd></div>
-    </dl>
-  </section>
+  ${
+    settled
+      ? ''
+      : `<section data-document-payment>${paymentCard({
+          withQr: true,
+          withBank: true,
+        })}</section>`
+  }
   <footer style="margin-block-start:6mm;padding-block-start:3mm;border-block-start:1px solid #e4e0d5;font-size:8pt">
-    <p style="margin:0 0 1.5mm;color:#5a564c">Generated 30 Sep 2026 &middot; Due 29 Oct 2026</p>
-    <p style="margin:0 0 2mm;font-size:8pt;line-height:1.45;color:#5a564c">This is a payment reminder for invoice INV-2026-0001, not a new invoice. The balance shown is what the ledger recorded as outstanding when this document was generated.</p>
-    <p style="margin:0;font-style:italic;font-weight:600">Verify the amount before paying.</p>
+  ${
+    settled
+      ? '<p style="margin:0 0 2mm;font-size:11pt;font-weight:700;color:#177245">Payment received in full. Thank you.</p>'
+      : `<p style="margin:0 0 1.5mm;color:#5a564c">Generated 30 Sep 2026 &middot; Due 29 Oct 2026</p>
+         <p style="margin:0 0 2mm;font-size:8pt;line-height:1.45;color:#5a564c">This is a payment reminder for invoice INV-2026-0001, not a new invoice. The balance shown is what the ledger recorded as outstanding when this document was generated.</p>
+         <p style="margin:0;font-style:italic;font-weight:600">Verify the amount before paying.</p>`
+  }
   </footer>
 </article></body></html>`
 
@@ -355,7 +406,7 @@ window.addEventListener('load', () => {
   const box = (sel) => document.querySelector(sel);
   const rect = (el) => (el ? el.getBoundingClientRect() : null);
   const paper = box('[data-document-paper]');
-  const block = box('[data-document-payment]') || box('[data-upi-qr]');
+  const block = box('[data-payment-card]') || box('[data-document-payment]') || box('[data-upi-qr]');
   const qr = box('[data-upi-qr] img');
   const p = rect(paper);
   const b = rect(block);
@@ -367,6 +418,16 @@ window.addEventListener('load', () => {
     qr: q ? mm(q.width) : null,
     chrome: !!box('[data-upi-qr] button, [data-upi-qr] a'),
     title: !!box('[data-upi-qr] h3'),
+    cards: document.querySelectorAll('[data-payment-card]').length,
+    stamps: document.querySelectorAll('[data-paid-stamp]').length,
+    // The bank details must appear exactly once per document. A regression that
+    // reintroduces a second block prints the account number twice on one page.
+    //
+    // Scoped to the sheet, not to the whole body: this probe is an inline script
+    // inside the body, and its own source text would otherwise be counted as a
+    // duplicate of the account number it is looking for.
+    bankRepeats: ((paper ? paper.textContent : '').match(/00123456789/g) || []).length,
+    fullyPaid: document.querySelector('[data-fully-paid]')?.dataset.fullyPaid ?? null,
   });
 });
 </script>`
@@ -407,7 +468,11 @@ function probe(name, html) {
 
 const results = [
   ['invoice', probe('invoice', invoiceHtml)],
-  ['balance', probe('balance', balanceHtml)],
+  ['balance', probe('balance', balanceHtml(false))],
+  // The settled balance sheet: the same document with the payment card absent. It has
+  // to be measured too, because dropping the card changes the page height and a
+  // regression that re-added it would silently put a live QR under a "fully paid" stamp.
+  ['balance-paid', probe('balance-paid', balanceHtml(true))],
   // The other three FR-P8 presentations, checked for the same A4 fit. Only
   // `not-selected` carries both rails and is therefore the tallest, but a
   // `bank_transfer` invoice renders the rows full-width in two columns where
@@ -423,19 +488,30 @@ for (const [name, r] of results) {
   const fits = r.sheet !== null && r.sheet <= A4_PRINTABLE_MM
   console.log(`print-check/${name}.pdf`)
   console.log(`  sheet height      ${r.sheet}mm   (A4 printable ${A4_PRINTABLE_MM}mm)  ${fits ? 'FITS' : 'OVERFLOWS'}`)
-  console.log(`  payment block     ${r.block}mm`)
+  console.log(`  payment card      ${r.block}mm   (cards rendered: ${r.cards})`)
   if (r.qr !== null) console.log(`  QR                ${r.qr}mm square`)
   if (r.qr !== null) console.log(`  print chrome      buttons=${r.chrome} heading=${r.title}  (both must be false)`)
+  console.log(`  account number    printed ${r.bankRepeats}x  (must be 0 or 1)`)
+  if (r.fullyPaid) console.log(`  settled           ${r.fullyPaid === 'true'}  stamps=${r.stamps}`)
   console.log()
 }
 
-// Fail the run on the two regressions this feature exists to prevent.
+// Fail the run on the regressions this harness exists to prevent.
 const problems = []
 for (const [name, r] of results) {
   if (r.sheet !== null && r.sheet > A4_PRINTABLE_MM) problems.push(`${name}: sheet is ${r.sheet}mm, over the ${A4_PRINTABLE_MM}mm printable height`)
   if (r.qr !== null && (r.chrome || r.title)) problems.push(`${name}: screen chrome leaked into the print form`)
   if (r.qr !== null && r.qr < 20) problems.push(`${name}: QR is ${r.qr}mm, below the ~20mm scannable floor`)
+  if (r.bankRepeats > 1) problems.push(`${name}: account number printed ${r.bankRepeats}x — bank details are duplicated`)
+  if (r.cards > 1) problems.push(`${name}: ${r.cards} payment cards rendered — bank details must appear once`)
 }
+
+// The settled sheet carries no payment card and no code at all, and says so on paper.
+const paid = results.find(([name]) => name === 'balance-paid')[1]
+if (paid.qr !== null) problems.push('balance-paid: a settled sheet must carry no QR')
+if (paid.cards !== 0) problems.push('balance-paid: a settled sheet must carry no payment card')
+if (paid.stamps !== 1) problems.push('balance-paid: the settled sheet must be stamped exactly once')
+
 if (problems.length) {
   console.error('Print check FAILED:')
   for (const p of problems) console.error(`  - ${p}`)

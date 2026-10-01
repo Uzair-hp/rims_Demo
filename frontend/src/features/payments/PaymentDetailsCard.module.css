@@ -1,0 +1,202 @@
+/*
+ * Ruchita Interiors — Payment Details card styles (§8.5).
+ *
+ * Tokens only, the single-file rule in styles/tokens.css. The beige is the same
+ * `--color-gold-soft` wash the Grand Total and Amount-due rows use, so the card reads as
+ * part of the existing document rather than as a widget pasted beside it.
+ *
+ * The whole card is one unbreakable unit. An account number separated from the code that
+ * pays it by a page break is the defect `break-inside: avoid` exists to prevent, and the
+ * card is small enough that keeping it whole never forces a wasteful gap.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Card
+ * ------------------------------------------------------------------ */
+
+/*
+ * 3mm of vertical padding, not 4mm.
+ *
+ * Measured, not chosen for looks. The card's height is set by the tile column — a 28mm
+ * code plus its amount and reference captions — so the padding is pure overhead on the
+ * sheet, and every millisecond here is a millisecond the sheet has left before it reaches
+ * the 269mm printable height. `print-check.mjs` renders a five-item invoice with five
+ * terms and measures 268.2mm against that ceiling on 4mm; 3mm buys back 2mm of headroom
+ * on a document whose length varies with its own terms text.
+ */
+.card {
+  padding: 3mm 4mm;
+  background: var(--color-gold-soft);
+  border-radius: var(--radius-lg);
+  /* No border: the wash is the boundary. A hairline as well would make it read as a
+     form field rather than as the invoice's own payment section. */
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* ------------------------------------------------------------------ *
+ * Header row - "Payment Details" left, "Scan to Pay" right
+ * ------------------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4mm;
+  margin-block-end: 2mm;
+}
+
+.heading,
+.scanLabel {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  margin: 0;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-gold-ink);
+  /* The label never wraps to a second line: a two-line "PAYMENT DETAILS" over a one-line
+     amount reads as two section headings. */
+  white-space: nowrap;
+}
+
+.scanLabel {
+  color: var(--color-ink-muted);
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--color-gold-ink);
+}
+
+/* ------------------------------------------------------------------ *
+ * Body - details on the left, the code pinned to the right
+ * ------------------------------------------------------------------ */
+
+.body {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4mm;
+}
+
+.details {
+  flex: 1 1 60mm;
+  min-inline-size: 0;
+}
+
+.tile {
+  /* Natural width, never a fixed gutter. `UpiQrCard`'s tile is a centred column that
+     owns its own 28mm square; pinning a wrapper to the same width squeezed the caption
+     under the code into one word per line (docs/QR_Code.md §6.2). */
+  flex: 0 0 auto;
+}
+
+.qr {
+  inline-size: 100%;
+}
+
+/* ------------------------------------------------------------------ *
+ * Label / value rows
+ * ------------------------------------------------------------------ */
+
+/*
+ * Two columns of pairs.
+ *
+ * A fixed label column keeps every value on the same left edge regardless of label
+ * length, which is what "Account number" beside "IFSC" would otherwise break. Six rows
+ * print as three rows of two.
+ *
+ * Two columns stay two whether or not the code shares the row, because the code does not
+ * need the width: the tile is a fixed 28mm pinned to the right, leaving roughly 150mm for
+ * the grid — two 24mm label columns, a 6mm gutter, about 48mm per value. An account
+ * number at 8.5pt needs roughly 30mm of that. Collapsing to one column beside the code was
+ * measured rather than assumed and made no difference to the card's height, because the
+ * tile column (code plus its amount and reference captions) is what sets it — the extra
+ * three rows simply absorbed slack beside a taller neighbour. It bought nothing and cost
+ * a second vertical rhythm, so it is gone.
+ */
+.rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5mm 6mm;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  gap: 2mm;
+  align-items: baseline;
+  min-inline-size: 0;
+}
+
+.row dt {
+  flex: 0 0 24mm;
+  font-size: 7pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.row dd {
+  margin: 0;
+  font-size: 8.5pt;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------ *
+ * Method line + hint
+ * ------------------------------------------------------------------ */
+
+/* The only instruction a cash invoice has; see the FR-P8 presentation matrix. */
+.methodLine {
+  margin: 0 0 1.5mm;
+  font-size: 9pt;
+  color: var(--color-ink);
+}
+
+/*
+ * The verification note is not padding. On the Tax Invoice the code encodes the invoice's
+ * grand total, which is what the sheet states as owed, while the amount actually asked
+ * for after a part payment lives on the Balance / Payment Due document. So the paper can
+ * be behind the live balance, and this is what makes a stale reprint safe to act on.
+ */
+.hint {
+  margin: 2mm 0 0;
+  font-size: 7pt;
+  line-height: 1.4;
+  color: var(--color-ink-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Narrow screens
+ * ------------------------------------------------------------------ */
+
+/*
+ * One column. The tile drops below the details and centres: at phone widths a 28mm code
+ * beside a two-column label grid leaves the values too narrow to read an account number
+ * off the page.
+ */
+@media (max-width: 30rem) {
+  .body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rows {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tile {
+    align-self: flex-start;
+  }
+
+  .header {
+    flex-wrap: wrap;
+  }
+}

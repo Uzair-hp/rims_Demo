@@ -30,19 +30,14 @@
  * }} props
  */
 
-import { useState } from 'react'
 import { calcLineTotal, milliToInput } from '../../lib/calc.js'
 import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
-import UpiQrCard from '../payments/UpiQrCard.jsx'
+import { formatPhone } from '../../lib/phone.js'
+import PaymentDetailsCard from '../payments/PaymentDetailsCard.jsx'
+import DocumentHeader from './DocumentHeader.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import styles from './DocumentPaper.module.css'
-
-/**
- * The official brand lockup shipped in `public/brand/`, used when Settings has no
- * uploaded logo.
- */
-const BUNDLED_LOGO = '/brand/logo.svg'
 
 /**
  * Whether this document is payable.
@@ -115,9 +110,8 @@ export default function DocumentPaper({
   isUnsaved = false,
   docKind = 'quotation',
 }) {
-  const [logoFailed, setLogoFailed] = useState(false)
-  const logoSrcResolved = logoSrc || BUNDLED_LOGO
-  const showLogo = !logoFailed
+  // The logo / wordmark fallback lives in `DocumentHeader` now, so this component holds
+  // no state at all: it is a pure function of the document payload.
 
   // Phase 7: one sheet, two document kinds. The shared spine — header, client
   // block, items, tax breakdown, terms, signatory, footer — is identical; only
@@ -161,14 +155,13 @@ export default function DocumentPaper({
   const discountLabel = isPercentDiscount ? `Discount (${(doc.discount_bp || 0) / 100}%)` : 'Discount'
   const gstLabel = `GST ${(doc.gst_bp || 0) / 100}%`
 
-  const paid = doc.paid_paise || 0
-  const outstanding = doc.outstanding_paise ?? Math.max(0, grandTotal - paid)
-
-  const companyAddress = joinAddress(
-    s.address_line1,
-    s.address_line2,
-    joinAddress(s.city, s.state, s.pincode),
-  )
+  // `paid_paise`, `outstanding_paise` and `payment_status` are **deliberately not read
+  // here**, though the server sends all three on this payload. A tax invoice is a fixed
+  // legal document of what was billed: it must print identically before any payment and
+  // after the last one, so anything derived from the ledger would make a reprint a
+  // different document from the one the customer already holds. Those figures live on the
+  // application UI and on the Balance / Payment Due sheet, which is derived from the
+  // ledger on every request (§8.5). Nothing below this line may reintroduce them.
 
   const clientAddress = joinAddress(client.address, client.city, client.state, client.pincode)
 
@@ -209,77 +202,31 @@ export default function DocumentPaper({
   const payeeName = (s.company_name || '').trim()
   const bankRows = showBank ? bankLines : []
 
+  // Whether the card will have anything at all to print. Mirrors the card's own guard,
+  // and is deliberately *not* just `showBank`: a bank-transfer invoice with an empty
+  // snapshot would otherwise mount a section around a card that renders nothing, which
+  // is a bare top border on the customer's page.
+  const hasPaymentBlock =
+    showMethod || showQr || (showBank && bankRows.length > 0) || (showUpi && Boolean(liveUpiId))
+
   return (
     <article className={styles.paper} data-document-paper aria-label={documentLabel}>
-      {/* 1. Header band */}
-      <header className={styles.header}>
-        <div className={styles.brand}>
-          {showLogo ? (
-            <img
-              src={logoSrcResolved}
-              alt={`${s.company_name || 'Company'} logo`}
-              className={styles.logo}
-              onError={() => setLogoFailed(true)}
-            />
-          ) : (
-            <span className={styles.wordmark}>{s.company_name || 'Ruchita Interiors'}</span>
-          )}
-          {showLogo ? <p className={styles.companyName}>{s.company_name || 'Ruchita Interiors'}</p> : null}
-          {/* Sits under the business name rather than in the contact column: it
-              describes the business, not the address. No fallback — an unset
-              tagline is an absence, and printing placeholder copy on a customer's
-              tax document is worse than printing nothing. */}
-          {s.tagline ? <p className={styles.tagline}>{s.tagline}</p> : null}
-        </div>
-
-        <div className={styles.company}>
-          <address className={styles.companyMeta}>
-            {companyAddress ? (
-              <span className={styles.metaLine}>
-                <Icon name="mapPin" size={13} className={styles.metaIcon} />
-                <span>{companyAddress}</span>
-              </span>
-            ) : null}
-            {s.phone ? (
-              <span className={styles.metaLine}>
-                <Icon name="phone" size={13} className={styles.metaIcon} />
-                <span>{s.phone}</span>
-              </span>
-            ) : null}
-            {s.email ? (
-              <span className={styles.metaLine}>
-                <Icon name="mail" size={13} className={styles.metaIcon} />
-                <span>{s.email}</span>
-              </span>
-            ) : null}
-            {s.website ? (
-              <span className={styles.metaLine}>
-                <Icon name="globe" size={13} className={styles.metaIcon} />
-                <span>{s.website}</span>
-              </span>
-            ) : null}
-            {s.gstin ? (
-              <span className={`${styles.metaLine} ${styles.gstin}`}>
-                <Icon name="building" size={13} className={styles.metaIcon} />
-                <span>GSTIN: {s.gstin}</span>
-              </span>
-            ) : null}
-          </address>
-        </div>
-      </header>
+      {/* 1. Header band — the same component the Balance / Payment Due sheet uses, so
+          the two documents cannot present different letterheads (see DocumentHeader). */}
+      <DocumentHeader settings={s} logoSrc={logoSrc} />
 
       {/* 2. Title strip */}
       <div className={styles.titleStrip}>
         <div className={styles.dates}>
           <p className={styles.dateLine}>
-            <Icon name="calendar" size={13} className={styles.labelIcon} />
+            <Icon name="calendar" size={15} strokeWidth={1.5} className={styles.labelIcon} />
             <span className={styles.microLabel}>{isInvoice ? 'Issue date' : 'Date'}</span>
             <span className={styles.dateValue}>
               {formatDate(isInvoice ? doc.issue_date : doc.quotation_date) || '—'}
             </span>
           </p>
           <p className={styles.dateLine}>
-            <Icon name="calendar" size={13} className={styles.labelIcon} />
+            <Icon name="calendar" size={15} strokeWidth={1.5} className={styles.labelIcon} />
             <span className={styles.microLabel}>{isInvoice ? 'Due date' : 'Valid until'}</span>
             <span className={styles.dateValue}>
               {formatDate(isInvoice ? doc.due_date : doc.valid_until) || '—'}
@@ -296,43 +243,43 @@ export default function DocumentPaper({
       <section className={styles.clientBlock}>
         <div className={styles.clientCell}>
           <h2 className={styles.blockLabel}>
-            <Icon name="user" size={13} className={styles.labelIcon} />
+            <Icon name="user" size={15} strokeWidth={1.5} className={styles.labelIcon} />
             <span>Bill To</span>
           </h2>
           <p className={styles.clientName}>{client.name || '—'}</p>
           {clientAddress ? (
             <p className={styles.clientLine}>
-              <Icon name="mapPin" size={12} className={styles.inlineIcon} />
+              <Icon name="mapPin" size={14} strokeWidth={1.5} className={styles.inlineIcon} />
               <span>{clientAddress}</span>
             </p>
           ) : null}
           {client.phone ? (
             <p className={styles.clientLine}>
-              <Icon name="phone" size={12} className={styles.inlineIcon} />
-              <span>{client.phone}</span>
+              <Icon name="phone" size={14} strokeWidth={1.5} className={styles.inlineIcon} />
+              <span>{formatPhone(client.phone)}</span>
             </p>
           ) : null}
           {client.email ? (
             <p className={styles.clientLine}>
-              <Icon name="mail" size={12} className={styles.inlineIcon} />
+              <Icon name="mail" size={14} strokeWidth={1.5} className={styles.inlineIcon} />
               <span>{client.email}</span>
             </p>
           ) : null}
           {client.gstin ? (
             <p className={styles.clientLine}>
-              <Icon name="building" size={12} className={styles.inlineIcon} />
+              <Icon name="badgeCheck" size={14} strokeWidth={1.5} className={styles.inlineIcon} />
               <span>GSTIN: {client.gstin}</span>
             </p>
           ) : null}
         </div>
         <div className={styles.clientCell}>
           <h2 className={styles.blockLabel}>
-            <Icon name="mapPin" size={13} className={styles.labelIcon} />
+            <Icon name="mapPin" size={15} strokeWidth={1.5} className={styles.labelIcon} />
             <span>Project / Site Address</span>
           </h2>
           {client.project_address ? (
             <p className={styles.clientLine}>
-              <Icon name="mapPin" size={12} className={styles.inlineIcon} />
+              <Icon name="mapPin" size={14} strokeWidth={1.5} className={styles.inlineIcon} />
               <span>{client.project_address}</span>
             </p>
           ) : (
@@ -357,7 +304,7 @@ export default function DocumentPaper({
             <th scope="col" className={styles.colUnit}>
               Unit
             </th>
-            <th scope="col" className={styles.colNum}>
+            <th scope="col" className={`${styles.colNum} ${styles.center}`}>
               Qty
             </th>
             <th scope="col" className={styles.colNum}>
@@ -418,109 +365,64 @@ export default function DocumentPaper({
             <dt>Grand Total</dt>
             <dd>{formatPaise(grandTotal)}</dd>
           </div>
-          {isInvoice && paid > 0 ? (
-            <div className={styles.totalRow}>
-              <dt>Amount Paid</dt>
-              <dd>−{formatPaise(paid)}</dd>
-            </div>
-          ) : null}
-          {isInvoice ? (
-            <div className={`${styles.totalRow} ${styles.totalBalance}`}>
-              <dt>Balance Due</dt>
-              <dd>{formatPaise(outstanding)}</dd>
-            </div>
-          ) : null}
+          {/* Deliberately nothing below this line. An earlier version ended the invoice
+              with "Amount Paid" and "Balance Due", which are both derived from the
+              payment ledger — so the same fixed tax document changed the moment a
+              payment was recorded, and a customer holding an already-printed copy could
+              be handed a second, different invoice for the same billing. The totals
+              block now stops at Grand Total, which is the whole amount billed and the
+              one figure this document is a legal statement of. What is still owed is
+              stated on the Balance / Payment Due sheet, which is re-derived per
+              collection. */}
         </dl>
       </section>
 
-      {/* 5b. Payment (§8.5, FR-P8).
+      {/* 5b. Payment details (§8.5, FR-P8).
        *
-       * The QR here is **generated** from a UPI intent URI, not an uploaded image.
-       * It encodes the invoice's GRAND TOTAL, never the outstanding balance: an
-       * outstanding amount is unknowable at issue and moves with every payment, so
-       * encoding it would mean a reprint of the same invoice asked for a different
-       * figure — the exact behaviour §8.4 exists to prevent, and the one thing a
-       * permanent tax document must never do. Collecting a reduced sum is the
-       * Balance / Payment Due document's job, and that document is regenerated per
-       * collection.
+       * `PaymentDetailsCard` is the same block the Balance / Payment Due sheet prints,
+       * so bank details and the scan code are laid out identically on both and appear
+       * exactly once per document.
+       *
+       * The QR here is **generated** from a UPI intent URI, not an uploaded image, and it
+       * encodes the invoice's GRAND TOTAL — never the outstanding balance. An outstanding
+       * amount is unknowable at issue and moves with every payment, so encoding it would
+       * mean a reprint of the same invoice asked for a different figure, which is the
+       * exact behaviour §8.4 exists to prevent and the one thing a permanent tax document
+       * must never do. Collecting a reduced sum is the Balance / Payment Due document's
+       * job, and that document is regenerated per collection.
        *
        * So the division of responsibility is:
-       *   - this sheet: the payment *instructions* (UPI, bank details) and the
-       *     current status. Static. Safe to reprint any time, forever.
-       *   - the Balance / Payment Due document: the amount-bearing QR for what is
-       *     still owed. Derived, never stored, regenerated per collection.
+       *   - this sheet: the payment *instructions*, and the grand total it states as
+       *     billed. Static. Safe to reprint any time, forever.
+       *   - the Balance / Payment Due document: what is still owed. Derived, never
+       *     stored, regenerated per collection.
        *
-       * The UPI ID and bank details are read live from Settings rather than the
-       * snapshot for the reason above; a closed account must not stay on issued
-       * documents. The *amounts* on this sheet are all the server's.
+       * The UPI ID is read live from Settings rather than the snapshot: a closed account
+       * must not stay on issued documents. The *amount* printed and encoded is the
+       * invoice's own saved grand total.
        */}
-      {isInvoice && (showMethod || showUpi || bankRows.length > 0) ? (
+      {/* The card returns `null` when it has nothing to print, so the section wrapper is
+          mounted only when the card will actually render — otherwise an empty section
+          with a top border would print as a stray hairline and a stray gap on the
+          customer's document (§21.24). `hasPaymentBlock` is the same question the card
+          asks, computed here from the same values. */}
+      {isInvoice && hasPaymentBlock ? (
         <section className={styles.payment} data-document-payment>
-          <h2 className={styles.blockLabel}>
-            <Icon name="wallet" size={13} className={styles.labelIcon} />
-            <span>Payment</span>
-          </h2>
-          <div className={styles.paymentBody}>
-            {showQr ? (
-              <div className={styles.paymentQr}>
-                {/* The QR's own caption, sitting with the code rather than in the
-                    section header: the label describes the code, and a header slot
-                    would leave it stranded on the left of a row the code may not
-                    share at all — a bank-transfer invoice prints no code. */}
-                <p className={styles.paymentQrHeader}>
-                  <Icon name="qrCode" size={13} className={styles.labelIcon} />
-                  <span>Scan to Pay</span>
-                </p>
-                <UpiQrCard
-                  variant="print"
-                  vpa={liveUpiId}
-                  payeeName={payeeName}
-                  amountPaise={doc.grand_total_paise}
-                  note={number}
-                />
-              </div>
-            ) : null}
-            <div className={styles.paymentDetails}>
-              {showMethod ? (
-                <p className={styles.paymentMethodLine}>
-                  <strong>Payment Method: {presentation.label}</strong>
-                </p>
-              ) : null}
-              {/*
-               * The UPI VPA and payee name are deliberately NOT repeated as rows
-               * here. `UpiQrCard`'s print variant already prints the VPA as text
-               * beneath the code — for a customer paying without a scanner — and
-               * duplicating it would print the same address twice on a document
-               * meant to be read once, carefully.
-               */}
-              {bankRows.length > 0 ? (
-                <dl className={styles.paymentRows}>
-                  {bankRows.map((line) => (
-                    <div key={line.label} className={styles.paymentRow}>
-                      <dt>{line.label}</dt>
-                      <dd>{line.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
-              {showUpi ? (
-                /*
-                 * The verification note is not padding. The printed QR encodes the
-                 * invoice's grand total, which is what the sheet states as owed; the
-                 * amount a customer is actually asked for after a part payment lives on
-                 * the Balance / Payment Due document. So the paper can be behind the
-                 * live balance, and this is what makes a stale reprint safe to act on.
-                 *
-                 * "Scan to Pay" is deliberately *not* repeated here: it now captions
-                 * the code itself, and saying it twice on one block reads as noise.
-                 */
-                <p className={styles.paymentHint}>
-                  Please verify the amount before paying
-                  {number ? `, and quote ${number}.` : '.'}
-                </p>
-              ) : null}
-            </div>
-          </div>
+          <PaymentDetailsCard
+            bankRows={bankRows}
+            upiId={showUpi ? liveUpiId : ''}
+            showBank={showBank}
+            showQr={showQr}
+            amountPaise={grandTotal}
+            payeeName={payeeName}
+            note={number}
+            methodLabel={showMethod ? presentation.label : null}
+            hint={
+              showUpi
+                ? `Please verify the amount before paying${number ? `, and quote ${number}.` : '.'}`
+                : null
+            }
+          />
         </section>
       ) : null}
 
@@ -528,7 +430,7 @@ export default function DocumentPaper({
       {doc.terms_text ? (
         <section className={styles.terms} data-document-terms>
           <h2 className={styles.blockLabel}>
-            <Icon name="fileText" size={13} className={styles.labelIcon} />
+            <Icon name="scrollText" size={15} strokeWidth={1.5} className={styles.labelIcon} />
             <span>Terms &amp; Conditions</span>
           </h2>
           <TermsList text={doc.terms_text} />
@@ -575,26 +477,44 @@ function ItemRow({ item, index }) {
   const lineTotal = item.line_total_paise ?? calcLineTotal(item.qty_milli, item.rate_paise)
   return (
     <tr className={styles.itemRow}>
-      <td className={`${styles.colIndex} ${styles.num}`}>{index}</td>
+      <td className={`${styles.colIndex} ${styles.center}`}>{index}</td>
       {/* The category is carried by the group's subheader row, not repeated on
-          every line: printing it twice would be noise on the page. The cell stays
-          so the column widths and the totals alignment are unchanged. */}
-      <td className={styles.colCategory}>{''}</td>
+          every line: printing it twice would be noise on the page. The cell has to
+          stay — `table-layout: fixed` sizes columns from the header, so dropping it
+          would slide the item text one column left — but it is marked as empty so it
+          can drop its rule. A bordered blank box under every line reads as a missing
+          value on a customer's document. */}
+      <td className={`${styles.colCategory} ${styles.colEmpty}`} data-empty-cell="true" />
       <td className={styles.colItem}>
         <span className={styles.itemName}>{item.name}</span>
         {item.description ? <span className={styles.itemDescription}>{item.description}</span> : null}
       </td>
-      <td className={styles.colUnit}>{item.unit || ''}</td>
+      <td className={`${styles.colUnit} ${styles.center}`}>{item.unit || ''}</td>
       {/* Quantity only. The unit used to be repeated here as well as in its own
           column, which contradicted the 14.3 column spec and — because this cell
           is `white-space: nowrap` — made a two-word unit like "running ft" an
           unbreakable token wide enough to widen the whole table. */}
-      <td className={`${styles.colNum} ${styles.num}`}>{milliToInput(item.qty_milli) || '0'}</td>
+      <td className={`${styles.colNum} ${styles.center}`}>{milliToInput(item.qty_milli) || '0'}</td>
       <td className={`${styles.colNum} ${styles.num}`}>{formatPaise(item.rate_paise)}</td>
       <td className={`${styles.colNum} ${styles.num}`}>{formatPaise(lineTotal)}</td>
     </tr>
   )
 }
+
+/**
+ * A leading "1." / "2)" / "3 -" typed into the terms textarea.
+ *
+ * Admins paste terms from documents that already number their lines, so the raw text
+ * commonly reads "1. 50% advance is required…". Rendered verbatim into an `<ol>` that
+ * produces "1. 1. 50% advance is required…" on the printed document — doubled numbering
+ * on a customer's tax document. The marker is stripped here and the `<ol>` supplies the
+ * single numbering, so the stored text is untouched and both styles of input look the
+ * same on paper.
+ *
+ * Anchored to the start and limited to one marker, so a term that merely *begins* with a
+ * number ("50% advance on order of…") is never truncated.
+ */
+const LEADING_MARKER = /^\s*\d+\s*[.)-]\s+/
 
 /**
  * Render terms text as a numbered list.
@@ -608,6 +528,7 @@ function TermsList({ text }) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+    .map((line) => line.replace(LEADING_MARKER, ''))
 
   if (lines.length === 0) return null
 

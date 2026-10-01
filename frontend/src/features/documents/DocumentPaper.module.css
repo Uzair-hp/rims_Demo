@@ -37,86 +37,16 @@
  * 1. Header band
  * ------------------------------------------------------------------ */
 
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 6mm;
-  padding-block-end: 3mm;
-  border-block-end: 0.6mm solid var(--color-gold);
-}
-
-.brand {
-  flex: 0 1 auto;
-  min-inline-size: 0;
-}
-
-/* Printed under the mark, never instead of it. The company name is the document's
-   strongest hierarchy cue, so it is the largest type on the sheet — above the
-   "QUOTATION"/"TAX INVOICE" title, which is now deliberately calmer. */
-.companyName {
-  margin: 2mm 0 0;
-  font-family: var(--font-display);
-  font-size: 18pt;
-  font-weight: var(--weight-semibold);
-  line-height: var(--line-height-tight);
-  color: var(--color-ink);
-}
-
-/* Height-capped, width-auto: the bundled lockup is 1424x772.5 (~1.84:1), so this
-   scales it proportionally and never distorts it. `block-size: auto` is
-   deliberately absent — it would override the max-height and let the SVG fall
-   back to its intrinsic 772.5px height (the `a362c3e` ballooning bug).
-   `max-inline-size` keeps it inside narrow rails. */
-.logo {
-  max-block-size: 16mm;
-  inline-size: auto;
-  max-inline-size: 62mm;
-}
-
-.wordmark {
-  font-family: var(--font-display);
-  font-size: 18pt;
-  font-weight: var(--weight-semibold);
-  line-height: var(--line-height-tight);
-  color: var(--color-ink);
-}
-
-.company {
-  flex: 0 1 auto;
-  min-inline-size: 0;
-  text-align: end;
-}
-
-.tagline {
-  margin: 0;
-  font-size: 8.5pt;
-  font-style: italic;
-  color: var(--color-ink-muted);
-}
-
-.companyMeta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.8mm;
-  font-style: normal;
-  font-size: 8pt;
-  line-height: 1.35;
-  color: var(--color-ink-muted);
-}
-
-.metaLine {
-  display: inline-flex;
-  align-items: center;
-  gap: 1.5mm;
-}
-
-.metaIcon {
-  color: var(--color-ink-subtle);
-  flex-shrink: 0;
-}
-
+/*
+ * The header itself — mark, business name, tagline and the icon contact block — is
+ * `DocumentHeader`, shared with the Balance / Payment Due sheet so the two documents
+ * cannot present different letterheads. Its rules live in
+ * `DocumentHeader.module.css`; nothing about it is restyled here, because a document
+ * module cannot reach another module's class names (see docs/QR_Code.md §6.2).
+ *
+ * Only the two icon tints the section labels below still need, for the Bill To / Project
+ * / Terms headings on this sheet.
+ */
 .labelIcon {
   color: var(--color-ink-subtle);
   flex-shrink: 0;
@@ -128,11 +58,6 @@
   flex-shrink: 0;
   margin-inline-end: 1.5mm;
   vertical-align: middle;
-}
-
-.gstin {
-  font-weight: var(--weight-medium);
-  color: var(--color-ink);
 }
 
 /* ------------------------------------------------------------------ *
@@ -207,15 +132,18 @@
  * ------------------------------------------------------------------ */
 
 .clientBlock {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4mm;
   padding-block: 3mm;
   border-block: var(--border-width) solid var(--color-border);
 }
 
+/* Two equal columns: Bill To and Project / Site Address. `minmax(0, 1fr)` rather than
+   `1fr` so a long address wraps inside its own column instead of forcing the grid wider
+   than the printable box, which is what a bare `1fr` does when its content is an
+   unbreakable token such as a GSTIN. */
 .clientCell {
-  flex: 1 1 60mm;
   min-inline-size: 0;
 }
 
@@ -302,6 +230,19 @@
   white-space: nowrap;
 }
 
+/*
+ * Unit and Qty are centred; # is centred with them.
+ *
+ * These three are the "how much of what" columns and they are short, so a centred value
+ * sits under its heading in the middle of a wide column instead of drifting to the far
+ * edge away from the label above it. Rate and Amount deliberately stay right-aligned,
+ * because those are the columns that have to line up vertically down the page for the
+ * totals to be checkable against each other.
+ */
+.center {
+  text-align: center;
+}
+
 /* ------------------------------------------------------------------ *
  * Column widths.
  *
@@ -374,6 +315,20 @@
   padding: 6mm 1mm;
   text-align: center;
   color: var(--color-ink-subtle);
+}
+
+/*
+ * The category cell on an item row.
+ *
+ * The category is printed once, on the group's subheader row, so every item row's cell
+ * is empty by design. It has to exist — `table-layout: fixed` sizes the columns from the
+ * header row, so removing it would slide every following value one column left and put
+ * the amount under Rate. But its horizontal rule is dropped, because a bordered blank
+ * cell under every line reads as a missing value on a document a customer receives,
+ * rather than as the quiet column it is.
+ */
+.colEmpty {
+  border-block-end: 0;
 }
 
 /* ------------------------------------------------------------------ *
@@ -459,7 +414,7 @@
  * belongs to the document the way the other sections do.
  */
 .payment {
-  margin-block-start: 4mm;
+  margin-block-start: 3mm;
   padding-block-start: 2.5mm;
   border-block-start: var(--border-width) solid var(--color-border);
   break-inside: avoid;
@@ -467,126 +422,12 @@
 }
 
 /*
- * A row, not a column, so a QR sits beside the details it explains rather than
- * pushing the block 26mm taller. `flex-wrap` is the safety valve: when there is no
- * QR the only child is `.paymentDetails`, which flexes to the full width, so all
- * four presentations share this rule and none of them needs a `:has()` or a
- * modifier class to select a different layout.
- *
- * The 4mm gutter and `align-items: center` are the two-column QR slot from the
- * reference layout: the code and the details read as one row, and the code sits
- * centred against the block instead of hanging off the top of a taller column.
+ * Everything inside the card — its background, the label/value grid, the code tile and
+ * the scan label — belongs to `PaymentDetailsCard.module.css`, which is also where the
+ * Balance / Payment Due sheet reads it from. Nothing is duplicated here: two modules
+ * styling "the payment block" is how the same account number came to be printed twice
+ * on one page, in two different styles.
  */
-.paymentBody {
-  display: flex;
-  flex-flow: row wrap;
-  gap: 4mm;
-  align-items: center;
-}
-
-/*
- * The card's natural width, not a 26mm or 30mm gutter.
- *
- * `UpiQrCard`'s print variant is itself a row - code on the left, VPA/payee/ref on
- * the right - and owns its own 26mm QR. Pinning this wrapper to a fixed square
- * squeezes that internal row into one narrow column, so the VPA and payee wrap one
- * word per line and the block grows to roughly 100mm. Measured, not assumed: the
- * first print check of FR-P8 reported a 104mm payment block for exactly this
- * reason. So there is deliberately no fixed size here and no 30mm image box.
- */
-.paymentQr {
-  flex: 0 0 auto;
-  max-inline-size: 100%;
-}
-
-/* The code's own caption, in the same small-caps register as a block label. */
-.paymentQrHeader {
-  display: flex;
-  align-items: center;
-  gap: 1.5mm;
-  margin: 0 0 1.5mm;
-  font-size: 7.5pt;
-  font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-wider);
-  text-transform: uppercase;
-  color: var(--color-ink-subtle);
-}
-
-.paymentDetails {
-  flex: 1 1 auto;
-  min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5mm;
-}
-
-/* The only instruction a cash invoice has; see the presentation matrix. */
-.paymentMethodLine {
-  margin: 0;
-  font-size: 9pt;
-  color: var(--color-ink);
-}
-
-/*
- * Label/value pairs in a two-column grid.
- *
- * A fixed label column keeps every value on the same left edge regardless of label
- * length, which is what "Account number" beside "IFSC" would otherwise break.
- * `mm` throughout, for the same reason as the rest of the sheet: identical physical
- * space on A4 and on screen.
- *
- * The grid collapses to one column when a QR is sharing the row, because two 30mm
- * label columns plus their values do not fit a 142mm-wide details column legibly.
- */
-.paymentRows {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8mm 6mm;
-  margin: 0;
-  flex: 1;
-}
-
-/* Beside a QR, one column: see the note above. */
-.paymentQr ~ .paymentDetails .paymentRows {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.paymentRow {
-  display: flex;
-  gap: 2mm;
-  align-items: baseline;
-  min-inline-size: 0;
-}
-
-.paymentRow dt {
-  flex: 0 0 30mm;
-  font-size: 7.5pt;
-  color: var(--color-ink-muted);
-}
-
-.paymentRow dd {
-  margin: 0;
-  font-size: 8.5pt;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-  color: var(--color-ink);
-}
-
-/*
- * The one instruction, and the reason the block exists.
- *
- * The verification note is not padding. A printed QR encodes the invoice's grand
- * total, which is what the sheet states as owed; the amount a customer is actually
- * asked for after a part payment lives on the Balance / Payment Due document. So the
- * paper can be behind the live balance, and "verify the amount before paying" is
- * what makes a stale reprint safe to act on.
- */
-.paymentHint {
-  margin: 0;
-  font-size: 7pt;
-  line-height: 1.4;
-  color: var(--color-ink-subtle);
-}
 
 /* ------------------------------------------------------------------ *
  * 6. Terms
@@ -602,7 +443,12 @@
   list-style: decimal;
   font-size: 8pt;
   line-height: 1.5;
-  color: var(--color-ink-muted);
+  /* Body ink, not muted and never a link colour: these are the contractual terms of
+     the document, and rendering them lighter than the surrounding text made them read
+     as fine print to be skimmed rather than terms to be read. The numbering itself is
+     supplied by this list — `TermsList` strips any marker typed into the source text so
+     a line cannot print as "1. 1.". */
+  color: var(--color-ink);
 }
 
 .termItem {

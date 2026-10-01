@@ -183,99 +183,92 @@
 }
 
 /* ------------------------------------------------------------------ *
- * Print variant (�8.5)
+ * Tile variant (§8.5) - the compact form used by the printed
+ * PaymentDetailsCard on both the Tax Invoice and the Balance / Payment Due document.
  *
- * The compact form used on the A4 documents. Defined **here**, in the module that
- * owns these class names, because a parent's `.bankQr .card` selector cannot reach
- * it: CSS Modules hashes per file, so a descendant rule written in another module
- * compiles to the parent's own hash and matches nothing. That is not theoretical -
- * the rules it replaced shipped and silently did nothing, and both printed
- * documents rendered the full screen card.
+ * Defined **here**, in the module that owns these class names, because a parent's
+ * `.bankQr .card` selector cannot reach it: CSS Modules hashes per file, so a descendant
+ * rule written in another module compiles to the parent's own hash and matches nothing.
+ * That is not theoretical - the rules it replaced shipped and silently did nothing, and
+ * both printed documents rendered the full screen card.
  *
- * Measured in mm, not px, because this is the printed stylesheet: the QR must
- * occupy the same physical area on A4 as it does on screen. 26mm is comfortably
- * above the ~20mm floor where a phone camera starts to struggle, and the encoder
- * renders at 2x (roughly 300dpi on paper), so it stays sharp at that size.
- */
-.card[data-variant='print'] {
+ * Measured in mm, not px, because this is the printed stylesheet: the QR must occupy the
+ * same physical area on A4 as it does on screen. 28mm sits well above the ~20mm floor
+ * where a phone camera starts to struggle, and the encoder renders at 2x (roughly 300dpi
+ * on paper), so it stays sharp at that size.
+ * ------------------------------------------------------------------ */
+.card[data-variant='tile'] {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  gap: 2.5mm;
+  gap: 1.2mm;
   padding: 0;
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  inline-size: 100%;
 }
 
-.card[data-variant='print'] .body {
-  flex: 1 1 auto;
+.card[data-variant='tile'] .body {
+  flex-direction: column;
   align-items: center;
-  gap: 2.5mm;
-  min-inline-size: 0;
+  gap: 1.2mm;
+  inline-size: 100%;
 }
 
-.card[data-variant='print'] .qrColumn {
-  flex: 0 0 auto;
-}
-
-/* The gold frame is dropped in favour of a plain rule: a heavy border around a
-   26mm square reads as a button, and the quiet zone is what makes a code scan. */
-.card[data-variant='print'] .qr {
-  inline-size: 26mm;
-  block-size: 26mm;
-  border: 0;
-  border-radius: 0;
-  /* A QR needs clear space around it to scan on the first try. 1.5mm is the
-     spec's quiet zone for this module size, and it reads as deliberate spacing
-     rather than padding around a widget. */
-  padding: 1.5mm;
+/*
+ * The code sits on its own white rounded tile, which is what supplies the quiet zone.
+ *
+ * `margin: 0` on the encoder drops QRCode's built-in quiet zone, so the 2mm of white
+ * around the modules is doing the job: a code cropped tight to its own modules is the
+ * classic "will not scan on the first try" failure. The tile is plain white and
+ * unbordered, because a visible frame around a code reads as a button.
+ */
+.card[data-variant='tile'] .qr {
+  display: block;
+  inline-size: 28mm;
+  block-size: 28mm;
+  padding: 2mm;
   background: #fff;
+  border: 0;
+  border-radius: 4px;
 }
 
-.card[data-variant='print'] .qrFallback {
-  inline-size: 26mm;
-  block-size: 26mm;
+.card[data-variant='tile'] .qrFallback {
+  inline-size: 28mm;
+  block-size: 28mm;
   padding: 1mm;
   border: var(--border-width) dashed var(--color-border-strong);
   background: #fff;
 }
 
-.card[data-variant='print'] .fallbackText {
+.card[data-variant='tile'] .fallbackText {
   font-size: 5.5pt;
   line-height: 1.25;
 }
 
-.card[data-variant='print'] .details {
-  gap: 0.4mm;
+.card[data-variant='tile'] .details {
+  align-items: center;
+  gap: 0.3mm;
 }
 
-/* The amount is the one figure worth emphasising, and it is set in ink at 9pt -
- * the same size the sheet's own total rows use. The screen variant's 2xl display
-   serif made the payment block compete with the totals block directly above it,
-   which is what made the page read as two documents. */
-.card[data-variant='print'] .amount {
+/* The amount is the one figure worth emphasising, and it is set in ink at 9pt - the
+   same size the sheet's own total rows use. The screen variant's 2xl display serif made
+   the payment block compete with the totals block directly above it, which is what made
+   the page read as two documents. */
+.card[data-variant='tile'] .amount {
   font-family: var(--font-sans);
   font-size: 9pt;
   font-weight: var(--weight-bold);
   line-height: var(--line-height-tight);
   letter-spacing: var(--tracking-tight);
   color: var(--color-ink);
+  text-align: center;
 }
 
-.card[data-variant='print'] .payee {
-  font-size: 7.5pt;
-  line-height: 1.3;
-}
-
-.card[data-variant='print'] .vpa {
-  font-size: 8pt;
-  font-weight: var(--weight-medium);
-  line-height: 1.3;
-}
-
-.card[data-variant='print'] .note {
+.card[data-variant='tile'] .note {
   font-size: 6.5pt;
   line-height: 1.25;
+  text-align: center;
 }

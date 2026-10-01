@@ -28,6 +28,7 @@ import { createQuotation, fetchQuotation, updateQuotation } from '../../api/endp
 import { fetchTerms } from '../../api/endpoints/settings.js'
 import { calcLineTotal, calcTotals } from '../../lib/calc.js'
 import { paiseToInput, rupeesToPaise } from '../../lib/money.js'
+import { formatPhone } from '../../lib/phone.js'
 import { validateQuotation } from '../../lib/validation.js'
 import styles from './QuotationEditor.module.css'
 
@@ -173,10 +174,12 @@ function buildPreviewDocument(form, totals, id, number) {
     client_id: form.client_id,
     // Whatever the picker gave us. The saved quotation gets the real snapshot from
     // the server on its next read, so a partial preview here is honest rather
-    // than a second source of truth for client details (§8.4).
+    // than a second source of truth for client details (§8.4). The phone is
+    // presented rather than stored raw, so the preview matches the saved
+    // document; the server snapshot keeps the bare digits (§8.4).
     client_snapshot: {
       name: form.client?.name || '',
-      phone: form.client?.phone || '',
+      phone: formatPhone(form.client?.phone),
       email: form.client?.email || '',
       address: form.client?.address || '',
       project_address: form.client?.project_address || '',

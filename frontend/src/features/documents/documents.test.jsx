@@ -273,6 +273,18 @@ describe('DocumentPaper — items table', () => {
     expect(document.querySelector('[data-document-items] thead')).toBeTruthy()
     expect(document.querySelector('[data-document-totals]')).toBeTruthy()
   })
+
+  it("marks the item rows' empty category cell, so it can drop its rule", () => {
+    // The category is printed once on the group subheader, so every item row's category
+    // cell is blank by design. The cell must exist for `table-layout: fixed`, and it
+    // must be marked so the stylesheet can suppress the border that would otherwise read
+    // as a missing value on every line.
+    render(<DocumentPaper document={quotation()} settings={SETTINGS} />)
+
+    const cells = document.querySelectorAll('[data-empty-cell="true"]')
+    expect(cells).toHaveLength(3)
+    expect([...cells].every((cell) => cell.textContent === '')).toBe(true)
+  })
 })
 
 describe('DocumentPaper — totals block', () => {
@@ -353,13 +365,48 @@ describe('DocumentPaper — terms, signatory and footer', () => {
 
     const terms = screen.getByRole('heading', { name: 'Terms & Conditions' }).parentElement
     const items = within(terms).getAllByRole('listitem')
-    // The blank line is dropped; all four real lines survive, in order.
+    // The blank line is dropped; all four real lines survive, in order — and the
+    // markers typed into the source text are stripped, because the `<ol>` supplies the
+    // numbering. Left in, each line printed as "1. 1. 50% advance…".
     expect(items).toHaveLength(4)
     expect(items.map((li) => li.textContent)).toEqual([
-      '1. 50% advance is required to begin work.',
-      '2. Prices are valid for the stated validity period.',
-      '3. Work begins on mutual agreement of drawings.',
-      '4. Payment terms as per the invoice.',
+      '50% advance is required to begin work.',
+      'Prices are valid for the stated validity period.',
+      'Work begins on mutual agreement of drawings.',
+      'Payment terms as per the invoice.',
+    ])
+  })
+
+  it('does not number a line that merely begins with a figure', () => {
+    // The strip is anchored to a digit *plus* a delimiter and trailing space, so a term
+    // that starts with a number keeps it. Truncating here would silently rewrite a
+    // contractual term, which is the one thing a document must never do.
+    render(
+      <DocumentPaper
+        document={quotation({ terms_text: '50% advance is due on order.' })}
+        settings={SETTINGS}
+      />,
+    )
+
+    const terms = screen.getByRole('heading', { name: 'Terms & Conditions' }).parentElement
+    expect(within(terms).getByRole('listitem').textContent).toBe('50% advance is due on order.')
+  })
+
+  it('accepts unnumbered terms and numbers them once itself', () => {
+    // The other common shape: text typed without markers. The `<ol>` still numbers it,
+    // so both styles of input look identical on the printed page.
+    render(
+      <DocumentPaper
+        document={quotation({ terms_text: 'Advance before work begins.\nWarranty as per the work order.' })}
+        settings={SETTINGS}
+      />,
+    )
+
+    const terms = screen.getByRole('heading', { name: 'Terms & Conditions' }).parentElement
+    const items = within(terms).getAllByRole('listitem')
+    expect(items.map((li) => li.textContent)).toEqual([
+      'Advance before work begins.',
+      'Warranty as per the work order.',
     ])
   })
 

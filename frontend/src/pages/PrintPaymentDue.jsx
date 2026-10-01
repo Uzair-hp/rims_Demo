@@ -11,10 +11,14 @@
  * indistinguishable from viewing it, which is the point: a payment reminder that
  * could alter the ledger or add to revenue would be a financial bug, not a feature.
  *
- * The server refuses the request outright when the invoice is not issued or nothing
- * is outstanding, so this screen never has to render a ₹0 QR. That refusal is
- * surfaced as an explanatory error rather than a blank sheet, because "fully paid"
- * is a normal state the user reached by doing the right thing.
+ * The server refuses the request outright when the invoice is not issued (a draft has
+ * not been billed, and a cancelled one must never produce a demand for money), so that
+ * case is surfaced as an explanatory error rather than a blank sheet.
+ *
+ * A **fully paid** invoice is not an error: the server answers 200 with `fully_paid`, and
+ * the paper renders as a settlement statement — the reconciliation, a FULLY PAID stamp,
+ * and no QR or bank details, because there is nothing left to pay. That is the receipt a
+ * customer asks for after paying, so the route shows it rather than apologising for it.
  *
  * Still authenticated — the backend enforces auth on every endpoint regardless of
  * the route guard (§16), and an unauthenticated visit is an error state, not a
@@ -50,8 +54,8 @@ export default function PrintPaymentDue() {
       })
       .catch((error) => {
         if (cancelled) return
-        // 422 carries a message worth showing: "fully paid" and "cancelled" are
-        // both ordinary reasons a user arrived here, not failures to report vaguely.
+        // 422 carries a message worth showing: "cancelled" and "not issued" are both
+        // ordinary reasons a user arrived here, not failures to report vaguely.
         setErrorMessage(error?.message || 'This balance document could not be generated.')
         setState('error')
       })
@@ -91,7 +95,7 @@ export default function PrintPaymentDue() {
       <PrintToolbar
         title={title}
         number={doc?.source_invoice_number}
-        statusLabel={doc ? `Due ${doc.upi_amount}` : undefined}
+        statusLabel={doc ? (doc.fully_paid ? 'Fully paid' : `Due ${doc.upi_amount}`) : undefined}
         backTo={`/invoices/${id}`}
       />
       {state === 'loading' ? (

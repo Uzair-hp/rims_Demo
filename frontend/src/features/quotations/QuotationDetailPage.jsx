@@ -26,6 +26,7 @@ import {
 } from '../../api/endpoints/quotations.js'
 import { calcLineTotal } from '../../lib/calc.js'
 import { formatPaise } from '../../lib/money.js'
+import { formatPhone } from '../../lib/phone.js'
 import TotalsPanel from './TotalsPanel.jsx'
 import { ACTION_META, statusLabel } from './status.js'
 import styles from './QuotationDetailPage.module.css'
@@ -248,7 +249,9 @@ export default function QuotationDetailPage() {
           <Card className={styles.clientCard}>
             <h2 className={styles.cardTitle}>Client</h2>
             <p className={styles.clientName}>{q.client_snapshot?.name || '—'}</p>
-            {q.client_snapshot?.phone ? <p className={styles.clientMeta}>{q.client_snapshot.phone}</p> : null}
+            {q.client_snapshot?.phone ? (
+              <p className={styles.clientMeta}>{formatPhone(q.client_snapshot.phone)}</p>
+            ) : null}
             {q.client_snapshot?.email ? <p className={styles.clientMeta}>{q.client_snapshot.email}</p> : null}
             {q.client_id ? (
               <Link to={`/clients/${q.client_id}`} className={styles.link}>

@@ -1,17 +1,22 @@
 /*
  * Ruchita Interiors — Balance / Payment Due sheet (§8.5).
  *
- * Deliberately a near-subset of `DocumentPaper.module.css`: the same 186mm A4 box,
- * the same mm/pt scale, the same header band and gold rule, so a payment reminder
- * and the invoice it refers to look like the same business's paperwork. It is a
- * separate file rather than extra classes in the document sheet because this is a
- * different kind of document — a notice, not a bill — and keeping them apart stops
- * a change to one from reflowing the other.
+ * Deliberately a near-subset of `DocumentPaper.module.css`: the same 186mm A4 box, the
+ * same mm/pt scale, the same section-label register, so a payment reminder and the
+ * invoice it refers to look like the same business's paperwork. The header and the
+ * payment block are not a subset at all — they are the shared `DocumentHeader` and
+ * `PaymentDetailsCard` components, used by both documents, because two letterheads and
+ * two payment layouts are what let the pair drift apart in the first place.
  *
- * The one place it diverges on purpose: the "Amount due now" row owns the brand
- * gold, because on this sheet that single figure *is* the document. On an invoice
- * the gold row is the grand total; here it is the balance, for the same reason.
+ * The one place this sheet diverges on purpose: the "Amount due now" row owns the brand
+ * gold, because on this sheet that single figure *is* the document. On an invoice the
+ * gold row is the grand total; here it is the balance, for the same reason — and when
+ * the invoice is settled, the balance is zero and the row turns green instead.
  */
+
+/* ------------------------------------------------------------------ *
+ * Sheet
+ * ------------------------------------------------------------------ */
 
 .paper {
   /* 210mm A4 minus the 12mm page margins in print.css. */
@@ -33,47 +38,7 @@
 }
 
 /* ------------------------------------------------------------------ *
- * 1. Header band — identical treatment to the invoice sheet
- * ------------------------------------------------------------------ */
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 6mm;
-  padding-block-end: 3mm;
-  border-block-end: 0.6mm solid var(--color-gold);
-}
-
-.logo {
-  max-block-size: 16mm;
-  inline-size: auto;
-  max-inline-size: 62mm;
-}
-
-.headerText {
-  min-inline-size: 0;
-  text-align: end;
-}
-
-.companyName {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 18pt;
-  font-weight: var(--weight-semibold);
-  line-height: var(--line-height-tight);
-  color: var(--color-ink);
-}
-
-.companyAddress,
-.companyMeta {
-  margin: 0;
-  font-size: 8pt;
-  color: var(--color-ink-muted);
-}
-
-/* ------------------------------------------------------------------ *
- * 2. Title strip
+ * 1. Title strip
  * ------------------------------------------------------------------ */
 
 .titleStrip {
@@ -84,8 +49,15 @@
   padding-block: 4mm;
 }
 
-/* "PAYMENT DUE" is set in the same calmer display face as the invoice's
-   "TAX INVOICE", so the two documents are recognisably siblings. */
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5mm;
+  min-inline-size: 0;
+}
+
+/* "PAYMENT DUE" is set in the same calmer display face as the invoice's "TAX INVOICE",
+   so the two documents are recognisably siblings. */
 .title {
   margin: 0;
   font-family: var(--font-display);
@@ -97,8 +69,41 @@
   color: var(--color-ink);
 }
 
-/* The reference to the source invoice is the most important identifier on the
-   sheet — more so than any number of its own, because it has none. */
+/* The due date, on the same left edge and at the same register as the issue/due pair
+   on the Tax Invoice. The Balance Bill has no issue date — it is generated, not issued
+   — so it states the one date that still has meaning on it. */
+.headingNote {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  margin: 0;
+}
+
+.microLabel {
+  min-inline-size: 18mm;
+  font-size: 7.5pt;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-ink-subtle);
+}
+
+.dateValue {
+  font-size: 9.5pt;
+  font-weight: var(--weight-medium);
+  color: var(--color-ink);
+}
+
+.referenceBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2mm;
+  text-align: end;
+}
+
+/* The reference to the source invoice is the most important identifier on the sheet —
+   more so than any number of its own, because it has none. */
 .reference {
   display: flex;
   flex-direction: column;
@@ -122,22 +127,68 @@
   color: var(--color-ink);
 }
 
+/*
+ * The FULLY PAID stamp.
+ *
+ * Green text, green border and a light green tint, set slightly off-square. The tilt is
+ * deliberate: it is the visual convention for a settled stamp, and it separates the
+ * one piece of good news on the sheet from the rows of figures around it. `--color-success`
+ * is the reserved success token (§18.5) and `--color-success-soft` its tint, so this
+ * reads as the same green as the "Paid" badge in the application rather than as a
+ * colour invented for print.
+ */
+.paidStamp {
+  margin: 0;
+  padding: 1.2mm 4mm;
+  font-size: 10pt;
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-widest);
+  text-transform: uppercase;
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border: var(--border-width-accent) solid var(--color-success);
+  border-radius: var(--radius-sm);
+  transform: rotate(-3deg);
+}
+
 /* ------------------------------------------------------------------ *
- * 3. Client block
+ * 2. Client block — Bill To / Project, two equal columns
  * ------------------------------------------------------------------ */
 
 .clientBlock {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4mm;
   padding-block: 3mm;
   border-block: var(--border-width) solid var(--color-border);
 }
 
+.clientCell {
+  min-inline-size: 0;
+}
+
 .blockLabel {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
   margin: 0 0 1.5mm;
   font-size: 7.5pt;
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
   color: var(--color-ink-subtle);
+}
+
+.labelIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+}
+
+.inlineIcon {
+  color: var(--color-ink-subtle);
+  flex-shrink: 0;
+  margin-inline-end: 1.5mm;
+  vertical-align: middle;
 }
 
 .clientName {
@@ -147,15 +198,18 @@
   color: var(--color-ink);
 }
 
-.clientAddress {
-  margin: 0;
-  font-size: 9pt;
+.clientLine {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  margin: 0 0 0.5mm;
+  font-size: 8.5pt;
   color: var(--color-ink-muted);
   overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------------------ *
- * 4. Balance summary
+ * 3. Balance summary
  * ------------------------------------------------------------------ */
 
 .summary {
@@ -194,8 +248,8 @@
   color: var(--color-ink);
 }
 
-/* The one figure the customer is here to pay: the brand moment of this sheet, and
-   the counterpart to the invoice's grand-total row. */
+/* The one figure the customer is here to pay: the brand moment of this sheet, and the
+   counterpart to the invoice's grand-total row. */
 .summaryRow:last-child {
   margin-block-start: 1mm;
   padding: 2mm 2.5mm;
@@ -216,70 +270,47 @@
   color: var(--color-gold-ink) !important;
 }
 
+/*
+ * Settled: the gold wash becomes green.
+ *
+ * Two `!important`s are inherited from the gold rules above, so the settled colours are
+ * forced at the same specificity rather than losing the cascade to a later rule that
+ * does not. A "fully paid" document must not keep presenting a zero balance in the
+ * urgent gold that means "pay this now".
+ */
+.paperSettled .summaryRow:last-child {
+  background: var(--color-success-soft);
+  border-inline-start: 0.7mm solid var(--color-success);
+}
+
+.paperSettled .summaryRow:last-child dt,
+.summaryDueSettled,
+.summarySettled {
+  color: var(--color-success) !important;
+}
+
+.summarySettled {
+  font-weight: var(--weight-medium) !important;
+}
+
 /* ------------------------------------------------------------------ *
- * 5. QR
+ * 4. Payment block
  * ------------------------------------------------------------------ */
 
 /*
- * The scan card, in its `variant="print"` form.
- *
- * This rule is now *layout only*. The rules that flatten the card — no shadow, no
- * rounded chrome, no buttons, no disclaimer — live in `UpiQrCard.module.css`
- * behind `[data-variant='print']`, because the `.qrCard .actions` selectors that
- * used to sit here compiled to this module's own hash and could never match an
- * element carrying the card's hash. They shipped, matched nothing, and left both
- * documents rendering the full screen card. The one thing left to own here is where
- * the block sits on the page.
+ * Placement only. The card's own background, radius, label/value grid and code tile are
+ * in `PaymentDetailsCard.module.css`, which the Tax Invoice reads from too. It is
+ * deliberately not styled here: a rule written against another module's class names
+ * compiles to this module's hash and matches nothing (docs/QR_Code.md §6.2).
  */
-.qrCard {
+.paymentSection {
   margin-block-start: 4mm;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 /* ------------------------------------------------------------------ *
- * 6. Bank details — an alternative, not a second demand
- * ------------------------------------------------------------------ */
-
-.bank {
-  margin-block-start: 5mm;
-  padding: 3mm 4mm;
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-
-.bankRows {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1mm 6mm;
-  margin: 0;
-}
-
-.bankRow {
-  display: flex;
-  gap: 2mm;
-  align-items: baseline;
-  min-inline-size: 0;
-}
-
-.bankRow dt {
-  flex: 0 0 26mm;
-  font-size: 8pt;
-  color: var(--color-ink-muted);
-}
-
-.bankRow dd {
-  margin: 0;
-  font-size: 9pt;
-  overflow-wrap: anywhere;
-  color: var(--color-ink);
-}
-
-/* ------------------------------------------------------------------ *
- * 7. Footer
+ * 5. Footer
  * ------------------------------------------------------------------ */
 
 .footer {
@@ -288,15 +319,21 @@
   border-block-start: var(--border-width) solid var(--color-border);
 }
 
+.thanks {
+  margin: 0 0 2mm;
+  font-size: 11pt;
+  font-weight: var(--weight-bold);
+  color: var(--color-success);
+}
+
 .generated {
   margin: 0 0 1.5mm;
   font-size: 8pt;
   color: var(--color-ink-muted);
 }
 
-/* States plainly that this is a reminder and that the figure is a snapshot. A
-   customer who thinks they are being re-invoiced will dispute it, and they would
-   be right to. */
+/* States plainly that this is a reminder and that the figure is a snapshot. A customer
+   who thinks they are being re-invoiced will dispute it, and they would be right to. */
 .disclaimer {
   margin: 0 0 2mm;
   font-size: 8pt;

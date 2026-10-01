@@ -1,11 +1,11 @@
 /**
  * Ruchita Interiors — UPI payment card (§8.5).
  *
- * The on-screen "Scan to Pay" surface, shared by the invoice detail page and the
- * Balance / Payment Due print document. The QR is **generated from a UPI intent
- * URI** built for the amount passed in, so it always asks for exactly the figure
- * shown directly above it — the two come from one `amountPaise` prop and one
- * `formatUpiAmount` call, and there is no second formatting path that could drift.
+ * The on-screen "Scan to Pay" surface, and the QR renderer inside the printed
+ * `PaymentDetailsCard`. The QR is **generated from a UPI intent URI** built for the amount
+ * passed in, so it always asks for exactly the figure shown directly above it — the two
+ * come from one `amountPaise` prop and one `formatUpiAmount` call, and there is no second
+ * formatting path that could drift.
  *
  * What this component is *not* is a payment confirmation. Scanning the code opens the
  * payer's UPI app; it tells this application nothing. `payment_status` stays derived
@@ -24,27 +24,30 @@
  * is never presented as universal. The QR remains the primary path, because it works
  * on every device that has a camera, including the desktop this returns false for.
  *
- * ## Two variants, and why the print one is styled here
+ * ## Two variants, and why the tile is styled here
  *
- * `variant="print"` is the compact form the A4 documents use. Its rules live in
- * **this** module, as `.card[data-variant='print']`, not as overrides in a parent.
+ * `variant="tile"` is the compact form the A4 documents use, and its rules live in
+ * **this** module as `.card[data-variant='tile']`, not as overrides in a parent.
  *
  * That is not a stylistic preference. CSS Modules hashes class names per file, so a
  * descendant selector written in another module - `.bankQr .card` in
  * `DocumentPaper.module.css`, `.qrCard .actions` in `PaymentDuePaper.module.css` -
  * compiles to `._bankQr_<parentHash> ._card_<parentHash>`, which can never match an
  * element carrying *this* module's hash. Those rules were written, shipped, and
- * silently matched nothing: both printed documents have been rendering the full
- * screen card, gold buttons and disclaimer paragraph included, which is why the QR
- * read as a separate document dominating the page. A variant styled in its own
- * module cannot fail that way, and `data-variant` gives the tests a stable hook.
+ * silently matched nothing: both printed documents rendered the full screen card, gold
+ * buttons and disclaimer paragraph included, which is why the QR read as a separate
+ * document dominating the page. A variant styled in its own module cannot fail that
+ * way, and `data-variant` gives the tests a stable hook.
  *
- * Print drops the buttons and the disclaimer (nobody taps paper, and that copy
- * explains a screen interaction), the display-serif title and the oversized amount
- * (the sheet's own totals block already carries the money figures at the sizes
- * 14.3 specifies), and the card chrome so the block sits on the page. Print keeps
- * the code, the VPA as text for a customer without a scanner, the amount, and the
- * verification note.
+ * The tile drops the buttons and the disclaimer (nobody taps paper, and that copy
+ * explains a screen interaction), the display-serif title, the oversized amount and the
+ * VPA/payee lines - the UPI address is printed once, in the bank grid of the
+ * `PaymentDetailsCard` that owns this tile. What remains is the code, the amount and
+ * the invoice reference, which is exactly the block the reference layout wants.
+ *
+ * Its physical size is set in **mm** here, not px, so the tile occupies the same area on
+ * A4 as on screen. 28mm sits well above the ~20mm floor where a phone camera starts to
+ * struggle, and the encoder renders at 2x (roughly 300dpi on paper) so it stays sharp.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -59,10 +62,11 @@ import styles from './UpiQrCard.module.css'
  * @param {string} props.vpa            Configured UPI ID. Empty disables the QR.
  * @param {string} [props.payeeName]    Business name shown in the payer's app.
  * @param {string} [props.note]         Transaction note, e.g. the invoice number.
- * @param {string} [props.title]        Card heading. Defaults to "Scan to Pay".
- * @param {number} [props.size]         Rendered QR edge length in CSS pixels.
+ * @param {string} [props.title]        Card heading. Screen variant only.
+ * @param {number} [props.size]         Encode resolution control; the tile's printed
+ *                                      edge is set in `UpiQrCard.module.css`.
  * @param {string} [props.className]    Extra class for layout.
- * @param {'screen' | 'print'} [props.variant]
+ * @param {'screen' | 'tile'} [props.variant]
  */
 export default function UpiQrCard({
   amountPaise,
@@ -98,7 +102,7 @@ export default function UpiQrCard({
 
     // Rendered at a higher resolution than it is displayed, so the code stays sharp
     // when printed and when the page is zoomed. `margin: 0` drops QRCode's built-in
-    // quiet zone, which this card replaces with its own padding.
+    // quiet zone, which this card replaces with its own tile padding.
     QRCode.toDataURL(uri, {
       width: Math.max(size, 220) * 2,
       margin: 0,
@@ -133,6 +137,9 @@ export default function UpiQrCard({
 
   if (!vpa) return null
 
+  const isTile = variant === 'tile'
+  const amountLabel = formatPaise(amountPaise)
+
   return (
     <section
       className={`${styles.card} ${className}`}
@@ -140,21 +147,26 @@ export default function UpiQrCard({
       data-variant={variant}
       aria-label="Payment by UPI"
     >
-      {variant === 'print' ? null : <h3 className={styles.title}>{title}</h3>}
+      {isTile ? null : <h3 className={styles.title}>{title}</h3>}
 
       <div className={styles.body}>
         <div className={styles.qrColumn}>
           {dataUrl ? (
             <img
               className={styles.qr}
+              // The tile's edge is owned by this module's stylesheet (28mm, identical
+              // on screen and on A4), so no inline px size is set on it - an inline
+              // dimension would outrank the stylesheet and break that parity.
+              style={isTile ? undefined : { inlineSize: `${size}px`, blockSize: `${size}px` }}
               src={dataUrl}
-              style={{ inlineSize: `${size}px`, blockSize: `${size}px` }}
-              alt={`UPI QR code to pay ${formatPaise(amountPaise)}`}
-              width={size}
-              height={size}
+              alt={`UPI QR code to pay ${amountLabel}`}
+              {...(isTile ? {} : { width: size, height: size })}
             />
           ) : (
-            <div className={styles.qrFallback} style={{ inlineSize: `${size}px`, blockSize: `${size}px` }}>
+            <div
+              className={styles.qrFallback}
+              style={isTile ? undefined : { inlineSize: `${size}px`, blockSize: `${size}px` }}
+            >
               <p className={styles.fallbackText}>
                 {uri
                   ? 'The QR code could not be generated.'
@@ -164,18 +176,30 @@ export default function UpiQrCard({
           )}
         </div>
 
-        <div className={styles.details}>
-          <p className={styles.amount}>{formatPaise(amountPaise)}</p>
-          {payeeName ? <p className={styles.payee}>{payeeName}</p> : null}
-          <p className={styles.vpa}>{vpa}</p>
-          {note ? <p className={styles.note}>Ref {note}</p> : null}
-        </div>
+        {/* The tile prints the figure it is asking for, directly under the code, so a
+            payer reads the code and the amount as one unit. The VPA and payee name are
+            deliberately absent here: the enclosing `PaymentDetailsCard` prints the UPI
+            address once in its bank grid, and repeating it here would put the same
+            string on the page twice. */}
+        {isTile ? (
+          <div className={styles.details}>
+            <p className={styles.amount}>{amountLabel}</p>
+            {note ? <p className={styles.note}>Ref {note}</p> : null}
+          </div>
+        ) : (
+          <div className={styles.details}>
+            <p className={styles.amount}>{amountLabel}</p>
+            {payeeName ? <p className={styles.payee}>{payeeName}</p> : null}
+            <p className={styles.vpa}>{vpa}</p>
+            {note ? <p className={styles.note}>Ref {note}</p> : null}
+          </div>
+        )}
       </div>
 
       {/* Interactive chrome is screen-only. On paper a button is dead weight and the
-          disclaimer is copy about a screen interaction, so print renders neither -
+          disclaimer is copy about a screen interaction, so the tile renders neither -
           and a 44px touch target is a large share of a compact payment block. */}
-      {variant === 'print' ? null : (
+      {isTile ? null : (
         <>
           <div className={styles.actions}>
             {canOpenUpiApp() && uri ? (
