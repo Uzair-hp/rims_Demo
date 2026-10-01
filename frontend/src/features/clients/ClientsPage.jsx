@@ -19,6 +19,7 @@ import Skeleton from '../../components/ui/Skeleton.jsx'
 import StatusBadge from '../../components/ui/StatusBadge.jsx'
 import TextField from '../../components/ui/TextField.jsx'
 import { archiveClient } from '../../api/endpoints/clients.js'
+import { formatPhone } from '../../lib/phone.js'
 import ClientFormModal from './ClientFormModal.jsx'
 import { useClients } from './useClients.js'
 import styles from './ClientsPage.module.css'
@@ -160,7 +161,7 @@ export default function ClientsPage() {
                           Archived
                         </StatusBadge>
                       ) : null}
-                      {client.phone ? <p className={styles.meta}>{client.phone}</p> : null}
+                      {client.phone ? <p className={styles.meta}>{formatPhone(client.phone)}</p> : null}
                       {client.email ? <p className={styles.meta}>{client.email}</p> : null}
                     </div>
                     <div className={styles.actions}>

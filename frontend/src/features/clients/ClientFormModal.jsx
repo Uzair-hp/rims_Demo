@@ -12,7 +12,7 @@ import Sheet from '../../components/ui/Sheet.jsx'
 import { createClient, updateClient } from '../../api/endpoints/clients.js'
 import ClientForm from './ClientForm.jsx'
 
-export default function ClientFormModal({ open, onClose, mode = 'create', client, onSaved }) {
+export default function ClientFormModal({ open, onClose, mode = 'create', client, onSaved, initialName }) {
   const [submitting, setSubmitting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
 
@@ -27,7 +27,12 @@ export default function ClientFormModal({ open, onClose, mode = 'create', client
         gstin: client.gstin,
         notes: client.notes,
       }
-    : {}
+    : // `initialName` seeds a new client with the text the user had already typed
+      // into the picker's search box, so "create 'Acme' as a new client" arrives
+      // at a form with the name already filled in rather than an empty one.
+      initialName
+      ? { name: initialName }
+      : {}
 
   const handleSave = async (draft) => {
     setSubmitting(true)

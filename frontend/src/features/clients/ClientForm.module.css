@@ -8,3 +8,62 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* The phone field is a `+91` box sitting inside the control's own border, so the
+   pair reads as a single input instead of a label, a static box and a field.
+
+   Flex rather than absolute positioning: the prefix is a sibling of the
+   `TextField`, and letting the browser place it means the two halves cannot
+   drift apart when the label wraps, the font size changes or the error message
+   appears. The prefix is decoration — the label and the value both belong to the
+   input, which `TextField` already wires together — so it is not a `<label>`. */
+.phoneField {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  min-inline-size: 0;
+}
+
+.phonePrefix {
+  display: flex;
+  align-items: center;
+  flex: none;
+  /* One `border-width` narrower than the input's own, so the two borders meet
+     with the same 1px weight instead of doubling into a 2px seam. */
+  padding-inline: var(--space-3);
+  min-block-size: var(--touch-target-comfortable);
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-ink-muted);
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-inline-end: 0;
+  border-start-start-radius: var(--radius-input);
+  border-end-start-radius: var(--radius-input);
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* The input's own left edge and corner are suppressed so it joins the prefix
+   into one continuous control. Everything else — focus ring, invalid state,
+   hover — still comes from `TextField` and applies to the joined shape. */
+.phoneInput {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.phoneInput .control {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+/* The hover and focus tints are drawn on the input's right-hand side only, or
+   the joined control shows a seam where the two backgrounds meet. */
+.phoneInput .control:hover:not(:disabled) {
+  border-inline-start-color: var(--color-border-strong);
+}
+
+.phoneInput .invalid {
+  border-inline-start-color: var(--color-danger);
+}

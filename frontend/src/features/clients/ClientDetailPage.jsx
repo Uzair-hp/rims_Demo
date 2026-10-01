@@ -38,6 +38,7 @@ import { archiveClient, restoreClient, fetchClient, fetchClientSummary } from '.
 import ClientFormModal from './ClientFormModal.jsx'
 import { formatDate } from '../../lib/format.js'
 import { formatPaise } from '../../lib/money.js'
+import { formatPhone } from '../../lib/phone.js'
 import { statusLabel } from '../quotations/status.js'
 import { PAYMENT_METHOD_LABELS, paymentStatusLabel } from '../invoices/status.js'
 import styles from './ClientDetailPage.module.css'
@@ -235,7 +236,7 @@ export default function ClientDetailPage() {
             <div className={styles.profileMeta}>
               {client.phone ? (
                 <span className={styles.metaItem}>
-                  <Icon name="phone" size={16} /> {client.phone}
+                  <Icon name="phone" size={16} /> {formatPhone(client.phone)}
                 </span>
               ) : null}
               {client.email ? (
