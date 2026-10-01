@@ -1,8 +1,9 @@
 /**
  * Navigation map — the single source of truth for labels, icons and page titles.
  *
- * §18.6 requires consistent labels, so the desktop sidebar, the mobile top bar
- * and the document title all read from here rather than repeating strings.
+ * §18.6 requires consistent labels, so the desktop sidebar, the mobile drawer, the
+ * mobile top bar and the document title all read from here rather than repeating
+ * strings.
  */
 
 export const NAV_ITEMS = [
@@ -10,16 +11,9 @@ export const NAV_ITEMS = [
   { to: '/quotations', label: 'Quotations', icon: 'fileText' },
   { to: '/invoices', label: 'Invoices', icon: 'receipt' },
   { to: '/clients', label: 'Clients', icon: 'users' },
-  // Phase 9A (SERVICES_PLAN §6): the bottom nav is already full (5 slots), so
-  // Services rides in the More sheet on mobile and the sidebar on desktop.
   { to: '/services', label: 'Services', icon: 'spark' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ]
-
-/** Five slots for the mobile bottom bar: three primary plus More and New (§18.6). */
-export const BOTTOM_NAV_ITEMS = [NAV_ITEMS[0], NAV_ITEMS[1], NAV_ITEMS[2]]
-
-export const MORE_NAV_ITEMS = [NAV_ITEMS[3], NAV_ITEMS[4]]
 
 /**
  * New-button targets, ordered by usefulness (§18.6).
@@ -28,6 +22,8 @@ export const MORE_NAV_ITEMS = [NAV_ITEMS[3], NAV_ITEMS[4]]
  * converting an approved quotation (FR-I1), so offering a direct create would
  * point at a flow that does not exist. The quotations entry above is where new
  * invoices actually come from.
+ *
+ * Reached from the desktop FAB's sheet and, below `lg`, from the drawer.
  */
 export const CREATE_ACTIONS = [
   { to: '/quotations/new', label: 'New quotation', icon: 'fileText' },

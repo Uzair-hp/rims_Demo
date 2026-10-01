@@ -34,8 +34,9 @@
   inline-size: 100%;
   max-inline-size: var(--size-content-max);
   margin-inline: auto;
-  padding: var(--space-4) var(--space-4)
-    calc(var(--size-bottom-nav) + var(--space-8) + env(safe-area-inset-bottom));
+  /* The bottom bar is gone, so nothing is reserved for it: the drawer and the
+     scrim are transient overlays that never sit under the content. */
+  padding: var(--space-4);
 }
 
 .main:focus {
@@ -64,47 +65,9 @@
   background: var(--color-gold-strong);
 }
 
-.sheetFooter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-block-start: var(--space-3);
-  padding: var(--space-3);
-  border-block-start: var(--border-width) solid var(--color-border);
-}
-
-.sheetBrand {
-  padding-inline: var(--space-1);
-}
-
-.sheetAction {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--touch-target-comfortable);
-  padding-inline: var(--space-3);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-ink);
-  font: inherit;
-  font-size: var(--font-size-base);
-  cursor: pointer;
-}
-
-.sheetAction:hover {
-  background: var(--color-surface-alt);
-}
-
-.sheetMeta {
-  padding-inline: var(--space-3);
-  font-size: var(--font-size-xs);
-  color: var(--color-ink-subtle);
-}
-
 @media (min-width: 768px) {
   .main {
-    padding-inline: var(--space-6);
+    padding: var(--space-5) var(--space-6) var(--space-8);
   }
 }
 

@@ -8,16 +8,38 @@ import { useSettings } from '../../features/settings/SettingsProvider.jsx'
 import styles from './Sidebar.module.css'
 
 /**
- * Desktop sidebar, shown from `lg` up (§18.6). Mobile and tablet get the bottom
- * bar instead, so the same destination is never listed twice on one screen.
+ * The navigation plate: brand, primary destinations, theme and account.
+ *
+ * `variant="desktop"` is the fixed rail shown from `lg` up (§18.6).
+ * `variant="drawer"` is the same plate inside the mobile drawer — same
+ * `NAV_ITEMS`, same icons, same active-route highlighting, rendered by
+ * `NavDrawer` below `lg`. One component means the two can never list different
+ * destinations or drift apart visually; only the head control differs (collapse
+ * toggle on the rail, close button in the drawer) and only `onNavigate` differs
+ * (absent on the rail, "close me" in the drawer).
  *
  * `collapsed` narrows the rail to icons only; the toggle persists via
  * `useSidebarCollapsed` in the shell. The collapsed state is desktop-only — the
- * whole sidebar is hidden below `lg`, so mobile navigation is unaffected.
+ * rail is hidden below `lg`, and the drawer is always full width, so neither can
+ * be left collapsed on a phone.
  *
- * @param {{ onNavigate?: () => void, collapsed?: boolean, onToggleCollapse?: () => void }} props
+ * @param {{
+ *   onNavigate?: () => void,
+ *   collapsed?: boolean,
+ *   onToggleCollapse?: () => void,
+ *   variant?: 'desktop' | 'drawer',
+ *   onClose?: () => void,
+ *   createActions?: Array<{ to: string, label: string, icon: string }>,
+ * }} props
  */
-export default function Sidebar({ onNavigate, collapsed = false, onToggleCollapse }) {
+export default function Sidebar({
+  onNavigate,
+  collapsed = false,
+  onToggleCollapse,
+  variant = 'desktop',
+  onClose,
+  createActions = [],
+}) {
   const { resolvedTheme, toggleTheme } = useTheme()
   const { user, signOut } = useAuth()
   // Phase 3 exit criterion: the uploaded company logo renders in the app shell.
@@ -25,8 +47,12 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
   // bundled vector — the slot is never empty.
   const { logoSrc } = useSettings()
 
+  const isDrawer = variant === 'drawer'
+
   return (
-    <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''} no-print`.trim()}>
+    <aside
+      className={`${styles.sidebar} ${isDrawer ? styles.drawer : ''} ${collapsed ? styles.collapsed : ''} no-print`.trim()}
+    >
       <div className={styles.head}>
         <div className={styles.brand}>
           {/*
@@ -43,16 +69,30 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
           */}
           <BrandLockup variant="stack" height={30} logoSrc={logoSrc} alt="" showWordmark={!collapsed} />
         </div>
-        <button
-          type="button"
-          className={styles.collapseToggle}
-          onClick={onToggleCollapse}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-pressed={collapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={18} />
-        </button>
+        {isDrawer ? (
+          // The drawer's counterpart to the collapse toggle: the plate is always
+          // full width on a phone, so there is nothing to collapse.
+          <button
+            type="button"
+            className={styles.collapseToggle}
+            onClick={onClose}
+            aria-label="Close navigation"
+            title="Close navigation"
+          >
+            <Icon name="x" size={18} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={styles.collapseToggle}
+            onClick={onToggleCollapse}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={collapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} size={18} />
+          </button>
+        )}
       </div>
 
       <nav className={styles.nav} aria-label="Primary">
@@ -72,6 +112,28 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
             </li>
           ))}
         </ul>
+
+        {/*
+          The create shortcuts the removed bottom bar carried on its "New" slot.
+          Only the drawer renders them: the desktop plate reaches the same actions
+          through the FAB, and listing them twice on a wide screen would be noise.
+          The items come from `CREATE_ACTIONS`, so there is still one definition.
+        */}
+        {createActions.length > 0 ? (
+          <>
+            <p className={styles.groupHeading}>Create</p>
+            <ul className={styles.list}>
+              {createActions.map((item) => (
+                <li key={item.to}>
+                  <NavLink to={item.to} onClick={onNavigate} className={styles.link}>
+                    <Icon name={item.icon} size={20} />
+                    <span className={styles.linkLabel}>{item.label}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
       </nav>
 
       <div className={styles.footer}>
@@ -88,8 +150,8 @@ export default function Sidebar({ onNavigate, collapsed = false, onToggleCollaps
         </button>
         {/*
           Logout lives here rather than on Settings: it is the one action that must
-          be reachable from anywhere, and on mobile this sidebar is not rendered at
-          all, so BottomNav carries the same control (§7).
+          be reachable from anywhere. Below `lg` the same plate is the drawer, so
+          the control is on screen at every size without a second copy (§7).
         */}
         <div className={styles.account}>
           <span className={styles.avatar} aria-hidden="true">

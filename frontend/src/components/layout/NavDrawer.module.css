@@ -1,0 +1,93 @@
+/**
+ * Mobile navigation drawer (§18.6, §19).
+ *
+ * The panel is the sidebar plate moved off the left edge, so it reads as the same
+ * navigation rather than a second one. Everything it contains is themed through
+ * tokens — including the ink plate, which is the ink plate in both themes exactly
+ * as the sidebar is.
+ *
+ * Motion (§18.10): transform and opacity only, on `--duration-slow` (220ms,
+ * inside the 200–300ms band) with `--ease-out`. The reduced-motion block in
+ * `base.css` collapses both transitions and animations globally, so no override
+ * is needed here.
+ *
+ * Opening is an *animation* and closing is a *transition*, and the difference is
+ * load-bearing rather than stylistic. The panel is mounted already carrying its
+ * open class, so a transition would have no previous computed value to move away
+ * from: `translateX(0)` would be its first style and the drawer would simply
+ * appear. An animation has no such requirement — it plays from its `from`
+ * keyframe the moment the element exists — which is what makes the slide-in
+ * happen at all. Closing needs none of that, because by then the panel is already
+ * on screen at `translateX(0)` and the class is merely removed, so the plain
+ * transition on the base rule animates it out.
+ *
+ * Both directions are declared with the same duration and easing so the two
+ * halves of the gesture read as one movement.
+ */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+}
+
+/* The scrim covers the viewport and sits under the panel. `--color-scrim` is the
+   same token the sheets use, and no blur: a full-screen backdrop-filter is the
+   most expensive thing on a mid-range phone and buys nothing here. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--color-scrim);
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+.backdropOpen {
+  opacity: 1;
+  animation: nav-drawer-scrim-enter var(--duration-slow) var(--ease-out);
+}
+
+@keyframes nav-drawer-scrim-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.panel {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: min(var(--size-sidebar), 86vw);
+  transform: translateX(-100%);
+  transition: transform var(--duration-slow) var(--ease-out);
+  will-change: transform;
+}
+
+.panelOpen {
+  transform: translateX(0);
+  animation: nav-drawer-panel-enter var(--duration-slow) var(--ease-out);
+}
+
+@keyframes nav-drawer-panel-enter {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* The drawer is a phone-and-tablet affordance only: from `lg` the fixed sidebar
+   is on screen, and two copies of the same destinations would be a regression.
+   `NavDrawer` also unmounts itself at that width; this rule covers the frame
+   between a resize and the next render. */
+@media (min-width: 1024px) {
+  .root {
+    display: none;
+  }
+}

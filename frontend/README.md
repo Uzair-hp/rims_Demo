@@ -109,7 +109,7 @@ frontend/
 │   │   └── health.js
 │   ├── app/                 # router, routes, theme, providers, error boundary
 │   ├── components/
-│   │   ├── layout/          # AppShell, Sidebar, TopBar, BottomNav, sheets
+│   │   ├── layout/          # AppShell, Sidebar (rail + drawer), TopBar, NavDrawer
 │   │   └── ui/              # Button, Card, EmptyState, Sheet, Icon, …
 │   ├── features/auth/       # AuthProvider, guards, LoginPage
 │   ├── hooks/               # useMediaQuery, usePwaInstall

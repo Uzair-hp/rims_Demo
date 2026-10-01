@@ -49,6 +49,7 @@ export const ICON_PATHS = {
   plus: { paths: ['M12 5.2v13.6', 'M5.2 12h13.6'] },
   plusCircle: { paths: [circle(12, 12, 8.4), 'M12 8.4v7.2', 'M8.4 12h7.2'] },
   more: { solid: true, paths: [circle(5.2, 12, 1.6), circle(12, 12, 1.6), circle(18.8, 12, 1.6)] },
+  menu: { paths: ['M4 7.2h16', 'M4 12h16', 'M4 16.8h16'] },
   chevronLeft: { paths: ['m14.4 6.2-5.8 5.8 5.8 5.8'] },
   chevronRight: { paths: ['m9.6 6.2 5.8 5.8-5.8 5.8'] },
   chevronDown: { paths: ['m6.2 9.6 5.8 5.8 5.8-5.8'] },

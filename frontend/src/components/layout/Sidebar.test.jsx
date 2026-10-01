@@ -66,6 +66,29 @@ describe('Sidebar branding', () => {
     expect(sidebar.contains(name)).toBe(true)
   })
 
+  it('offers a close control instead of a collapse toggle in the drawer variant', () => {
+    // The drawer plate is always full width on a phone, so there is nothing to
+    // collapse; the control that dismisses it takes that slot instead.
+    const { sidebar } = renderSidebar({ variant: 'drawer', onClose: vi.fn() })
+
+    const close = sidebar.querySelector('button[aria-label="Close navigation"]')
+    expect(close).toBeInTheDocument()
+    expect(sidebar.querySelector('button[aria-pressed]')).not.toBeInTheDocument()
+  })
+
+  it('lists no create shortcuts unless they are passed in', () => {
+    const without = renderSidebar({ variant: 'drawer', onClose: vi.fn() })
+    expect(without.sidebar.textContent).not.toMatch(/New quotation/)
+    without.unmount()
+
+    const with_ = renderSidebar({
+      variant: 'drawer',
+      onClose: vi.fn(),
+      createActions: [{ to: '/quotations/new', label: 'New quotation', icon: 'fileText' }],
+    })
+    expect(with_.sidebar.textContent).toMatch(/New quotation/)
+  })
+
   it('places the name directly below the logo', () => {
     const { sidebar } = renderSidebar()
 

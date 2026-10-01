@@ -3,7 +3,10 @@
   inset-block-start: 0;
   z-index: var(--z-topbar);
   display: grid;
-  grid-template-columns: var(--size-touch) 1fr var(--size-touch);
+  /* The leading slot holds the menu button and, off the dashboard, the back link,
+     so its width is content-driven; the trailing slot keeps a fixed track so an
+     optional action does not shift the title when a route adds one. */
+  grid-template-columns: auto 1fr var(--size-touch);
   align-items: center;
   gap: var(--space-2);
   min-height: var(--size-topbar);
@@ -24,18 +27,23 @@
   justify-content: center;
 }
 
-.placeholder {
-  inline-size: var(--size-touch);
-  block-size: var(--size-touch);
-}
-
 .iconButton {
   display: grid;
   place-items: center;
+  /* `--size-touch` is the 44x44 minimum target (§5). */
   inline-size: var(--size-touch);
   block-size: var(--size-touch);
+  flex: none;
+  /* A bare button needs the reset an anchor gets for free; without it the UA
+     border and background make the hamburger look like a second, worse button. */
+  padding: 0;
+  border: 0;
+  font: inherit;
   color: var(--color-ink);
+  background: transparent;
   border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .iconButton:hover {

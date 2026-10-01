@@ -215,6 +215,35 @@
   outline-offset: var(--focus-ring-offset);
 }
 
+/* ------------------------------------------------- mobile drawer variant */
+
+/*
+ * Inside `NavDrawer` the same plate fills the sliding panel: it is not fixed to
+ * the viewport (the panel already is) and it is not behind a `lg` media query, so
+ * the drawer and the rail are literally one component styled twice.
+ */
+.drawer {
+  position: relative;
+  display: flex;
+  inline-size: 100%;
+  block-size: 100%;
+  padding-block-start: calc(var(--space-5) + env(safe-area-inset-top));
+  padding-block-end: calc(var(--space-4) + env(safe-area-inset-bottom));
+  padding-inline-start: calc(var(--space-3) + env(safe-area-inset-left));
+  transition: none;
+}
+
+/* A group label between the destination list and the create shortcuts. */
+.groupHeading {
+  margin: var(--space-4) 0 var(--space-2);
+  padding-inline: var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-muted-inverse);
+}
+
 /* ---------------------------------------------------------- collapsed rail */
 
 .collapsed {

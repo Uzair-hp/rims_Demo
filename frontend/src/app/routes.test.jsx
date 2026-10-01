@@ -66,7 +66,7 @@ describe('routing', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Edit quotation' })).toBeInTheDocument()
   })
 
-  it('keeps the print route chrome-less, so no sidebar or bottom bar reaches the paper', () => {
+  it('keeps the print route chrome-less, so no sidebar or drawer reaches the paper', () => {
     renderAt('/print/quotation/42')
 
     expect(screen.getByRole('heading', { level: 1, name: 'Quotation' })).toBeInTheDocument()
@@ -122,37 +122,131 @@ describe('routing', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Clients' })).toBeInTheDocument()
   })
 
-  it('exposes both navigations, since only one is on screen at a time', () => {
+  it('exposes only the desktop navigation until the drawer is opened', () => {
     renderAt('/')
 
+    // The drawer unmounts when closed, so there is exactly one `Primary`
+    // navigation in the document — the sidebar, which is `display: none` below
+    // `lg` in jsdom. Two sets of links would mean two competing navigations.
     const navs = screen.getAllByRole('navigation', { name: 'Primary', hidden: true })
-    expect(navs).toHaveLength(2)
+    expect(navs).toHaveLength(1)
+    expect(within(navs[0]).getByRole('link', { name: 'Settings', hidden: true })).toBeInTheDocument()
 
-    const [desktop, mobile] = navs
-    expect(within(desktop).getByRole('link', { name: 'Settings', hidden: true })).toBeInTheDocument()
-    expect(within(mobile).getByRole('button', { name: 'More', hidden: true })).toBeInTheDocument()
-    expect(within(mobile).getByRole('button', { name: 'New', hidden: true })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument()
   })
 
-  it('keeps the mobile slots free of the destinations the bottom bar cannot hold', () => {
+  it('opens the navigation drawer from the hamburger and lists every destination', async () => {
     renderAt('/')
 
-    const [, mobile] = screen.getAllByRole('navigation', { name: 'Primary', hidden: true })
-    const labels = within(mobile)
-      .getAllByRole('link', { hidden: true })
-      .map((link) => link.textContent)
+    const trigger = screen.getByRole('button', { name: 'Open navigation' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
-    // The bottom bar holds exactly three destinations; Clients, Services and
-    // Settings reach mobile through the More sheet instead (SERVICES_PLAN §6).
-    expect(labels).toEqual(['Dashboard', 'Quotations', 'Invoices'])
+    await userEvent.click(trigger)
+
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    // The drawer is the sidebar plate, so it carries all six destinations — the
+    // rule the removed bottom bar broke by holding only three.
+    const links = within(drawer).getAllByRole('link')
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/',
+      '/quotations',
+      '/invoices',
+      '/clients',
+      '/services',
+      '/settings',
+      '/quotations/new',
+      '/clients',
+    ])
   })
 
-  it('offers Services from the desktop sidebar but never as a bottom-bar slot', () => {
+  it('marks the current destination inside the drawer, as the sidebar does', async () => {
+    renderAt('/quotations')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' })
+    expect(within(drawer).getByRole('link', { name: 'Quotations' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('closes the drawer after navigating from it', async () => {
     renderAt('/')
 
-    const [desktop, mobile] = screen.getAllByRole('navigation', { name: 'Primary', hidden: true })
-    expect(within(desktop).getByRole('link', { name: 'Services', hidden: true })).toBeInTheDocument()
-    expect(within(mobile).queryByRole('link', { name: 'Services', hidden: true })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Services' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Services' })).toBeInTheDocument()
+    // The panel stays mounted for the length of the slide-out, so this waits for
+    // the exit rather than asserting on the frame the link was clicked.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument())
+  })
+
+  it('closes the drawer when the scrim is clicked', async () => {
+    renderAt('/')
+    const trigger = screen.getByRole('button', { name: 'Open navigation' })
+
+    await userEvent.click(trigger)
+    await userEvent.click(screen.getByRole('button', { name: 'Close navigation overlay' }))
+
+    // The panel stays mounted for the length of the slide-out, so this waits for
+    // the exit rather than asserting on the frame the scrim was clicked.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument())
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes the drawer on Escape', async () => {
+    renderAt('/')
+    const trigger = screen.getByRole('button', { name: 'Open navigation' })
+
+    await userEvent.click(trigger)
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument())
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes the drawer from its own close button', async () => {
+    renderAt('/')
+    const trigger = screen.getByRole('button', { name: 'Open navigation' })
+
+    await userEvent.click(trigger)
+    await userEvent.click(screen.getByRole('button', { name: 'Close navigation' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).not.toBeInTheDocument())
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('locks the page behind the drawer while it is open', async () => {
+    renderAt('/')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    expect(document.body.style.overflow).toBe('hidden')
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(document.body.style.overflow).not.toBe('hidden'))
+  })
+
+  it('offers Services and Settings on mobile, which the bottom bar could not', async () => {
+    renderAt('/')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' })
+
+    expect(within(drawer).getByRole('link', { name: 'Services' })).toBeInTheDocument()
+    expect(within(drawer).getByRole('link', { name: 'Settings' })).toBeInTheDocument()
+  })
+
+  it('keeps the theme control and sign out reachable on mobile', async () => {
+    renderAt('/')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    const drawer = screen.getByRole('dialog', { name: 'Navigation' })
+
+    // Below `lg` the sidebar is off screen, so the drawer's footer is the only
+    // place these can live (§7).
+    expect(within(drawer).getByRole('button', { name: /theme/i })).toBeInTheDocument()
+    expect(within(drawer).getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
   })
 
   it('shows the signed-in identity in the sidebar footer', () => {
