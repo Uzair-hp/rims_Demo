@@ -47,3 +47,16 @@
 .positive .value {
   color: var(--color-success);
 }
+
+/* Phones only: the Dashboard lays tiles 3-up from the smallest screen, which
+   leaves a tile roughly a third of a 375 px viewport. At the desktop `2xl`
+   figure an Indian-grouped amount such as `₹45,300.00` needs more width than
+   that, so it would wrap mid-number on every money tile. Stepping the figure
+   down one token keeps each amount on a single line, and the label / hint
+   already sit at `xs` so they simply wrap instead. Desktop and tablet are
+   untouched: the query is capped below the 768 px breakpoint. */
+@media (max-width: 767px) {
+  .value {
+    font-size: var(--font-size-lg);
+  }
+}
