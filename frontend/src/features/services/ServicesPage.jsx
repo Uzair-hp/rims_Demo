@@ -16,11 +16,11 @@ import Card from '../../components/ui/Card.jsx'
 import Checkbox from '../../components/ui/Checkbox.jsx'
 import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx'
 import EmptyState from '../../components/ui/EmptyState.jsx'
+import Icon from '../../components/ui/Icon.jsx'
 import PageHeader from '../../components/ui/PageHeader.jsx'
 import Pagination from '../../components/ui/Pagination.jsx'
 import Skeleton from '../../components/ui/Skeleton.jsx'
 import StatusBadge from '../../components/ui/StatusBadge.jsx'
-import TextField from '../../components/ui/TextField.jsx'
 import { archiveService, restoreService } from '../../api/endpoints/services.js'
 import { formatPaise } from '../../lib/money.js'
 import ServiceFormModal from './ServiceFormModal.jsx'
@@ -123,20 +123,45 @@ export default function ServicesPage() {
         title="Services"
         description="Your standard rate card — pick one while writing a quotation and edit the rate on the line."
         actions={
-          <Button variant="primary" icon="plus" onClick={openCreate}>
+          <Button variant="primary" icon="plus" onClick={openCreate} fullWidth className={styles.newButton}>
             New service
           </Button>
         }
       />
 
       <div className={styles.toolbar}>
-        <TextField
-          label="Search services"
-          placeholder="Search by name, category or description…"
-          value={searchTerm}
-          onChange={setSearchTerm}
-          className={styles.search}
-        />
+        {/*
+         * A raw input rather than `TextField`: this field needs a leading search
+         * icon and a trailing clear button, and `TextField` has no slot for
+         * either. The label is `visually-hidden` rather than dropped, so the
+         control keeps its accessible name; the placeholder is a short hint, not
+         * the label.
+         */}
+        <div className={styles.searchWrap}>
+          <label htmlFor="services-search" className="visually-hidden">
+            Search services
+          </label>
+          <Icon name="search" size={18} className={styles.searchIcon} />
+          <input
+            id="services-search"
+            type="search"
+            className={styles.search}
+            placeholder="Search services"
+            value={searchTerm}
+            onChange={setSearchTerm}
+            autoComplete="off"
+          />
+          {searchTerm ? (
+            <button
+              type="button"
+              className={styles.searchClear}
+              onClick={() => setSearchTerm('')}
+              aria-label="Clear search"
+            >
+              <Icon name="x" size={16} />
+            </button>
+          ) : null}
+        </div>
         <Checkbox
           label="Show archived"
           checked={includeArchived}
@@ -216,46 +241,55 @@ export default function ServicesPage() {
             {items.map((service) => (
               <li key={service.id}>
                 <Card as="article" className={service.is_archived ? styles.archived : undefined}>
-                  <div className={styles.row}>
-                    <div className={styles.summary}>
-                      <div className={styles.titleRow}>
-                        <span className={styles.rowTitle}>{service.name}</span>
-                        {service.is_archived ? <StatusBadge archived>Archived</StatusBadge> : null}
-                      </div>
-                      {service.category ? <p className={styles.meta}>{service.category}</p> : null}
-                      {service.description ? (
-                        <p className={styles.description}>{service.description}</p>
-                      ) : null}
-                    </div>
-                    <div className={styles.rate}>
-                      <span className={styles.rateValue}>{formatPaise(service.rate_paise)}</span>
-                      <span className={styles.rateUnit}>per {service.unit || 'job'}</span>
-                    </div>
-                    <div className={styles.actions}>
-                      <Button size="sm" variant="ghost" icon="edit" onClick={() => openEdit(service)}>
-                        Edit
+                  {/*
+                   * Stacked in four rows rather than one crowded line. The
+                   * single-row layout put the name, the rate, the unit and two
+                   * labelled buttons on one line, which broke at narrow widths:
+                   * a long name ran under the price, the category wrapped to an
+                   * orphan, "per job" collided with the text, and the actions
+                   * squeezed the content instead of sitting below it.
+                   */}
+                  <div className={styles.headRow}>
+                    {/* `min-width: 0` lets this truncate; without it the flex item
+                        refuses to shrink below its content and overlaps the price. */}
+                    <span className={styles.name}>{service.name}</span>
+                    <span className={styles.rateValue}>{formatPaise(service.rate_paise)}</span>
+                  </div>
+
+                  <div className={styles.metaRow}>
+                    <span className={styles.metaLeft}>
+                      {service.is_archived ? <StatusBadge archived>Archived</StatusBadge> : null}
+                      {service.category ? <span className={styles.pill}>{service.category}</span> : null}
+                    </span>
+                    <span className={styles.rateUnit}>per {service.unit || 'job'}</span>
+                  </div>
+
+                  {service.description ? <p className={styles.description}>{service.description}</p> : null}
+
+                  <div className={styles.actions}>
+                    <Button size="sm" variant="ghost" icon="edit" onClick={() => openEdit(service)}>
+                      Edit
+                    </Button>
+                    {service.is_archived ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon="rotateCw"
+                        disabled={busy}
+                        onClick={() => setRestoreTarget(service)}
+                      >
+                        Restore
                       </Button>
-                      {service.is_archived ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon="rotateCw"
-                          disabled={busy}
-                          onClick={() => setRestoreTarget(service)}
-                        >
-                          Restore
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon="archive"
-                          onClick={() => setArchiveTarget(service)}
-                        >
-                          Archive
-                        </Button>
-                      )}
-                    </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon="archive"
+                        onClick={() => setArchiveTarget(service)}
+                      >
+                        Archive
+                      </Button>
+                    )}
                   </div>
                 </Card>
               </li>
