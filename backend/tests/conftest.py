@@ -49,6 +49,37 @@ def client(app):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_default_database(tmp_path, monkeypatch):
+    """
+    Send the *default* database somewhere harmless, for every test.
+
+    The `app` fixture passes an explicit URI, but a test is free to build its own
+    app, and `create_app()` reads `SQLALCHEMY_DATABASE_URI` off the settings
+    singleton - which defaults to `backend/instance/ruchita_interiors.db`. A test
+    that omits the override therefore opens the developer's real database, and any
+    `db.create_all()` / `db.drop_all()` in it rewrites or empties that file.
+
+    Not hypothetical: `test_allowed_actions.py` built its app without the override
+    and called `drop_all()`, so an ordinary `npm test` dropped every table in the
+    development database - clients, invoices, quotations and payments - while
+    leaving `alembic_version` claiming a revision whose schema no longer existed.
+    The module docstring above promises that no test can do this; redirecting the
+    default is what makes the promise true rather than merely intended.
+
+    Patched on the settings object rather than the environment because
+    `app.config.settings` resolves `DATABASE_URL` once at import, long before any
+    fixture runs.
+    """
+    from app.config.settings import settings
+
+    db_path = tmp_path / "default_isolated.db"
+    monkeypatch.setattr(
+        settings, "SQLALCHEMY_DATABASE_URI", f"sqlite:///{db_path.as_posix()}", raising=False
+    )
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _reset_login_rate_limit():
     """
     The rate limiter is process-wide (§16 in-memory, single process), so a test that
