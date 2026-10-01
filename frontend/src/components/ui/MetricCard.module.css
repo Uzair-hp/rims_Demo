@@ -48,15 +48,15 @@
   color: var(--color-success);
 }
 
-/* Phones only: the Dashboard lays tiles 3-up from the smallest screen, which
-   leaves a tile roughly a third of a 375 px viewport. At the desktop `2xl`
-   figure an Indian-grouped amount such as `₹45,300.00` needs more width than
-   that, so it would wrap mid-number on every money tile. Stepping the figure
-   down one token keeps each amount on a single line, and the label / hint
-   already sit at `xs` so they simply wrap instead. Desktop and tablet are
-   untouched: the query is capped below the 768 px breakpoint. */
+/* Phones only: the Dashboard lays tiles 2-up from the smallest screen, which
+   leaves a tile roughly half a 375 px viewport. The `2xl` figure is sized for a
+   3-up desktop column, and an Indian-grouped amount such as `₹45,300.00` does
+   not fit that width in two columns, so it wraps mid-number. One token down
+   keeps each amount on a single line; the label and hint are already at `xs` and
+   simply wrap instead. Capped below the 768 px breakpoint, so tablet and desktop
+   keep `2xl`. */
 @media (max-width: 767px) {
   .value {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-xl);
   }
 }

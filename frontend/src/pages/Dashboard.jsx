@@ -74,12 +74,15 @@ function Tiles({ data }) {
       </section>
 
       {/* The money trio. `due` marks money the business is owed, so outstanding
-          is the only toned tile here — invoiced and received are neutral. */}
+          is the only warning-toned tile here. `positive` is money already
+          collected, so received carries it; invoiced stays neutral because an
+          issued invoice is neither collected nor yet owed. */}
       <section className={styles.tiles} aria-label="Money position">
         <MetricCard label="Invoiced" value={formatPaise(money.invoiced_value)} hint="issued invoices only" />
         <MetricCard
           label="Received"
           value={formatPaise(money.received_total)}
+          tone="positive"
           hint="from recorded payments"
         />
         <MetricCard

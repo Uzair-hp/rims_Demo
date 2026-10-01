@@ -1,15 +1,14 @@
 /**
  * Dashboard layout (§18.4, §19).
  *
- * Tiles are 3-up at every width, mobile included: FR-D1's six figures read as a
- * compact grid on a phone instead of a tall one-card-per-row strip. The column
- * track is `minmax(0, 1fr)` and every tile sets `min-inline-size: 0`, so a long
- * rupee figure wraps inside its own tile (`MetricCard`'s `.value` carries
- * `overflow-wrap: anywhere`) rather than widening the grid and scrolling the page
- * sideways. The gap is `--space-2` on mobile and steps to `--space-4` from
- * 768 px, where the columns have room for it; the column count never changes, so
- * desktop is unaffected. Mobile is the primary target (§19), so the 3-up rule is
- * the base rule.
+ * Tiles are 2-up on mobile and 3-up from 768 px: six figures read as a compact
+ * block on a phone instead of a tall one-card-per-row strip, and each tile still
+ * has room for an Indian-grouped amount. The column track is `minmax(0, 1fr)` and
+ * every tile sets `min-inline-size: 0`, so a long rupee figure wraps inside its own
+ * tile (`MetricCard`'s `.value` carries `overflow-wrap: anywhere`) rather than
+ * widening the grid and scrolling the page sideways. The gap is `--space-2` on
+ * mobile and steps to `--space-4` from 768 px, where the columns have room for it.
+ * Mobile is the primary target (§19), so the narrow rule is the base rule.
  *
  * The two charts sit side by side from 1024 px, where each still has room for a
  * 12-point x-axis, and stack below that.
@@ -20,21 +19,21 @@
 
 .tiles {
   display: grid;
-  /* 3-up from the smallest phone. `minmax(0, 1fr)` (not `1fr`) so a long rupee
+  /* 2-up from the smallest phone. `minmax(0, 1fr)` (not `1fr`) so a long rupee
      figure shrinks its own column instead of pushing the grid wider than the
      viewport and starting a horizontal scroll. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  /* Tighter than desktop: at three across, gutter width is what makes the row
-     read as a grid rather than as three separate cards. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Tighter than desktop: at two across, gutter width is what makes the row
+     read as a grid rather than as two separate cards. */
   gap: var(--space-2);
   margin-block-end: var(--space-4);
 }
 
-/* A tile's own content is what protects the narrow columns: MetricCard sets
-   `min-inline-size: 0` and lets the value wrap. Reset to the roomier desktop
-   gutter once the columns can carry it. */
+/* Desktop and tablet keep the 3-up layout this page has always had; only the
+   phone breakpoint is 2-up. The wider gutter comes with the extra width. */
 @media (min-width: 768px) {
   .tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-4);
   }
 }
