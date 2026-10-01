@@ -36,6 +36,24 @@ const UNAUTHORIZED = jsonResponse(
 )
 
 /**
+ * A gateway response: an error status with no §9.1 envelope and a body that is
+ * not JSON, which is what the Vite dev proxy returns when Flask is down.
+ * `json()` rejects the way the browser's does, so the client's own `catch` is
+ * exercised rather than bypassed.
+ */
+function gatewayError(status) {
+  return {
+    ok: false,
+    status,
+    headers: { get: () => null },
+    json: async () => {
+      throw new SyntaxError('Unexpected end of JSON input')
+    },
+    text: async () => '',
+  }
+}
+
+/**
  * @param {{ me?: object, login?: object }} [responses]
  */
 function mockFetch({ me = UNAUTHORIZED, login } = {}) {
@@ -202,6 +220,77 @@ describe('sign in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
 
     expect(await screen.findByText(/Cannot reach the server/i)).toBeInTheDocument()
+  })
+
+  /**
+   * The reported bug, and the reason the transport-level test above was not
+   * enough.
+   *
+   * When the Flask API is not running, the Vite dev proxy answers with a 502 that
+   * has *no body*. `fetch` resolves for it — an HTTP error status is not a
+   * network failure — so the `offline` flag was never set and the screen fell
+   * through to its generic fallback and said "Something went wrong", which points
+   * at the user rather than at a stopped server.
+   *
+   * These two assertions are the regression: the connectivity copy appears, and
+   * the misleading generic copy does not.
+   */
+  it('says the server is unreachable when the dev proxy answers 502 with no body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        if (String(url).endsWith('/auth/me')) return UNAUTHORIZED
+        if (String(url).endsWith('/auth/login')) return gatewayError(502)
+        return jsonResponse({})
+      }),
+    )
+    renderAt('/login')
+
+    await userEvent.type(await screen.findByLabelText('Email'), USER.email)
+    await userEvent.type(screen.getByLabelText('Password'), 'admin12345')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByText(/Cannot reach the server/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Something went wrong/i)).not.toBeInTheDocument()
+  })
+
+  it.each([502, 503, 504])('treats a bodiless %i the same way on the login screen', async (status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) => {
+        if (String(url).endsWith('/auth/me')) return UNAUTHORIZED
+        if (String(url).endsWith('/auth/login')) return gatewayError(status)
+        return jsonResponse({})
+      }),
+    )
+    renderAt('/login')
+
+    await userEvent.type(await screen.findByLabelText('Email'), USER.email)
+    await userEvent.type(screen.getByLabelText('Password'), 'admin12345')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByText(/Cannot reach the server/i)).toBeInTheDocument()
+  })
+
+  it('still blames the credentials for a real 401, not the connection', async () => {
+    // The counterpart to the case above: a genuine server answer must keep its own
+    // copy. If a 401 were also classified as a connectivity failure, a user with a
+    // wrong password would be told to check their network, which is a worse lie.
+    mockFetch({
+      me: UNAUTHORIZED,
+      login: jsonResponse(
+        { error: { code: 'UNAUTHENTICATED', message: 'Email or password is incorrect.' } },
+        { ok: false, status: 401 },
+      ),
+    })
+    renderAt('/login')
+
+    await userEvent.type(await screen.findByLabelText('Email'), USER.email)
+    await userEvent.type(screen.getByLabelText('Password'), 'wrong-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByText('Email or password is incorrect.')).toBeInTheDocument()
+    expect(screen.queryByText(/Cannot reach the server/i)).not.toBeInTheDocument()
   })
 })
 

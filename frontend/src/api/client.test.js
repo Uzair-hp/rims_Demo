@@ -25,6 +25,24 @@ const UNAUTHORIZED = jsonResponse(
   { ok: false, status: 401 },
 )
 
+/**
+ * A gateway response: an error status with no §9.1 envelope, and a body that is
+ * not JSON at all — which is exactly what the Vite dev proxy returns when Flask
+ * is not running. `json()` rejects the way the real one does, so `toApiError`'s
+ * `catch` is exercised rather than bypassed.
+ */
+function gatewayError(status) {
+  return {
+    ok: false,
+    status,
+    headers: { get: () => null },
+    json: async () => {
+      throw new SyntaxError('Unexpected end of JSON input')
+    },
+    text: async () => '',
+  }
+}
+
 function clearCsrfCookie() {
   document.cookie.split(';').forEach((entry) => {
     const name = entry.split('=')[0].trim()
@@ -111,6 +129,94 @@ describe('apiRequest', () => {
 
     expect(error.offline).toBe(true)
     expect(error.code).toBe('NETWORK')
+  })
+})
+
+/**
+ * The dev proxy answers with a bodiless 502 when Flask is not running. `fetch`
+ * still *resolves* for that, so it is not a transport failure and never reaches
+ * the `catch` in `apiRequest`; it has to be recognised in `toApiError`, or every
+ * screen reports a generic internal error for what is an outage.
+ */
+describe('gateway failures are connectivity failures, not application errors', () => {
+  it.each([502, 503, 504])('treats a bodiless %i as offline', async (status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => gatewayError(status)),
+    )
+
+    const error = await apiRequest('/auth/login', { method: 'POST' }).catch((caught) => caught)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error.offline).toBe(true)
+    expect(error.code).toBe('NETWORK')
+    // The status is kept, not zeroed, so any `status >= 500` reasoning stays true.
+    expect(error.status).toBe(status)
+    expect(error.details).toEqual([])
+    expect(error.message).toMatch(/no connection/i)
+  })
+
+  it('keeps a real backend 500 as an application error, not a connectivity one', async () => {
+    // The mirror case, and the important one: Flask always returns a §9.1 envelope
+    // for a 500, so an enveloped 500 is the server's own error and must keep its
+    // own copy. This is the guard against classifying 5xx too broadly.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse({ error: { code: 'INTERNAL', message: 'boom' } }, { ok: false, status: 500 }),
+      ),
+    )
+
+    const error = await apiRequest('/auth/login', { method: 'POST' }).catch((caught) => caught)
+
+    expect(error.offline).toBe(false)
+    expect(error.status).toBe(500)
+    expect(error.code).toBe('INTERNAL')
+    expect(error.message).toBe('boom')
+  })
+
+  it('does not treat an enveloped 502 as a connectivity failure', async () => {
+    // A gateway status that *does* carry an envelope came from something that
+    // speaks the API contract, so its message is authoritative.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          { error: { code: 'BUSINESS_RULE', message: 'Not available right now.' } },
+          { ok: false, status: 502 },
+        ),
+      ),
+    )
+
+    const error = await apiRequest('/auth/login', { method: 'POST' }).catch((caught) => caught)
+
+    expect(error.offline).toBe(false)
+    expect(error.message).toBe('Not available right now.')
+  })
+
+  it('leaves a bodiless 4xx as an ordinary error', async () => {
+    // A 404 with no body is a routing answer, not an outage. Only the gateway
+    // family means "nothing answered".
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => gatewayError(404)),
+    )
+
+    const error = await apiRequest('/clients/999').catch((caught) => caught)
+
+    expect(error.offline).toBe(false)
+    expect(error.status).toBe(404)
+  })
+
+  it('does not try to refresh a token after a gateway failure', async () => {
+    // A dead API cannot issue a new token, so attempting a refresh would be a
+    // pointless round trip against the same unreachable host.
+    const fetchMock = vi.fn(async () => gatewayError(502))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await apiRequest('/auth/me').catch(() => {})
+
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/auth/refresh'))).toHaveLength(0)
   })
 })
 

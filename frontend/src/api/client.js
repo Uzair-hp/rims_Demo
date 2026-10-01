@@ -74,6 +74,24 @@ const FRIENDLY_MESSAGES = {
 }
 
 /**
+ * Statuses that mean "no API answered", rather than "the API answered with an
+ * error".
+ *
+ * A 502/503/504 is emitted by an *intermediary* — the Vite dev proxy, a reverse
+ * proxy, a load balancer, an edge — when the upstream it fronts is unreachable.
+ * Flask never produces one: every 4xx and 5xx it returns carries a §9.1 JSON
+ * envelope (`app/__init__.py` error handlers). So these three are the signature of
+ * a request that never reached the application at all, which is a connectivity
+ * failure and not an application error.
+ *
+ * Scoped to the gateway family rather than "any 5xx" on purpose. A 500 *with* an
+ * envelope is a real server error and must keep its own copy; and a 5xx whose body
+ * happens to parse as JSON without an `error` key is too ambiguous to classify as
+ * a connectivity failure, so it stays an ordinary error.
+ */
+const UNAVAILABLE_STATUSES = new Set([502, 503, 504])
+
+/**
  * @param {Response} response
  * @returns {Promise<ApiError>}
  */
@@ -85,6 +103,23 @@ async function toApiError(response) {
     payload = null
   }
   const envelope = payload && payload.error ? payload.error : null
+
+  // A gateway status with no envelope came from the proxy, not from Flask: the
+  // API never answered. `response.json()` threw above and was swallowed, so this
+  // is the only place left that still knows the body was unusable — and that
+  // knowledge has to be used here or it is lost. Reported as `offline` so every
+  // screen's existing `error.offline` branch ("Cannot reach the server") fires
+  // instead of its generic 5xx copy, and so a login attempt says the server is
+  // down rather than blaming the user's credentials for an outage.
+  if (!envelope && UNAVAILABLE_STATUSES.has(response.status)) {
+    return new ApiError('No connection to the Ruchita Interiors server.', {
+      code: 'NETWORK',
+      status: response.status,
+      details: [],
+      offline: true,
+    })
+  }
+
   const message = envelope?.message || FRIENDLY_MESSAGES[envelope?.code] || FRIENDLY_MESSAGES.INTERNAL
   return new ApiError(message, {
     code: envelope?.code || 'INTERNAL',
