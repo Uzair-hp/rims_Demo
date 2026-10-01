@@ -85,6 +85,27 @@
   padding: var(--space-3) var(--space-3) var(--space-4);
 }
 
+/* A pinned footer, outside the scrolling body. A sheet that has one is a form
+   or a picker whose primary action must stay reachable however long the content
+   grows — losing the submit button under a long list is the failure this
+   prevents. */
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* Wider variant for content that is a list of rows rather than a form. The
+   desktop width only; below 1024px the panel is already full-bleed. */
+@media (min-width: 1024px) {
+  .wide {
+    inline-size: min(32.5rem, 100%);
+  }
+}
+
 @keyframes fade {
   from {
     opacity: 0;

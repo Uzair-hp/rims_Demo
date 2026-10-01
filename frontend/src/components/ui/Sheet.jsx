@@ -19,10 +19,12 @@ const FOCUSABLE =
  *   title: string,
  *   description?: string,
  *   children?: import('react').ReactNode,
+ *   footer?: import('react').ReactNode,
+ *   size?: 'default' | 'wide',
  *   labelledById?: string,
  * }} props
  */
-export default function Sheet({ open, onClose, title, description, children }) {
+export default function Sheet({ open, onClose, title, description, children, footer, size = 'default' }) {
   const panelRef = useRef(null)
   const restoreFocusRef = useRef(null)
 
@@ -79,7 +81,7 @@ export default function Sheet({ open, onClose, title, description, children }) {
         tabIndex={-1}
       />
       <div
-        className={styles.panel}
+        className={`${styles.panel} ${size === 'wide' ? styles.wide : ''}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -97,6 +99,7 @@ export default function Sheet({ open, onClose, title, description, children }) {
           </button>
         </header>
         <div className={styles.body}>{children}</div>
+        {footer ? <div className={styles.footer}>{footer}</div> : null}
       </div>
     </div>,
     document.body,

@@ -1,74 +1,237 @@
+/**
+ * Client picker — header, search, list, footer (§9.2, §4.2).
+ *
+ * The one structural rule: **the list is the only scrolling area.** The sheet
+ * hands this column a bounded height, so `.sheet` is a column with the search
+ * pinned at the top and the list absorbing the rest. `min-height: 0` on the list
+ * is required — a flex child will not shrink below its content without it, so
+ * the list would grow to fit every client and push the footer off the sheet,
+ * which is the bug this layout exists to fix.
+ */
+
 .sheet {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  min-block-size: 0;
+  max-block-size: 60dvh;
+}
+
+/* --- search --- */
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-block-end: var(--space-3);
 }
 
 .search {
-  max-width: 36ch;
+  inline-size: 100%;
+  min-block-size: 44px;
+  /* Room for the leading icon and the trailing clear button, so neither ever
+     sits on top of the typed text. */
+  padding-inline: 2.75rem 2.5rem;
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: 10px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
+.search::placeholder {
+  color: var(--color-ink-subtle);
+}
+
+.search:hover {
+  border-color: var(--color-ink-subtle);
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 2px var(--color-gold-soft);
+}
+
+.search:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The native search affordance is replaced by the `x` button below, which is a
+   real button with a label rather than a glyph the browser draws. */
+.search::-webkit-search-cancel-button,
+.search::-webkit-search-decoration {
+  appearance: none;
+}
+
+.searchIcon {
+  position: absolute;
+  inset-inline-start: var(--space-3);
+  color: var(--color-ink-muted);
+  pointer-events: none;
+}
+
+.searchClear {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  display: grid;
+  place-items: center;
+  inline-size: var(--touch-target-min);
+  block-size: var(--touch-target-min);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.searchClear:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-ink);
+}
+
+/* --- list --- */
+
 .list {
+  flex: 1;
+  /* Load-bearing: see the note at the top of this file. */
+  min-block-size: 0;
+  overflow-y: auto;
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  max-height: 50vh;
-  overflow-y: auto;
+  gap: 8px;
+  /* Room for a focus ring on the first and last row, which would otherwise be
+     clipped by the scroll container's edge. */
+  padding-block: 2px;
+  scrollbar-gutter: stable;
 }
 
+/* A full-width button on a fixed grid: `auto 1fr auto` gives every row the same
+   avatar and chevron tracks, so the only thing that varies is the middle column
+   — and that column truncates. A content-width row, by contrast, is as wide as
+   its longest word and no two rows line up. */
 .item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: 12px;
+  inline-size: 100%;
+  min-block-size: 64px;
+  padding: 12px 14px;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  background: var(--color-surface);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out);
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
 }
 
 .item:hover {
-  background: var(--color-surface-alt);
+  background: var(--color-gold-soft);
+  border-color: var(--color-gold);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+/* The row the keyboard is on. Same treatment as hover, so arrow keys look like
+   pointing rather than like a separate state. */
+.itemActive {
+  background: var(--color-gold-soft);
+  border-color: var(--color-gold);
+}
+
+/* One consistent colour for every avatar, rather than a hash of the name: a
+   palette of tints turns the list into confetti and competes with the status
+   colours, which are the only things in this app that should carry meaning
+   through hue. */
+.avatar {
+  display: grid;
+  place-items: center;
+  inline-size: 40px;
+  block-size: 40px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-gold-soft);
+  color: var(--color-gold-ink);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  user-select: none;
+}
+
+.itemText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
 }
 
 .itemName {
+  font-size: 15px;
   font-weight: var(--weight-semibold);
   color: var(--color-ink);
+  /* `min-width: 0` on the parent is what allows a long unbroken name to
+     ellipsis instead of widening the grid track. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .itemMeta {
-  font-size: var(--font-size-sm);
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTrailing {
+  flex: none;
   color: var(--color-ink-muted);
 }
 
-.createRow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: var(--border-width) dashed var(--color-border);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-gold);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-  width: 100%;
+/* --- states --- */
+
+.empty {
+  padding-block: var(--space-6);
 }
 
-.createRow:hover {
-  background: var(--color-gold-soft);
-  border-style: solid;
+.count {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-ink-subtle);
 }
 
-.noResults {
-  padding: var(--space-6) var(--space-4);
-  text-align: center;
-  color: var(--color-ink-muted);
-  font-size: var(--font-size-sm);
+@media (max-width: 639px) {
+  .sheet {
+    max-block-size: none;
+  }
+
+  .item {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    gap: 10px;
+    min-block-size: 60px;
+    padding: 10px 12px;
+  }
+
+  .avatar {
+    inline-size: 36px;
+    block-size: 36px;
+  }
 }
