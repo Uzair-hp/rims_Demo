@@ -67,15 +67,24 @@ class CompanySettings(db.Model):
     gstin = db.Column(db.String(15))
 
     # --- Document defaults (§15) ---
+    # Named CHECKs, not anonymous ones: SQLAlchemy cannot reflect an unnamed
+    # constraint, so batch mode drops it silently on any later table recreate
+    # (and Alembic cannot autogenerate its removal on downgrade).
     default_gst_bp = db.Column(
         db.Integer,
-        CheckConstraint("default_gst_bp >= 0 AND default_gst_bp <= 2800"),
+        CheckConstraint(
+            "default_gst_bp >= 0 AND default_gst_bp <= 2800",
+            name="ck_company_settings_default_gst_bp",
+        ),
         nullable=False,
         server_default=str(DEFAULT_GST_BP),
     )
     default_validity_days = db.Column(
         db.Integer,
-        CheckConstraint("default_validity_days >= 0 AND default_validity_days <= 365"),
+        CheckConstraint(
+            "default_validity_days >= 0 AND default_validity_days <= 365",
+            name="ck_company_settings_default_validity_days",
+        ),
         nullable=False,
         server_default=str(DEFAULT_VALIDITY_DAYS),
     )
@@ -110,7 +119,7 @@ class CompanySettings(db.Model):
     # ------------------------------------------------------------- fetching
 
     @classmethod
-    def get_row(cls) -> "CompanySettings":
+    def get_row(cls, *, flush: bool = True) -> "CompanySettings":
         """
         Return the settings row, creating it if absent.
 
@@ -118,6 +127,16 @@ class CompanySettings(db.Model):
         missing row is never a 500: the defaults in this model are the response.
         Seeding makes no code change unnecessary — a fresh database answers
         correctly before `flask seed-defaults` has ever run.
+
+        The created row is `flush`ed, not committed. It used to commit, which meant
+        a getter performed a write: this runs on GET request paths
+        (`services/settings.py`, `api/uploads.py`, `services/numbering.py`), so a
+        read request took a write lock and could fail with "database is locked"
+        against a concurrent write, and a rolled-back request left the insert
+        committed anyway. Flushing makes the row immediately readable — which is
+        all any of those callers need — while leaving the transaction that opened
+        it responsible for ending it. Pass `flush=False` on a read-only path that
+        genuinely must not open a write transaction at all.
         """
         row = db.session.get(cls, SINGLETON_ID)
         if row is None:
@@ -127,7 +146,8 @@ class CompanySettings(db.Model):
             if not row.units:
                 row.units = list(DEFAULT_UNITS)
             db.session.add(row)
-            db.session.commit()
+            if flush:
+                db.session.flush()
         return row
 
     # Alias: numbering/quotation services and their tests refer to the row this

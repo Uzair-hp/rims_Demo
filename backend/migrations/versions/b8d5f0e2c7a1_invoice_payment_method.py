@@ -25,6 +25,13 @@ choice* is frozen here.
 """
 from alembic import op
 
+from app.utils.ddl import (
+    index_ddl_for,
+    strip_inline_column,
+    strip_table_constraint,
+    table_column_names,
+)
+
 
 # revision identifiers, used by Alembic.
 revision = 'b8d5f0e2c7a1'
@@ -72,8 +79,119 @@ def upgrade():
 
 
 def downgrade():
-    # A column-level CHECK travels with its column, so dropping the column drops the
-    # constraint. This is again a rewrite, and would hit the same foreign key
-    # refusal as the original upgrade if anything still referenced `invoices`.
-    with op.batch_alter_table('invoices', schema=None) as batch_op:
-        batch_op.drop_column('payment_method')
+    # Destructive by nature: it discards the admin's payment presentation choice
+    # for every invoice. Alembic's downgrade order guarantees the later revision
+    # that names this constraint (`c3d7e9f1a2b4`) has already been undone.
+    _rebuild_invoices_without_payment_method()
+
+
+def _rebuild_invoices_without_payment_method() -> None:
+    """
+    Remove `invoices.payment_method` by recreating the table, keeping every row.
+
+    Two things rule out the obvious tools, and both are properties of this
+    schema rather than of Alembic:
+
+    - `op.batch_alter_table` implements a column drop by creating a new table,
+      copying the rows, then `DROP TABLE invoices`. `invoice_items` and `payments`
+      both hold a foreign key into `invoices` and `extensions/database.py` sets
+      `PRAGMA foreign_keys=ON` on every connection (§8.5), so the drop is refused:
+
+          sqlite3.IntegrityError: FOREIGN KEY constraint failure
+          [SQL: DROP TABLE invoices]
+
+      This is the failure the module's own docstring documents for the upgrade
+      side; using batch mode here would reintroduce it on the way down. The
+      existing cycle test downgraded an empty database, so it never saw it.
+
+    - Native `ALTER TABLE ... DROP COLUMN` (SQLite 3.35+; this project runs 3.50)
+      avoids the recreate entirely, but refuses a column that a table-level CHECK
+      names. `c3d7e9f1a2b4` gives the constraint the name
+      `ck_invoices_payment_method`, which is exactly such a reference, so the
+      native form is refused too:
+
+          sqlite3.OperationalError: error in table invoices after drop column:
+          no such column: payment_method
+
+    So the table is rebuilt by hand from its own DDL with the column def removed.
+    The DDL is transformed rather than retyped, so no other column, default or
+    FK can be dropped by accident, and a column added by any other revision
+    survives this one.
+
+    The two pragmas are both load-bearing, and both were verified directly
+    against this project's SQLite (3.50):
+
+    - `foreign_keys=OFF` is needed for the `DROP TABLE`, as above.
+    - `legacy_alter_table=ON` is needed *because* of that: with FK enforcement
+      on, SQLite rewrites the `REFERENCES` clause of every child table on
+      `ALTER TABLE ... RENAME`, ignoring `legacy_alter_table`, leaving
+      `invoice_items` and `payments` permanently pointing at `invoices_old`.
+
+    They are toggled on Alembic's own connection rather than a second one:
+    `PRAGMA foreign_keys` is a no-op inside a transaction, so autocommit is
+    required, and a separate connection deadlocks against Alembic's transaction.
+    Both are restored in a `finally`, and `PRAGMA foreign_key_check` runs while
+    enforcement is still off so a botched rebuild fails loudly here rather than
+    surfacing as corrupt data later.
+    """
+    dbapi = op.get_bind().connection.driver_connection
+
+    isolation = dbapi.isolation_level
+    dbapi.isolation_level = None  # autocommit: the pragmas need this
+    try:
+        cursor = dbapi.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=OFF")
+            cursor.execute("PRAGMA legacy_alter_table=ON")
+
+            old_ddl = cursor.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='invoices'"
+            ).fetchone()[0]
+
+            # Remove the column definition *and* any CHECK constraint naming it,
+            # in one pass, so this works whether the constraint is still the
+            # anonymous inline one from the upgrade above or the named one that
+            # c3d7e9f1a2b4 introduced.
+            new_ddl = strip_table_constraint(old_ddl, "ck_invoices_payment_method")
+            new_ddl = strip_inline_column(new_ddl, "payment_method")
+            if new_ddl == old_ddl:
+                raise RuntimeError(
+                    "b8d5f0e2c7a1: could not find payment_method in the invoices "
+                    "DDL; the table shape has changed since this migration was "
+                    "written."
+                )
+
+            # Copy the surviving columns by name rather than with SELECT *, so a
+            # column that no longer exists on one side cannot shift into another.
+            columns = [c for c in table_column_names(cursor, "invoices") if c != "payment_method"]
+            column_list = ", ".join(columns)
+
+            # Captured before the rename, which moves every index onto
+            # `invoices_old` for `DROP TABLE` to take with it.
+            index_ddl = index_ddl_for(cursor, "invoices")
+
+            cursor.execute("ALTER TABLE invoices RENAME TO invoices_old")
+            cursor.execute(new_ddl)
+            cursor.execute(
+                f"INSERT INTO invoices ({column_list}) SELECT {column_list} FROM invoices_old"
+            )
+            cursor.execute("DROP TABLE invoices_old")
+            for statement in index_ddl:
+                cursor.execute(statement)
+
+            violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise RuntimeError(
+                    f"b8d5f0e2c7a1: rebuilding invoices left {len(violations)} "
+                    f"foreign key violation(s): {violations[:5]}"
+                )
+        finally:
+            cursor.close()
+    finally:
+        dbapi.isolation_level = isolation
+        cursor = dbapi.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA legacy_alter_table=OFF")
+        finally:
+            cursor.close()
