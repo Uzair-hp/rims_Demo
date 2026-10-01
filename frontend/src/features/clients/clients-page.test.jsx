@@ -149,6 +149,65 @@ describe('Clients page — search and filter', () => {
       expect(String(last.path)).toContain('include_archived=true')
     })
   })
+
+  it('offers the same search control as the services page', async () => {
+    const user = userEvent.setup()
+    mockApi()
+    renderPage()
+
+    const search = await screen.findByRole('searchbox', { name: 'Search clients' })
+    expect(search).toHaveAttribute('type', 'search')
+
+    // The label is visually hidden rather than dropped, so the control keeps an
+    // accessible name now that the visible `TextField` label is gone.
+    expect(screen.getByText('Search clients')).toBeInTheDocument()
+
+    // A leading icon and a trailing clear button, as on Services — `TextField` has
+    // no slot for either, which is why this is a raw input.
+    await user.type(search, 'acme')
+    expect(await screen.findByRole('button', { name: 'Clear search' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(search).toHaveValue('')
+  })
+
+  it('declares the same search rules as the services stylesheet', () => {
+    /**
+     * Two directories, one search bar.
+     *
+     * Asserted against the stylesheet *source*, because jsdom applies no cascade
+     * and resolves no custom properties, so a computed style cannot compare the
+     * two. The rules are compared as normalised declaration lists rather than as
+     * raw text, so a comment or a reordered comment block cannot fail this.
+     */
+    const [clients, services] = [
+      import.meta.glob('./ClientsPage.module.css', { query: '?raw', import: 'default', eager: true }),
+      import.meta.glob('../services/ServicesPage.module.css', {
+        query: '?raw',
+        import: 'default',
+        eager: true,
+      }),
+    ].map((loaded) => Object.values(loaded)[0] || '')
+
+    /** One rule's declarations, whitespace- and order-insensitive. */
+    const declarations = (source, selector) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const block = source.match(new RegExp(`(?:^|[\\s,}])\\.${escaped}\\s*\\{([^}]*)\\}`))?.[1] || ''
+      return block
+        .split(';')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.replace(/\s+/g, ' '))
+        .sort()
+        .join('; ')
+    }
+
+    for (const selector of ['searchWrap', 'search', 'searchIcon', 'searchClear', 'search:focus']) {
+      const own = declarations(clients, selector)
+      expect(own, `${selector} should exist in ClientsPage.module.css`).toBeTruthy()
+      expect(own, `${selector} should match ServicesPage.module.css`).toBe(declarations(services, selector))
+    }
+  })
 })
 
 describe('Clients page — client name typography', () => {

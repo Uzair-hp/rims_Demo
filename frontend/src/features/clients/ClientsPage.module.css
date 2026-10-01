@@ -10,10 +10,83 @@
   gap: var(--space-3);
 }
 
+/* ---- search ----
+   Copied verbatim from `ServicesPage.module.css` so the two directory search
+   bars are the same control. If one changes, the other must change with it. */
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .search {
-  /* Widened from 32ch. Long enough to be worth typing into, short enough that it
-     does not dominate the toolbar on a wide screen. */
-  max-width: 40ch;
+  inline-size: 100%;
+  min-block-size: var(--touch-target-min);
+  /* Room for the leading icon and the trailing clear button, so neither ever
+     covers typed text. */
+  padding-inline: 2.75rem 2.5rem;
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.search::placeholder {
+  color: var(--color-ink-subtle);
+}
+
+.search:hover {
+  border-color: var(--color-ink-subtle);
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 2px var(--color-gold-soft);
+}
+
+.search:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Replaced by the clear button below, which is a labelled button rather than a
+   glyph the browser draws. */
+.search::-webkit-search-cancel-button,
+.search::-webkit-search-decoration {
+  appearance: none;
+}
+
+.searchIcon {
+  position: absolute;
+  inset-inline-start: var(--space-3);
+  color: var(--color-ink-muted);
+  pointer-events: none;
+}
+
+.searchClear {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  display: grid;
+  place-items: center;
+  inline-size: var(--touch-target-min);
+  block-size: var(--touch-target-min);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+}
+
+.searchClear:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-ink);
 }
 
 /* ---- client row typography ----

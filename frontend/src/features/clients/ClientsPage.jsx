@@ -13,11 +13,11 @@ import Card from '../../components/ui/Card.jsx'
 import Checkbox from '../../components/ui/Checkbox.jsx'
 import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx'
 import EmptyState from '../../components/ui/EmptyState.jsx'
+import Icon from '../../components/ui/Icon.jsx'
 import PageHeader from '../../components/ui/PageHeader.jsx'
 import Pagination from '../../components/ui/Pagination.jsx'
 import Skeleton from '../../components/ui/Skeleton.jsx'
 import StatusBadge from '../../components/ui/StatusBadge.jsx'
-import TextField from '../../components/ui/TextField.jsx'
 import { archiveClient } from '../../api/endpoints/clients.js'
 import { formatPhone } from '../../lib/phone.js'
 import ClientFormModal from './ClientFormModal.jsx'
@@ -103,13 +103,40 @@ export default function ClientsPage() {
       />
 
       <div className={styles.toolbar}>
-        <TextField
-          label="Search clients"
-          placeholder="Search by name, phone or email…"
-          value={searchTerm}
-          onChange={setSearchTerm}
-          className={styles.search}
-        />
+        {/*
+         * The same raw input as `ServicesPage` (SERVICES_PLAN §6), icon and clear
+         * button included, so the two directories cannot drift apart visually.
+         * A raw input rather than `TextField`: this field needs a leading search
+         * icon and a trailing clear button, and `TextField` has no slot for
+         * either. The label is `visually-hidden` rather than dropped, so the
+         * control keeps its accessible name; the placeholder is a short hint, not
+         * the label.
+         */}
+        <div className={styles.searchWrap}>
+          <label htmlFor="clients-search" className="visually-hidden">
+            Search clients
+          </label>
+          <Icon name="search" size={18} className={styles.searchIcon} />
+          <input
+            id="clients-search"
+            type="search"
+            className={styles.search}
+            placeholder="Search by name, phone or email"
+            value={searchTerm}
+            onChange={setSearchTerm}
+            autoComplete="off"
+          />
+          {searchTerm ? (
+            <button
+              type="button"
+              className={styles.searchClear}
+              onClick={() => setSearchTerm('')}
+              aria-label="Clear search"
+            >
+              <Icon name="x" size={16} />
+            </button>
+          ) : null}
+        </div>
         <Checkbox
           label="Show archived"
           checked={includeArchived}
