@@ -237,6 +237,52 @@ def test_list_search_by_number(authed_client):
     assert found["total"] == 1
 
 
+def test_amount_filters_are_in_paise_not_rupees(authed_client):
+    """
+    `min_amount` / `max_amount` are paise, despite the name.
+
+    The name invites a rupee reading, which would be off by 100x: a client
+    sending `10000` means ₹100.00, not ₹10,000. This pins the unit so the two
+    cannot be confused later, and so the frontend's `rupeesToPaise` conversion
+    stays mandatory rather than looking like a double-conversion bug.
+    """
+    c = _make_client(authed_client)
+    # 1 unit at 1_000_00 paise = ₹1,000.00, no tax.
+    cheap = _create_quotation(
+        authed_client,
+        c["id"],
+        gst_bp=0,
+        items=[{"name": "Small", "qty_milli": 1000, "rate_paise": 100000}],
+    )
+    dear = _create_quotation(
+        authed_client,
+        c["id"],
+        gst_bp=0,
+        items=[{"name": "Large", "qty_milli": 1000, "rate_paise": 1000000}],
+    )
+    assert cheap["grand_total_paise"] == 100_000  # ₹1,000
+    assert dear["grand_total_paise"] == 1_000_000  # ₹10,000
+
+    def ids(query):
+        return {
+            row["id"]
+            for row in authed_client.get("/api/v1/quotations", query_string=query)
+            .get_json()["data"]["items"]
+        }
+
+    # 500_000 paise = ₹5,000: between the two, which is the whole point. Read as
+    # rupees this would be ₹5,00,000 and return nothing.
+    assert ids({"min_amount": 500_000}) == {dear["id"]}
+    assert ids({"max_amount": 500_000}) == {cheap["id"]}
+    assert ids({"min_amount": 0}) == {cheap["id"], dear["id"]}
+    assert ids({"min_amount": 500_000, "max_amount": 1_000_000}) == {dear["id"]}
+
+
+def test_amount_filters_reject_negative_values(authed_client):
+    assert authed_client.get("/api/v1/quotations?min_amount=-1").status_code == 422
+    assert authed_client.get("/api/v1/quotations?max_amount=-1").status_code == 422
+
+
 # ------------------------------------------------------------------- update
 
 

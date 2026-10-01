@@ -86,6 +86,16 @@ def _apply_list_filters(query, params):
     if date_to:
         query = query.filter(Quotation.quotation_date <= date_to)
 
+    # `min_amount` / `max_amount` are PAISE, not rupees, despite the name: the
+    # whole API is integer-paise (§8.1) and these are compared directly against
+    # `grand_total_paise`. The client converts before sending — see
+    # `rupeesToPaise` in `QuotationsPage.jsx` — so a client sending `10000`
+    # correctly means ₹100.00.
+    #
+    # The name is the hazard, not the behaviour: a rupee reading is the obvious
+    # one and is off by 100x. Renaming the parameters would be the clean fix, but
+    # it breaks the shipped frontend contract for no functional gain, so the unit
+    # is pinned by a test instead and documented in docs/api.md.
     min_amount = params.get("min_amount")
     if min_amount is not None:
         query = query.filter(Quotation.grand_total_paise >= min_amount)
