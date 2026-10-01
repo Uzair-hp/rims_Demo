@@ -147,9 +147,13 @@ def payment_due_document_route(invoice_id: int):
     concerns, which is the only identity it needs, and giving a collection notice a
     second number would read as a second sale.
 
-    Refused with 422 when the invoice is not issued, or when nothing is outstanding:
-    a fully paid invoice has no balance to collect, and answering 200 with a zero
-    amount would let a client render a ₹0 QR.
+    Refused with 422 only when the invoice is not issued: a draft has not been billed
+    and a cancelled one must never produce a demand for money. A **fully paid** invoice
+    is answered with 200 and `fully_paid: true` instead — that is a state a customer
+    reaches by doing the right thing, and the sheet it produces is a settlement
+    statement with no QR and no bank details, not an error. A zero-amount QR is still
+    impossible: the amount fed to `build_upi_uri` is non-positive when settled, so the
+    URI comes back `None`.
     """
     return success({"payment_due": payment_due_document(get_invoice(invoice_id))})
 

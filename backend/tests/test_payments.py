@@ -36,8 +36,16 @@ def _csrf(client) -> dict:
 
 
 def _make_client(authed_client, name="Payments Client"):
+    # A phone is required on the client, and unique per client, so a structurally
+    # valid one is derived from the current client count.
+    with authed_client.application.app_context():
+        from app.extensions.database import db
+        from app.models import Client
+
+        existing = db.session.scalar(db.select(db.func.count()).select_from(Client)) or 0
+    phone = f"6{str(200000000 + existing * 911)[-9:]}"
     resp = authed_client.post(
-        "/api/v1/clients", json={"name": name}, headers=_csrf(authed_client)
+        "/api/v1/clients", json={"name": name, "phone": phone}, headers=_csrf(authed_client)
     )
     assert resp.status_code == 201, resp.get_data(as_text=True)
     return resp.get_json()["data"]["client"]
@@ -699,7 +707,7 @@ def test_balance_document_reports_the_latest_method(authed_client):
 
 def test_fully_paid_invoice_still_reports_its_final_method(authed_client):
     """
-    Settling an invoice does not rewrite it, it only stops the reminder.
+    Settling an invoice does not rewrite it, it only changes the balance document.
 
     The method stays readable on both surfaces afterwards: the ledger remembers what
     happened, and hiding it would discard an accounting fact rather than preserve the
@@ -712,9 +720,11 @@ def test_fully_paid_invoice_still_reports_its_final_method(authed_client):
     assert settled["payment_status"] == "paid"
     assert settled["latest_payment_method"] == "cash"
 
-    # And no further collection document is producible.
-    again = authed_client.get(f"/api/v1/invoices/{invoice['id']}/payment-due")
-    assert again.status_code == 422
+    # The balance sheet is still producible — it is the customer's receipt — but it is
+    # now a settlement statement rather than a demand.
+    again = _payment_due(authed_client, invoice["id"])
+    assert again["fully_paid"] is True
+    assert again["latest_payment_method"] == "cash"
 
 
 # ------------------------------------------------ Balance / Payment Due doc
@@ -783,14 +793,43 @@ def test_balance_follows_a_second_partial_payment(authed_client):
     assert doc["outstanding_paise"] == 4000000
 
 
-def test_fully_paid_invoice_has_no_balance_document(authed_client):
-    """Nothing is owed, so there is no document and no QR to print."""
+def test_fully_paid_invoice_yields_a_settlement_statement_with_no_qr(authed_client):
+    """
+    Nothing is owed, so the balance sheet stops being a demand and becomes a receipt.
+
+    It is still produced (200), because the settlement reconciliation is exactly what a
+    customer asks for after paying. What it must not carry is anything payable: the
+    outstanding is zero and no URI is built from it, so a settled document cannot open a
+    payment app asking for ₹0.
+    """
+    _set_upi(authed_client)
     invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
     _pay(authed_client, invoice["id"], 10000000)
 
     assert _invoice(authed_client, invoice["id"])["payment_status"] == "paid"
-    body = _payment_due(authed_client, invoice["id"], expect=422)
-    assert "fully paid" in body["error"]["message"].lower()
+
+    doc = _payment_due(authed_client, invoice["id"])
+    assert doc["fully_paid"] is True
+    assert doc["outstanding_paise"] == 0
+    assert doc["amount_due_paise"] == 0
+    assert doc["upi_amount"] == "0.00"
+    # The load-bearing assertion: no code that asks for money.
+    assert doc["upi_uri"] is None
+    # The history is still reconciled, so the sheet works as a receipt.
+    assert doc["grand_total_paise"] == 10000000
+    assert doc["paid_paise"] == 10000000
+
+
+def test_an_unpaid_balance_document_is_explicitly_not_fully_paid(authed_client):
+    """The flag distinguishes the two states; a default would hide the difference."""
+    _set_upi(authed_client)
+    invoice = _issued_invoice(authed_client, _make_client(authed_client)["id"], grand_total_paise=10000000)
+    _pay(authed_client, invoice["id"], 4000000)
+
+    doc = _payment_due(authed_client, invoice["id"])
+    assert doc["fully_paid"] is False
+    assert doc["outstanding_paise"] == 6000000
+    assert doc["upi_uri"] is not None
 
 
 def test_balance_qr_encodes_the_current_outstanding(authed_client):
@@ -973,10 +1012,13 @@ def test_existing_payment_status_still_drives_the_balance(authed_client):
         authed_client, invoice["id"]
     )["payment_status"] == "partially_paid"
 
-    # Paid: the document is refused, and the status says why.
+# Paid: the document reports the same status, and switches to the settled shape
+    # rather than being refused - the settlement statement is the customer's receipt.
     _pay(authed_client, invoice["id"], 6000000)
     assert _invoice(authed_client, invoice["id"])["payment_status"] == "paid"
-    assert _payment_due(authed_client, invoice["id"], expect=422) is not None
+    paid_doc = _payment_due(authed_client, invoice["id"])
+    assert paid_doc["payment_status"] == _invoice(authed_client, invoice["id"])["payment_status"] == "paid"
+    assert paid_doc["fully_paid"] is True
 
 
 def test_balance_amount_uses_invoice_paise_without_float_error(authed_client):

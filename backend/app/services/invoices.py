@@ -202,10 +202,23 @@ def payment_due_document(invoice: Invoice) -> dict:
     client formats them, so no float ever touches money.
 
     `upi_uri` is built here rather than in the browser so the QR cannot encode a
-    different amount from the one this function reports, and so a non-positive
-    balance yields `None` (no QR) instead of a code that opens a payment app asking
-    for ₹0. Scanning it initiates a payment and nothing more: recording one is still
-    the Record Payment flow, and no status changes as a result of reading this.
+    different amount from the one this function reports. Scanning it initiates a
+    payment and nothing more: recording one is still the Record Payment flow, and no
+    status changes as a result of reading this.
+
+    ## Refused vs. settled
+
+    Two cases produce no document, and they are different in kind from the paid case:
+
+    - **Not issued** (draft or cancelled) -> 422. A draft has not been billed and a
+      cancelled one must never produce a demand for money. There is no reading of a
+      balance sheet that makes sense here, so there is nothing to render.
+    - **Fully paid** -> 200 with `fully_paid: true`. Not a demand: a statement. The
+      client shows the reconciliation, stamps it settled and prints no payment rails.
+
+    The distinction matters because "you have paid everything" is a state a customer
+    reaches by doing the right thing and may well want to see; "this was never a bill"
+    is an error worth reporting.
     """
     from app.models.company_settings import CompanySettings
     from app.services.calculations import format_upi_amount, build_upi_uri
@@ -231,13 +244,17 @@ def payment_due_document(invoice: Invoice) -> dict:
         .limit(1)
     )
 
-    # A fully settled invoice has nothing to collect, so there is no document to
-    # produce. Refusing here (rather than returning an empty one) means the client
-    # cannot render a ₹0 QR by ignoring the flag.
-    if outstanding <= 0:
-        raise business_rule(
-            f"Invoice {invoice.number} is fully paid, so there is no outstanding balance."
-        )
+    # A settled invoice still gets a document, but a *statement*, not a demand.
+    #
+    # This used to raise here ("nothing is outstanding, so there is no document"), which
+    # meant a paid invoice could not be shown to the customer at all. But the balance
+    # sheet is exactly what a customer wants to see once they have paid: it is the
+    # receipt. So the fully-paid case is answered with 200 and `fully_paid: true`, and
+    # the client renders a settled state — no QR, no bank details, no amount to collect.
+    #
+    # What must not come back is a code that opens a payment app asking for ₹0, so the
+    # URI below is built from a zero amount and `build_upi_uri` returns None for it.
+    fully_paid = outstanding <= 0
 
     settings = CompanySettings.get_row()
     upi_id = (settings.upi_id or "").strip()
@@ -257,6 +274,10 @@ def payment_due_document(invoice: Invoice) -> dict:
         "paid_paise": paid,
         "outstanding_paise": outstanding,
         "amount_due_paise": outstanding,
+        # The one flag that separates "pay this" from "already settled". The client
+        # switches presentation on it rather than re-deriving the comparison, so the
+        # document and the ledger cannot disagree about whether money is owed.
+        "fully_paid": fully_paid,
         "payment_status": payment_status(paid, grand_total),
         "latest_payment_method": latest,
         # Live from Settings, never snapshotted: a payee that closes the account must
