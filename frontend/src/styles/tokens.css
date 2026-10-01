@@ -42,6 +42,22 @@
   --color-on-primary: #ffffff;
   --color-ring: #1d1b16;
 
+  /* --- Navigation rail: one fixed ink plate in BOTH themes ---
+     The sidebar is a *plate*, not a text surface, so it cannot borrow the text
+     tokens. `--color-ink` is the body text colour and it inverts under
+     `[data-theme='dark']` (#1d1b16 → #f0eee8), which turned the rail into a
+     glaring ivory block beside a dark page and left the nav labels at ~2.6:1.
+     These are declared here only and deliberately NOT repeated in the dark
+     block: both themes want the same plate, the same way `--charcoal` serves the
+     login brand panel. The values are the light theme's current rendering, so
+     light mode does not move a pixel — only dark mode is corrected.
+     `--color-rail-ink-muted` is ~7.8:1 on the plate (AA). */
+  --color-rail: #1d1b16;
+  --color-rail-ink: #f7f6f3;
+  --color-rail-ink-muted: #b5afa2;
+  --color-rail-hover: rgb(255 255 255 / 0.08);
+  --color-rail-border: rgb(255 255 255 / 0.08);
+
   /* --- Brand gold: accent only, never a workhorse (§18.4) --- */
   --color-gold: #c9a24b;
   --color-gold-strong: #b08c33;

@@ -27,7 +27,11 @@
     justify-content: space-between;
     padding: var(--space-16) var(--space-16) var(--space-16) calc(var(--space-16) * 2);
     background: var(--charcoal);
-    color: var(--ivory);
+    /* `--charcoal` is fixed in both themes, so the inherited text colour cannot be
+       a themed one: `--ivory` flips to #1c1915 under [data-theme='dark'] and would
+       leave any unstyled child at 1.03:1 on the panel. The three visible children
+       are overridden below; this is what anything else inherits. */
+    color: var(--text-on-dark);
   }
 
   .page {

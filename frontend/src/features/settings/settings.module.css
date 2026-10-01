@@ -154,6 +154,9 @@
   }
 }
 
+/* The logo is gold artwork on a transparent ground, so its plate has to be the
+   dark rail in both themes. `--color-ink` is the *text* token and inverts to
+   near-white in the dark theme, which put gold artwork on a white tile. */
 .logoBox {
   display: grid;
   place-items: center;
@@ -161,7 +164,7 @@
   inline-size: 100%;
   min-block-size: var(--space-16);
   padding: var(--space-4);
-  background: var(--color-ink);
+  background: var(--color-rail);
   border-radius: var(--radius-md);
   overflow: hidden;
 }

@@ -88,17 +88,17 @@ export default function BrandLockup({
 
   if (variant === 'stack') {
     /*
-     * The sidebar lockup: the ink plate, with the company name directly beneath.
+     * The sidebar lockup: the rail plate, with the company name directly beneath.
      *
      * This is the app's primary brand placement. The Dashboard deliberately does
      * *not* repeat it — one location, so the name is never stated twice in view.
      *
      * The wordmark reuses the `text` variant's typography exactly
      * (`--font-display`, `--font-size-lg`, semibold) and differs only in colour:
-     * the sidebar is on `--color-ink` in both themes, where `--color-ink` text
-     * would be invisible, so the name is set in `--gold`. That token is defined
-     * per theme (#c9a24b light, #d9b45c dark), so the wordmark stays legible on
-     * the dark rail in both.
+     * the rail plate is dark in both themes, where `--color-ink` text would be
+     * invisible, so the name is set in `--gold`. That token is defined per theme
+     * (#c9a24b light, #d9b45c dark), so the wordmark stays legible on the dark
+     * rail in both.
      */
     return (
       <span className={`${styles.stack} ${className}`.trim()}>

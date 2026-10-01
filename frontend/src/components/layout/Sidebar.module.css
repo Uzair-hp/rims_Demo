@@ -1,3 +1,12 @@
+/**
+ * The navigation rail.
+ *
+ * The plate and its text come from the `--color-rail*` family rather than from
+ * `--color-ink` / `--color-ink-inverse`. Those are *text* tokens and they invert
+ * with the theme, so a rail painted with them became a near-white slab in the dark
+ * theme; these are fixed in `tokens.css` for both themes, which is what the old
+ * "always the ink plate" comments here assumed but never actually had.
+ */
 .sidebar {
   position: fixed;
   inset-block: 0;
@@ -8,8 +17,8 @@
   flex-direction: column;
   gap: var(--space-5);
   padding: var(--space-5) var(--space-3) var(--space-4);
-  background: var(--color-ink);
-  color: var(--color-ink-inverse);
+  background: var(--color-rail);
+  color: var(--color-rail-ink);
   transition: inline-size var(--duration-slow) var(--ease-out);
 }
 
@@ -35,7 +44,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-ink-muted-inverse);
+  color: var(--color-rail-ink-muted);
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease-out),
@@ -43,12 +52,12 @@
 }
 
 .collapseToggle:hover {
-  background: var(--color-surface-translucent);
-  color: var(--color-ink-inverse);
+  background: var(--color-rail-hover);
+  color: var(--color-rail-ink);
 }
 
 .collapseToggle:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-ink-inverse);
+  outline: var(--focus-ring-width) solid var(--color-rail-ink);
   outline-offset: var(--focus-ring-offset);
 }
 
@@ -73,7 +82,7 @@
   min-height: var(--touch-target-min);
   padding-inline: var(--space-3);
   border-radius: var(--radius-md);
-  color: var(--color-ink-muted-inverse);
+  color: var(--color-rail-ink-muted);
   font-size: var(--font-size-base);
   font-weight: var(--weight-medium);
   text-decoration: none;
@@ -84,8 +93,8 @@
 }
 
 .link:hover {
-  background: var(--color-surface-translucent);
-  color: var(--color-ink-inverse);
+  background: var(--color-rail-hover);
+  color: var(--color-rail-ink);
 }
 
 .active,
@@ -100,7 +109,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding-block-start: var(--space-3);
-  border-block-start: var(--border-width) solid var(--color-surface-translucent);
+  border-block-start: var(--border-width) solid var(--color-rail-border);
 }
 
 .footerButton {
@@ -112,7 +121,7 @@
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-ink-muted-inverse);
+  color: var(--color-rail-ink-muted);
   font: inherit;
   font-size: var(--font-size-sm);
   white-space: nowrap;
@@ -123,8 +132,8 @@
 }
 
 .footerButton:hover {
-  background: var(--color-surface-translucent);
-  color: var(--color-ink-inverse);
+  background: var(--color-rail-hover);
+  color: var(--color-rail-ink);
 }
 
 .account {
@@ -142,12 +151,12 @@
   flex: none;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--color-surface-translucent);
-  color: var(--color-ink-inverse);
+  background: var(--color-rail-hover);
+  color: var(--color-rail-ink);
 }
 
-/* The company mark is gold artwork on transparent; the sidebar is always the
-   ink plate in both themes, so it reads correctly inside the avatar circle. */
+/* The company mark is gold artwork on transparent; the rail is always the ink
+   plate in both themes, so it reads correctly inside the avatar circle. */
 .avatarImg {
   inline-size: 70%;
   block-size: 70%;
@@ -163,7 +172,7 @@
 .accountName {
   font-size: var(--font-size-sm);
   font-weight: var(--weight-semibold);
-  color: var(--color-ink-inverse);
+  color: var(--color-rail-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -171,7 +180,7 @@
 
 .accountMeta {
   font-size: var(--font-size-xs);
-  color: var(--color-ink-muted-inverse);
+  color: var(--color-rail-ink-muted);
   /* The address is one long token; truncating keeps the row from forcing the
      sidebar wider than its fixed track. */
   overflow: hidden;
@@ -190,9 +199,9 @@
   font: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--weight-medium);
-  color: var(--color-ink-muted-inverse);
+  color: var(--color-rail-ink-muted);
   background: none;
-  border: var(--border-width) solid var(--color-surface-translucent);
+  border: var(--border-width) solid var(--color-rail-border);
   border-radius: var(--radius-md);
   white-space: nowrap;
   cursor: pointer;
@@ -202,16 +211,16 @@
     border-color var(--duration-fast) var(--ease-out);
 }
 
-/* The sidebar is always the ink plate, in both themes, so these use the inverse
-   ink pair directly instead of a themed token that would be wrong on light. */
+/* The rail is always the ink plate, in both themes, so these use the rail
+   family directly instead of a themed token that would be wrong on light. */
 .signOut:hover {
-  color: var(--color-ink-inverse);
-  border-color: var(--color-ink-muted-inverse);
-  background: var(--color-surface-translucent);
+  color: var(--color-rail-ink);
+  border-color: var(--color-rail-ink-muted);
+  background: var(--color-rail-hover);
 }
 
 .signOut:focus-visible {
-  outline: var(--focus-ring-width) solid var(--color-ink-inverse);
+  outline: var(--focus-ring-width) solid var(--color-rail-ink);
   outline-offset: var(--focus-ring-offset);
 }
 
@@ -241,7 +250,7 @@
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--color-ink-muted-inverse);
+  color: var(--color-rail-ink-muted);
 }
 
 /* ---------------------------------------------------------- collapsed rail */

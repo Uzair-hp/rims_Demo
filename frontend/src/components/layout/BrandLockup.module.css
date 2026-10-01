@@ -44,6 +44,13 @@
   border-radius: var(--radius-pill);
 }
 
+/* The mark sits on the rail plate, which is a fixed ink colour in both themes.
+   `.plate` on its own is `--color-ink`, the *text* token, which inverts to
+   near-white in the dark theme — a white logo tile in a dark sidebar. */
+.stack .plate {
+  background: var(--color-rail);
+}
+
 /* Stack variant: the plate with the company name directly beneath it.
    The sidebar's one primary brand placement. */
 .stack {
@@ -58,7 +65,8 @@
 .stackWordmark {
   /* Typography is the `text` variant's, unchanged: same family, size, weight and
      line height as the branding type used elsewhere. Only the colour differs,
-     because the sidebar is on `--color-ink` where ink text would vanish. */
+     because the rail plate is dark in both themes, where `--color-ink` text
+     would be invisible. */
   font-family: var(--font-display);
   font-size: var(--font-size-lg);
   font-weight: var(--weight-semibold);
