@@ -192,8 +192,14 @@ class InvoiceDraftSchema(Schema):
 
     issue_date = fields.Date(allow_none=True)
     due_date = fields.Date(allow_none=True)
-    notes = fields.String(allow_none=True, load_default=None)
-    terms_text = fields.String(allow_none=True, load_default=None)
+    # No `load_default` on the three presentation fields below: with one, they
+    # are always present in the loaded payload and `update_invoice_draft`'s
+    # `if field in payload` writes them on every PUT, so a partial update such as
+    # `{"due_date": "..."}` would silently clear the notes, the printed terms and
+    # the payment presentation. Absent key now means "leave unchanged"; sending
+    # an explicit `null` is still what clears the field.
+    notes = fields.String(allow_none=True, validate=validate.Length(max=4000))
+    terms_text = fields.String(allow_none=True, validate=validate.Length(max=8000))
     # The invoice's payment *presentation*, not the ledger's record of how the
     # client actually paid. Deliberately narrower than PaymentSchema.method:
     # cheque/card/other are legitimate ways to be paid but are not offered as
@@ -202,7 +208,6 @@ class InvoiceDraftSchema(Schema):
     # back to that state has to be expressible.
     payment_method = fields.String(
         allow_none=True,
-        load_default=None,
         validate=validate.OneOf(["upi", "bank_transfer", "cash"]),
     )
 

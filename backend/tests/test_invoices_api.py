@@ -499,6 +499,69 @@ def test_invoice_items_are_not_editable_via_the_api(authed_client):
     assert after["grand_total_paise"] == before["grand_total_paise"]
 
 
+def test_partial_invoice_put_leaves_untouched_fields_alone(authed_client):
+    """A partial PUT must not clear the fields it does not mention.
+
+    `InvoiceDraftSchema` used to give notes / terms_text / payment_method a
+    `load_default`, so they were always in the loaded payload and every PUT
+    rewrote them — a date-only edit silently erased the invoice's notes, its
+    printed terms and its whole payment presentation.
+    """
+    c = _make_client(authed_client)
+    q = _approved_quotation(authed_client, c["id"])
+    invoice_id = _invoice_id(_convert(authed_client, q["id"]))
+
+    seeded = authed_client.put(
+        f"/api/v1/invoices/{invoice_id}",
+        json={
+            "notes": "Gate access needed on site.",
+            "terms_text": "Net 30. Advance 50%.",
+            "payment_method": "upi",
+        },
+        headers=_csrf(authed_client),
+    )
+    assert seeded.status_code == 200
+
+    due = (date.today() + timedelta(days=45)).isoformat()
+    resp = authed_client.put(
+        f"/api/v1/invoices/{invoice_id}",
+        json={"due_date": due},
+        headers=_csrf(authed_client),
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()["data"]["invoice"]
+    assert body["due_date"] == due
+    assert body["notes"] == "Gate access needed on site."
+    assert body["terms_text"] == "Net 30. Advance 50%."
+    assert body["payment_method"] == "upi"
+
+    # An explicit null is still how a field is cleared.
+    cleared = authed_client.put(
+        f"/api/v1/invoices/{invoice_id}",
+        json={"notes": None},
+        headers=_csrf(authed_client),
+    )
+    assert cleared.status_code == 200
+    after = cleared.get_json()["data"]["invoice"]
+    assert after["notes"] is None
+    assert after["terms_text"] == "Net 30. Advance 50%."
+    assert after["payment_method"] == "upi"
+
+
+def test_invoice_notes_and_terms_length_are_capped(authed_client):
+    c = _make_client(authed_client)
+    q = _approved_quotation(authed_client, c["id"])
+    invoice_id = _invoice_id(_convert(authed_client, q["id"]))
+
+    for field in ("notes", "terms_text"):
+        resp = authed_client.put(
+            f"/api/v1/invoices/{invoice_id}",
+            json={field: "x" * 50_000},
+            headers=_csrf(authed_client),
+        )
+        assert resp.status_code == 422, field
+
+
 def test_issue_is_refused_for_an_invoice_with_no_valid_items(app, authed_client):
     c = _make_client(authed_client)
     q = _approved_quotation(authed_client, c["id"])
