@@ -34,65 +34,79 @@ const DashboardCharts = lazy(() => import('../features/dashboard/DashboardCharts
  * second implementation of §11, which is precisely what §11's "computed, never
  * stored" rule forbids.
  *
- * The FR-D1 metrics are grouped rather than flattened into one long strip:
- * quotation counts, the money trio, then the charts and recent activity. FR-D1
- * asks for counts by status, total quotation value, approved value, invoiced,
- * received and outstanding — all six are present as tiles.
+ * The FR-D1 metrics sit in one grid ordered as three comparable pairs, then the
+ * charts and recent activity. FR-D1 asks for counts by status, total quotation
+ * value, approved value, invoiced, received and outstanding — all six are present
+ * as tiles, paired so the figures a reader compares share a row.
  */
 
-/** Tiles shown while loading, matching the real layout so nothing shifts. */
+/** Tiles shown while loading, matching the real layout so nothing shifts. The
+    order mirrors `Tiles` below — pairs first — so the skeletons land where the
+    real figures arrive. */
 const SKELETON_TILES = [
   'Quotations',
   'Quotation value',
   'Approved value',
   'Invoiced',
-  'Received',
   'Outstanding',
+  'Received',
 ]
 
+/**
+ * The six FR-D1 figures in one grid.
+ *
+ * They are ordered as three pairs rather than as the old quotation-counts group
+ * followed by the money trio, because the pairs are the useful reading on a
+ * phone: approved sits beside invoiced, and outstanding sits beside received, so
+ * the two figures a reader compares are in the same row. Splitting them across
+ * two sections made that comparison a vertical scroll on mobile.
+ *
+ * Pairing requires a single grid — two separate sections cannot place a card
+ * from each next to one another — and on a 3-up desktop that still lays out as
+ * two rows of three, exactly as the two sections did.
+ */
 function Tiles({ data }) {
   const { quotation_counts: counts, quotation_values: values, money } = data
 
   return (
-    <>
-      <section className={styles.tiles} aria-label="Quotation position">
-        <MetricCard
-          label="Quotations"
-          value={String(Object.values(counts).reduce((a, b) => a + b, 0))}
-          hint={`${counts.approved} approved · ${counts.sent} awaiting reply`}
-        />
-        <MetricCard
-          label="Quotation value"
-          value={formatPaise(values.total_quotation_value)}
-          hint="all quotations, any status"
-        />
-        <MetricCard
-          label="Approved value"
-          value={formatPaise(values.approved_value)}
-          hint={`${counts.approved} approved`}
-        />
-      </section>
+    <section className={styles.tiles} aria-label="Business position">
+      <MetricCard
+        label="Quotations"
+        value={String(Object.values(counts).reduce((a, b) => a + b, 0))}
+        hint={`${counts.approved} approved · ${counts.sent} awaiting reply`}
+      />
+      <MetricCard
+        label="Quotation value"
+        value={formatPaise(values.total_quotation_value)}
+        hint="all quotations, any status"
+      />
 
-      {/* The money trio. `due` marks money the business is owed, so outstanding
-          is the only warning-toned tile here. `positive` is money already
-          collected, so received carries it; invoiced stays neutral because an
-          issued invoice is neither collected nor yet owed. */}
-      <section className={styles.tiles} aria-label="Money position">
-        <MetricCard label="Invoiced" value={formatPaise(money.invoiced_value)} hint="issued invoices only" />
-        <MetricCard
-          label="Received"
-          value={formatPaise(money.received_total)}
-          tone="positive"
-          hint="from recorded payments"
-        />
-        <MetricCard
-          label="Outstanding"
-          value={formatPaise(money.outstanding_total)}
-          tone={money.outstanding_total > 0 ? 'due' : 'positive'}
-          hint="invoiced less received"
-        />
-      </section>
-    </>
+      {/* Pair 1: what was approved against what has been billed for it. */}
+      <MetricCard
+        label="Approved value"
+        value={formatPaise(values.approved_value)}
+        hint={`${counts.approved} approved`}
+      />
+      <MetricCard label="Invoiced" value={formatPaise(money.invoiced_value)} hint="issued invoices only" />
+
+      {/* Pair 2: what is still owed against what has come in. `due` marks money
+          the business is owed, so outstanding is the only warning-toned tile.
+          `positive` is money already collected, so received carries it; invoiced
+          above stays neutral because an issued invoice is neither collected nor
+          yet owed. */}
+      <MetricCard
+        label="Outstanding"
+        value={formatPaise(money.outstanding_total)}
+        tone={money.outstanding_total > 0 ? 'due' : 'positive'}
+        hint="invoiced less received"
+      />
+      <MetricCard
+        label="Received"
+        value={formatPaise(money.received_total)}
+        tone="positive"
+        hint="from recorded payments"
+      />
+    </section>
   )
 }
 

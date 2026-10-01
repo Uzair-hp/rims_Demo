@@ -3,12 +3,16 @@
  *
  * Tiles are 2-up on mobile and 3-up from 768 px: six figures read as a compact
  * block on a phone instead of a tall one-card-per-row strip, and each tile still
- * has room for an Indian-grouped amount. The column track is `minmax(0, 1fr)` and
- * every tile sets `min-inline-size: 0`, so a long rupee figure wraps inside its own
- * tile (`MetricCard`'s `.value` carries `overflow-wrap: anywhere`) rather than
- * widening the grid and scrolling the page sideways. The gap is `--space-2` on
- * mobile and steps to `--space-4` from 768 px, where the columns have room for it.
- * Mobile is the primary target (§19), so the narrow rule is the base rule.
+ * has room for an Indian-grouped amount. The six are one grid rather than two
+ * stacked sections, because the source order is three comparable pairs and a
+ * section boundary would break a pair across a scroll. On a 3-up desktop that
+ * still computes as two rows of three, which is what the two sections produced.
+ * The column track is `minmax(0, 1fr)` and every tile sets `min-inline-size: 0`,
+ * so a long rupee figure wraps inside its own tile (`MetricCard`'s `.value`
+ * carries `overflow-wrap: anywhere`) rather than widening the grid and scrolling
+ * the page sideways. The gap is `--space-2` on mobile and steps to `--space-4`
+ * from 768 px, where the columns have room for it. Mobile is the primary target
+ * (§19), so the narrow rule is the base rule.
  *
  * The two charts sit side by side from 1024 px, where each still has room for a
  * 12-point x-axis, and stack below that.
