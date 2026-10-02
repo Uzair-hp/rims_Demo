@@ -15,7 +15,7 @@
  * the server identified per field (§9.1 `details`).
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import BrandLockup from '../../components/layout/BrandLockup.jsx'
 import Button from '../../components/ui/Button.jsx'
@@ -37,6 +37,14 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
+
+  // Land the cursor in the email field on arrival, so a returning owner can type
+  // straight away without reaching for the mouse. A ref + effect is used over the
+  // autoFocus attribute so focus is applied after mount rather than during render.
+  const emailRef = useRef(null)
+  useEffect(() => {
+    emailRef.current?.focus()
+  }, [])
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -117,6 +125,9 @@ export default function Login() {
       </aside>
 
       <div className={styles.formPane}>
+        {/* Soft champagne light bloom behind the card — decorative only (§18.4). */}
+        <div className={styles.glow} aria-hidden="true" />
+
         <div className={styles.formCol}>
           <div className={styles.mobileBrand}>
             <header className={styles.mobileHeader}>
@@ -124,104 +135,106 @@ export default function Login() {
             </header>
           </div>
 
-          <header className={styles.header}>
-            <h1 className={styles.title}>Sign in</h1>
-            <span className={styles.titleRule} aria-hidden="true" />
-            <p className={styles.subtitle}>
-              Ruchita Interiors keeps quotations, invoices and clients in one place.
-            </p>
-          </header>
+          <section className={styles.card}>
+            <header className={styles.header}>
+              <h1 className={styles.title}>Sign in</h1>
+              <p className={styles.subtitle}>
+                Ruchita Interiors keeps quotations, invoices and clients in one place.
+              </p>
+            </header>
 
-          {formError ? (
-            <p className={styles.formError} role="alert">
-              <span className={styles.formErrorIcon} aria-hidden="true">
-                <Icon name="alert" size={16} />
-              </span>
-              <span>{formError}</span>
-            </p>
-          ) : null}
-
-          <form className={styles.form} onSubmit={handleSubmit} noValidate>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="login-email">
-                Email
-              </label>
-              <div className={styles.inputWrap}>
-                <span className={styles.inputIcon} aria-hidden="true">
-                  <Icon name="mail" size={20} />
+            {formError ? (
+              <p className={styles.formError} role="alert">
+                <span className={styles.formErrorIcon} aria-hidden="true">
+                  <Icon name="alert" size={16} />
                 </span>
-                <input
-                  id="login-email"
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className={`${styles.input} ${emailError ? styles.inputInvalid : ''}`.trim()}
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  disabled={submitting}
-                  required
-                  aria-invalid={emailError ? 'true' : undefined}
-                  aria-describedby={emailError ? 'login-email-error' : undefined}
-                />
+                <span>{formError}</span>
+              </p>
+            ) : null}
+
+            <form className={styles.form} onSubmit={handleSubmit} noValidate>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="login-email">
+                  Email
+                </label>
+                <div className={styles.inputWrap}>
+                  <span className={styles.inputIcon} aria-hidden="true">
+                    <Icon name="mail" size={20} />
+                  </span>
+                  <input
+                    id="login-email"
+                    ref={emailRef}
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    className={`${styles.input} ${emailError ? styles.inputInvalid : ''}`.trim()}
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    disabled={submitting}
+                    required
+                    aria-invalid={emailError ? 'true' : undefined}
+                    aria-describedby={emailError ? 'login-email-error' : undefined}
+                  />
+                </div>
+                {emailError ? (
+                  <span className={styles.fieldError} id="login-email-error" role="alert">
+                    {emailError}
+                  </span>
+                ) : null}
               </div>
-              {emailError ? (
-                <span className={styles.fieldError} id="login-email-error" role="alert">
-                  {emailError}
-                </span>
-              ) : null}
-            </div>
 
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="login-password">
-                Password
-              </label>
-              <div className={styles.passwordWrap}>
-                <span className={`${styles.inputIcon} ${styles.passwordIcon}`} aria-hidden="true">
-                  <Icon name="lock" size={20} />
-                </span>
-                <input
-                  id="login-password"
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  autoComplete="current-password"
-                  className={`${styles.input} ${styles.passwordInput} ${passwordError ? styles.inputInvalid : ''}`.trim()}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  disabled={submitting}
-                  required
-                  aria-invalid={passwordError ? 'true' : undefined}
-                  aria-describedby={passwordError ? 'login-password-error' : undefined}
-                />
-                <button
-                  type="button"
-                  className={styles.reveal}
-                  onClick={() => setShowPassword((visible) => !visible)}
-                  disabled={submitting}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  aria-pressed={showPassword}
-                >
-                  <Icon name={showPassword ? 'eyeOff' : 'eye'} size={20} />
-                </button>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="login-password">
+                  Password
+                </label>
+                <div className={styles.passwordWrap}>
+                  <span className={`${styles.inputIcon} ${styles.passwordIcon}`} aria-hidden="true">
+                    <Icon name="lock" size={20} />
+                  </span>
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    name="password"
+                    autoComplete="current-password"
+                    className={`${styles.input} ${styles.passwordInput} ${passwordError ? styles.inputInvalid : ''}`.trim()}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    disabled={submitting}
+                    required
+                    aria-invalid={passwordError ? 'true' : undefined}
+                    aria-describedby={passwordError ? 'login-password-error' : undefined}
+                  />
+                  <button
+                    type="button"
+                    className={styles.reveal}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    disabled={submitting}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                  >
+                    <Icon name={showPassword ? 'eyeOff' : 'eye'} size={20} />
+                  </button>
+                </div>
+                {passwordError ? (
+                  <span className={styles.fieldError} id="login-password-error" role="alert">
+                    {passwordError}
+                  </span>
+                ) : null}
               </div>
-              {passwordError ? (
-                <span className={styles.fieldError} id="login-password-error" role="alert">
-                  {passwordError}
-                </span>
-              ) : null}
-            </div>
 
-            <Button type="submit" variant="primary" size="lg" fullWidth loading={submitting}>
-              {submitting ? 'Signing in…' : 'Sign in'}
-            </Button>
-          </form>
+              <Button type="submit" variant="primary" size="lg" fullWidth loading={submitting}>
+                {submitting ? 'Signing in…' : 'Sign in'}
+              </Button>
+            </form>
 
-          <p className={styles.note}>
-            This system is for Ruchita Interiors only. If you have lost your password, contact the
-            administrator to reset it.
-          </p>
+            <p className={styles.note}>
+              This system is for Ruchita Interiors only. If you have lost your password, contact the
+              administrator to reset it.
+            </p>
+          </section>
         </div>
       </div>
     </main>

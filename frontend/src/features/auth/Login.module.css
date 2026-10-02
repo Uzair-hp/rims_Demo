@@ -104,25 +104,76 @@
 /* -------------------------------------------------------------- form pane */
 
 .formPane {
+  /* Local champagne / brushed-brass palette and a fixed "ink glass" card surface,
+     kept on this subtree so the app-wide accent tokens are untouched. The card is
+     deliberately dark in both themes — like the charcoal brand panel — so its
+     contrast never rides on the theme flips that drive the rest of the UI. */
+  --brass: #d8bd82;
+  --brass-bright: #ecd9a6;
+  --brass-line: rgb(216 189 130 / 0.22);
+  --ink-card: rgb(23 21 18 / 0.82);
+  --ink-field: rgb(255 255 255 / 0.045);
+  --ink-field-border: rgb(245 241 232 / 0.14);
+  --on-card: #f3efe6;
+  --on-card-muted: #b9b1a1;
+  --on-card-error: #efb0ac;
+
+  position: relative;
   display: grid;
   place-items: center;
   padding: var(--space-6) var(--space-4) calc(var(--space-10) + env(safe-area-inset-bottom));
-  background: radial-gradient(circle at 50% -10%, var(--gold-soft), transparent 55%), var(--ivory);
+  background: var(--ivory);
+  overflow: hidden;
 }
 
 @media (min-width: 1024px) {
   .formPane {
     padding: var(--space-10) var(--space-8);
-    background: var(--ivory);
   }
 }
 
+/* Decorative champagne light bloom, sitting behind the card. */
+.glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 38% at 50% 8%, rgb(216 189 130 / 0.2), transparent 72%),
+    radial-gradient(34% 34% at 82% 96%, rgb(216 189 130 / 0.1), transparent 70%);
+}
+
 .formCol {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  inline-size: 100%;
+  max-inline-size: 26rem;
+}
+
+/* ------------------------------------------------------- frosted ink card */
+
+.card {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  inline-size: 100%;
-  max-inline-size: 26rem;
+  padding: var(--space-8);
+  background: var(--ink-card);
+  -webkit-backdrop-filter: blur(14px) saturate(118%);
+  backdrop-filter: blur(14px) saturate(118%);
+  border: 1px solid var(--brass-line);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 24px 60px -24px rgb(0 0 0 / 0.55),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+@media (min-width: 640px) {
+  .card {
+    padding: var(--space-10);
+  }
 }
 
 /* Mobile header band */
@@ -169,23 +220,17 @@
 
 .title {
   font-family: var(--font-heading);
-  font-size: var(--font-size-3xl);
+  font-size: clamp(2rem, 4vw, 2.5rem);
   font-weight: 600;
+  letter-spacing: 0.01em;
   line-height: var(--line-height-tight);
-  color: var(--text);
-}
-
-.titleRule {
-  inline-size: 40px;
-  block-size: 3px;
-  background: var(--gold);
-  border-radius: var(--radius-pill);
+  color: var(--on-card);
 }
 
 .subtitle {
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
-  color: var(--text-muted);
+  color: var(--on-card-muted);
   max-inline-size: 36ch;
 }
 
@@ -206,7 +251,7 @@
 .label {
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--text);
+  color: var(--on-card);
 }
 
 .inputWrap {
@@ -221,7 +266,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  color: var(--on-card-muted);
   pointer-events: none;
 }
 
@@ -231,9 +276,9 @@
   padding-inline: calc(var(--space-3) + 24px) var(--space-3);
   font-family: var(--font-body);
   font-size: var(--font-size-base);
-  color: var(--text);
-  background: var(--card);
-  border: var(--border-width) solid var(--border);
+  color: var(--on-card);
+  background: var(--ink-field);
+  border: 1px solid var(--ink-field-border);
   border-radius: 10px;
   transition:
     border-color var(--duration-fast) var(--ease-out),
@@ -242,47 +287,50 @@
 }
 
 .input:hover:not(:disabled) {
-  border-color: var(--border);
+  border-color: rgb(245 241 232 / 0.26);
 }
 
 .input:focus {
-  border-color: var(--gold);
+  border-color: var(--brass);
   outline: none;
-  box-shadow: var(--ring-gold-soft);
+  box-shadow: 0 0 0 3px rgb(216 189 130 / 0.22);
 }
 
 .input:focus-visible {
   outline: none;
-  box-shadow: var(--ring-gold-soft);
+  box-shadow: 0 0 0 3px rgb(216 189 130 / 0.22);
 }
 
 .input:disabled {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
-  background: var(--color-surface-alt);
+  background: rgb(255 255 255 / 0.02);
 }
 
 .input::placeholder {
-  color: var(--text-muted);
+  color: var(--on-card-muted);
 }
 
-/* Browser autofill */
-.input:-webkit-autofill {
-  -webkit-box-shadow: 0 0 0 1000px var(--card) inset;
-  -webkit-text-fill-color: var(--text);
-  caret-color: var(--text);
+/* Browser autofill — repaint to the dark field rather than the browser's default
+   white, which would otherwise flash an opaque block over the ink card. */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #211d18 inset;
+  -webkit-text-fill-color: var(--on-card);
+  caret-color: var(--on-card);
 }
 
 .inputInvalid,
 .inputInvalid:hover:not(:disabled) {
-  border-color: var(--error);
-  background: var(--color-danger-soft);
+  border-color: rgb(226 92 86 / 0.6);
+  background: rgb(226 92 86 / 0.1);
 }
 
 .inputInvalid:focus,
 .inputInvalid:focus-visible {
-  border-color: var(--error);
-  box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.25);
+  border-color: #e25c56;
+  box-shadow: 0 0 0 3px rgb(226 92 86 / 0.25);
 }
 
 /* Password plus a reveal toggle, sharing one 48px row. */
@@ -318,14 +366,14 @@
   inline-size: var(--touch-target-comfortable);
   display: grid;
   place-items: center;
-  color: var(--text-muted);
+  color: var(--on-card-muted);
   background: transparent;
   border-end-end-radius: 10px;
   transition: color var(--duration-fast) var(--ease-out);
 }
 
 .reveal:hover:not(:disabled) {
-  color: var(--text);
+  color: var(--brass);
 }
 
 .reveal:disabled {
@@ -341,27 +389,34 @@
   padding: var(--space-3);
   font-size: var(--font-size-sm);
   line-height: var(--line-height-relaxed);
-  color: var(--error);
-  background: var(--color-danger-soft);
-  border: var(--border-width) solid var(--error);
+  color: var(--on-card-error);
+  background: rgb(226 92 86 / 0.12);
+  border: 1px solid rgb(226 92 86 / 0.4);
   border-radius: var(--radius-md);
 }
 
 .formErrorIcon {
   display: inline-flex;
   flex: none;
-  color: var(--error);
+  color: var(--on-card-error);
+}
+
+/* Inline, per-field validation message under the control it refers to. */
+.fieldError {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+  color: var(--on-card-error);
 }
 
 /* ------------------------------------------------------------------ notes */
 
 .note {
   padding-block-start: var(--space-4);
-  border-block-start: 1px solid var(--border);
+  border-block-start: 1px solid var(--brass-line);
   font-size: var(--font-size-xs);
   line-height: 1.6;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--on-card-muted);
 }
 
 /* Fade-in animation for card */
