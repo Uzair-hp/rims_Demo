@@ -8,7 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+# `dist` is intentionally NOT ignored here. This file is a child of the root
+# .gitignore and wins any conflict, so a `dist` line in it would override the
+# root's `!frontend/dist/` exception and the PythonAnywhere build would have to
+# be produced on the server, which has no Node runtime.
 dist-ssr
 *.local
 

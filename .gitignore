@@ -4,6 +4,15 @@ dist/
 dist-ssr/
 # Service-worker output written by vite-plugin-pwa during `npm run dev`.
 dev-dist/
+# PythonAnywhere has no Node runtime and no build step, so the production bundle
+# has to travel in the repository. Only frontend/dist is shipped; every other
+# directory named `dist` stays ignored. Must stay after the `dist/` rule above:
+# a file inside an ignored directory cannot be re-included by a later pattern.
+!frontend/dist/
+# Source maps are ~4.5 MB of the ~6 MB bundle and only affect devtools, so they
+# stay out. Each rebuild fingerprints new filenames, which would otherwise leave a
+# full copy of them in history on every deploy.
+frontend/dist/**/*.map
 
 # ---------- Dev server state ----------
 # PID files, generated .cmd launchers and server logs from scripts/dev.ps1.
