@@ -99,20 +99,6 @@
   /* --- Overlays --- */
   --color-scrim: rgb(22 19 15 / 0.45);
 
-  /* --- Scrollbars (§18.12) ---
-     Two tokens plus a size, because `scrollbar-color` needs a thumb and a track and
-     nothing else. The track is transparent so the surface shows through, which keeps
-     a scrollbar from reading as a second panel edge on a card.
-
-     Light values are the border ramp: `--color-border-strong` for the thumb so it is
-     visible at rest against `#f7f6f3`, and the border tone for the hover state. Dark
-     uses the same two roles inverted in lightness — the thumb has to be *lighter*
-     than the dark surface, not darker, or it disappears the same way the chart tick
-     labels did. */
-  --scrollbar-thumb: #cfc9ba;
-  --scrollbar-thumb-hover: #a8a091;
-  --scrollbar-size: 10px;
-
   /* --- Chart tokens: dashboard only (§18.8) --- */
   --chart-1: #1d1b16;
   --chart-2: #c9a24b;
@@ -241,6 +227,30 @@
   --state-hover-tint: rgb(29 27 22 / 0.04);
   --state-active-tint: rgb(29 27 22 / 0.08);
   --state-skeleton: #e9e6df;
+
+  /* --- Scrollbars (§18.10) ---
+     One slim, quiet bar for every scrolling surface: the page, the sheet body,
+     the pickers and any future list. The track is transparent so a scrollbar
+     never reads as a panel; the thumb is a restrained ink wash that deepens on
+     hover. `base.css` consumes these so the two engines (Firefox and WebKit)
+     cannot drift. `--scrollbar-size` is the full bar thickness, of which the
+     thumb paints the inner part after the transparent border (see base.css). */
+  --scrollbar-size: 10px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgb(29 27 22 / 0.2);
+  --scrollbar-thumb-hover: rgb(29 27 22 / 0.38);
+  /* How far the thumb is inset from the bar's edge (a transparent border, see
+     base.css). Small enough to stay a slim bar, large enough that the pill
+     reads as separate from the track. */
+  --scrollbar-thumb-inset: 2px;
+
+  /* The navigation rail is a fixed ink plate in BOTH themes (see the
+     `--color-rail*` family above), so its scrollbar cannot use the themed
+     thumb — a dark thumb would vanish on the dark plate. Declared here only,
+     like the rest of the rail family, so the plate's scrollbar is the one
+     surface that does not invert with the theme. */
+  --scrollbar-thumb-rail: rgb(247 246 243 / 0.22);
+  --scrollbar-thumb-rail-hover: rgb(247 246 243 / 0.4);
 }
 
 /* ------------------------------------------------------------------ *
@@ -299,12 +309,6 @@
 
   --color-scrim: rgb(0 0 0 / 0.6);
 
-  /* Dark scrollbars: a lighter thumb on the dark surface, and a hover that goes
-     lighter again. Both sit well past 3:1 against `#14120e`, so the scrollbar is
-     visible without being the brightest thing on the page. */
-  --scrollbar-thumb: #4a443a;
-  --scrollbar-thumb-hover: #6b6455;
-
   --chart-1: #f0eee8;
   --chart-2: #d9b45c;
   --chart-3: #8f8878;
@@ -325,4 +329,10 @@
   --state-hover-tint: rgb(240 238 232 / 0.05);
   --state-active-tint: rgb(240 238 232 / 0.09);
   --state-skeleton: #2a261f;
+
+  /* Scrollbar thumb inverts to a light wash so it stays legible on the dark
+     surfaces. The track stays transparent and the rail family above is
+     deliberately left untouched — both themes want the same dark plate. */
+  --scrollbar-thumb: rgb(240 238 232 / 0.22);
+  --scrollbar-thumb-hover: rgb(240 238 232 / 0.42);
 }

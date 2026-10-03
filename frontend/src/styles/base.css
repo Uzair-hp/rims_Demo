@@ -175,55 +175,54 @@ table {
   letter-spacing: var(--tracking-tight);
 }
 
-/* ------------------------------------------------------------------
- * Scrollbars (§18.12)
-
- * Two mechanisms, because neither covers everything:
-
- * - `scrollbar-color` / `scrollbar-width` is the standard. Firefox honours it and
- *   it needs no vendor prefix, so it is declared first and unprefixed.
- * - The `::-webkit-scrollbar` block is for Chromium and Safari, which ignore the
- *   standard properties entirely. Without it the page scrollbar stays the OS
- *   default: near-black on the light theme and near-white on the dark one, which
- *   is the one place either theme's chrome is not ours.
-
- * The page scrollbar colours from `body` and inherits into the document, so the
- * rules are on `*` rather than on `html` alone — a nested scroller (a table body,
- * a sheet, the print preview) is styled by the same declaration with no per-component
- * work, which is what stops this drifting back to the OS default in one place and
- * ours in another.
+/* ------------------------------------------------------------------ *
+ * Scrollbars (§18.10).
+ *
+ * One slim, quiet bar on every scrolling surface — the page, the sheet body,
+ * the client and service pickers — so a long list never acquires a chunky
+ * platform-default chrome. Firefox and WebKit expose different APIs, so both
+ * blocks exist; they read the same tokens, which is what stops the two engines
+ * from drifting. The universal selector is deliberate: it is the only shape
+ * that styles a surface this app has not created yet without a per-component
+ * copy, and it still respects the "every raw value lives in tokens.css" rule —
+ * the values below are tokens, not literals.
+ *
+ * `ServicesPage`'s category chip row deliberately opts out with
+ * `scrollbar-width: none`; that declaration on the element outranks the
+ * universal rule here, so the one hidden scrollbar stays hidden.
  * ------------------------------------------------------------------ */
-
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
-*::-webkit-scrollbar {
-  width: var(--scrollbar-size);
-  height: var(--scrollbar-size);
+::-webkit-scrollbar {
+  inline-size: var(--scrollbar-size);
+  block-size: var(--scrollbar-size);
 }
 
-*::-webkit-scrollbar-track {
-  background: transparent;
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
 }
 
-*::-webkit-scrollbar-thumb {
+/* The transparent border insets the thumb inside the gutter, and
+   `background-clip: padding-box` keeps the paint off the border — so the thumb
+   reads as a rounded pill with a little breathing room rather than filling the
+   whole bar. */
+::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
+  border: var(--scrollbar-thumb-inset) solid transparent;
   border-radius: var(--radius-pill);
-  /* Transparent border in the track colour: keeps the rounded corners from being
-     clipped by the square scrollbar box, without painting a visible ring. */
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background-clip: padding-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
-  background-clip: content-box;
+  background-clip: padding-box;
 }
 
-*::-webkit-scrollbar-corner {
-  background: transparent;
+::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
 }
 
 @media (prefers-reduced-motion: reduce) {
