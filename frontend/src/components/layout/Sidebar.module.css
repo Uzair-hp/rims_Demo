@@ -64,6 +64,14 @@
 .nav {
   flex: 1;
   overflow-y: auto;
+  /* The rail is an ink plate in both themes, so the global themed scrollbar
+     thumb from `base.css` would be barely visible on it. Re-pointing the two
+     thumb tokens here is the whole override: `::-webkit-scrollbar-thumb`
+     inherits custom properties from this element, and `scrollbar-color` on
+     `*` resolves them here too, so the rail gets a legible light thumb while
+     the bar thickness, shape and hover behaviour stay defined in one place. */
+  --scrollbar-thumb: var(--scrollbar-thumb-rail);
+  --scrollbar-thumb-hover: var(--scrollbar-thumb-rail-hover);
 }
 
 .list {
