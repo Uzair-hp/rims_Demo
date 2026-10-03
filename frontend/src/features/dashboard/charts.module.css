@@ -39,6 +39,21 @@
 }
 
 /* ------------------------------------------------------------------
+   Recharts' own text
+
+   The axis labels are handed a fill token as a prop (see `chrome()` in
+   charts.jsx), but the legend text is not: Recharts paints it with its own
+   hardcoded light-theme grey, which is unreadable on a dark card. A CSS
+   `fill` beats an SVG presentation attribute, so one rule here fixes it
+   whatever Recharts version is installed, and unlike a prop it follows the
+   theme without the charts having to re-read the tokens for it.
+   ------------------------------------------------------------------ */
+
+.plot :global(.recharts-legend-item-text) {
+  fill: var(--color-ink-muted);
+}
+
+/* ------------------------------------------------------------------
    Range filter (7 / 14 / 30 days, or 12 months)
 
    One line, always. Wrapping was what pushed the trend chart down on a

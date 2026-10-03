@@ -1,10 +1,13 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Dashboard from '../../pages/Dashboard.jsx'
 import DashboardCharts from './DashboardCharts.jsx'
-import { shortRupees } from './charts.jsx'
+import { chrome, shortRupees } from './charts.jsx'
+import { CHART_GRID, CHART_TICK, useChartTheme } from './chartTheme.js'
 
 /**
  * Phase 9 Dashboard tests (§4.6, §9.2, §20, §24).
@@ -541,6 +544,161 @@ describe('Dashboard charts', () => {
 
     await waitFor(() => expect(container.querySelectorAll('.recharts-rectangle').length).toBeGreaterThan(0))
     expect(container.querySelectorAll('[data-chart="status-breakdown"] .recharts-rectangle').length).toBe(5)
+  })
+
+  it('paints axis tick text with an ink token, never the grid colour', () => {
+    // Regression guard. The tick fill used to be `--chart-grid`, which is a *line*
+    // colour: #e4e0d5 on #ffffff in light and #353026 on #1c1915 in dark, both about
+    // 1.3:1. Every axis label — the months, and `approved` / `rejected` on the status
+    // chart — was therefore invisible in BOTH themes.
+    //
+    // Asserted on the axis props rather than the rendered DOM on purpose: Recharts
+    // emits its tick labels as empty `<g>` elements under jsdom, with no `<text>`
+    // child, so there is nothing in the document to read a fill off.
+    expect(chrome(false).tick.fill).toBe(CHART_TICK())
+    expect(chrome(true).tick.fill).toBe(CHART_TICK())
+
+    // The actual bug, stated as an inequality so the test names it.
+    expect(chrome(false).tick.fill).not.toBe(CHART_GRID())
+    expect(chrome(true).tick.fill).not.toBe(CHART_GRID())
+
+    // The grid line still uses the grid token — the two roles must not be swapped.
+    expect(chrome(false).stroke).toBe(CHART_GRID())
+  })
+
+  it('repaints when the theme changes, without any other interaction', async () => {
+    // Regression guard. `useTheme` sets `data-theme` in an effect, and the toggle
+    // lives in the header — so nothing re-rendered the Dashboard and the charts
+    // kept the colours of the previous theme. A reader had to change the date range
+    // before the chart caught up. `useChartTheme` watches the attribute, so the
+    // charts follow the theme on their own.
+    //
+    // Counts renders of the component that calls the hook, not of a parent wrapper:
+    // the state lives inside the hook, so React re-renders that component alone and
+    // a parent would never re-render at all.
+    let renders = 0
+    function ThemeProbe() {
+      renders += 1
+      useChartTheme()
+      return null
+    }
+
+    render(<ThemeProbe />)
+    const before = renders
+
+    // setAttribute to the value already present is not a mutation, so the observer
+    // would never fire. Flip to whatever the attribute is not, then put it back.
+    const root = document.documentElement
+    const original = root.getAttribute('data-theme')
+    const next = original === 'dark' ? 'light' : 'dark'
+
+    try {
+      await act(async () => {
+        root.setAttribute('data-theme', next)
+      })
+      await waitFor(() =>
+        expect(renders, 'the chart did not re-render on a theme switch').toBeGreaterThan(before),
+      )
+    } finally {
+      await act(async () => {
+        if (original === null) root.removeAttribute('data-theme')
+        else root.setAttribute('data-theme', original)
+      })
+    }
+  })
+
+  describe('chart text contrast, both themes at once', () => {
+    /**
+     * Why this reads the stylesheet instead of the DOM.
+     *
+     * jsdom does not resolve CSS custom properties, so a rendered chart cannot tell
+     * us which theme's values it got — every assertion here would see the same
+     * light-theme fallback. Reading `tokens.css` directly is the only way to check
+     * the DARK theme, and the dark theme is exactly where the bug was invisible:
+     * `--chart-grid` (#353026) and `--color-border` (#353026) are the same value, so
+     * the grid lines were the only thing on the card that could be seen at all.
+     *
+     * Checking both themes in one test is deliberate. Fixing a contrast bug by
+     * hardcoding the other theme's value is the failure mode this is meant to stop.
+     */
+
+    // Resolved from the working directory rather than `import.meta.url`: Vitest's
+    // jsdom transform leaves `import.meta.url` on a non-`file:` scheme, which
+    // `fileURLToPath` rejects. Vitest runs with the frontend directory as its root,
+    // which is where `npm run test` is invoked from.
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/tokens.css'), 'utf8')
+
+    /** Token values from the light block and from the `[data-theme='dark']` block. */
+    function themeTokens() {
+      // Split on the selector that OPENS the rule, brace included — a plain
+      // `indexOf("[data-theme='dark']")` matches an earlier mention in a comment,
+      // which silently leaves the light block inside the "dark" slice and reports
+      // light values as dark ones.
+      const darkStart = css.search(/\[\s*data-theme=['"]dark['"]\s*\]\s*\{/)
+      expect(darkStart, "no [data-theme='dark'] rule found in tokens.css").toBeGreaterThan(-1)
+      const light = css.slice(0, darkStart)
+      const dark = css.slice(darkStart)
+      const read = (block, name) => {
+        const match = block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`))
+        return match?.[1]
+      }
+      return { light, dark, read }
+    }
+
+    /** WCAG relative-luminance contrast ratio. */
+    function contrast(a, b) {
+      const channel = (value) => {
+        const c = value / 255
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+      }
+      const luminance = (hex) => {
+        const n = parseInt(hex.slice(1), 16)
+        return (
+          0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
+        )
+      }
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+      return (hi + 0.05) / (lo + 0.05)
+    }
+
+    it.each([
+      ['light', 'light'],
+      ['dark', 'dark'],
+    ])('keeps every chart text token above 4.5:1 in the %s theme', (_label, key) => {
+      const { light, dark, read } = themeTokens()
+      const block = key === 'light' ? light : dark
+      const surface = read(block, '--color-surface')
+
+      // Ticks, the legend, and the tooltip values all resolve to these three.
+      // 4.5:1 is the WCAG AA floor for text at 11-12px.
+      for (const name of ['--color-ink', '--color-ink-muted', '--color-ink-subtle']) {
+        const value = read(block, name)
+        expect(value, `${name} missing from the ${key} block`).toBeTruthy()
+        expect(
+          contrast(value, surface),
+          `${name} (${value}) on ${key} surface ${surface} is below 4.5:1`,
+        ).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+
+    it('never paints text with the grid token, in either theme', () => {
+      const { light, dark, read } = themeTokens()
+      for (const key of ['light', 'dark']) {
+        const block = key === 'light' ? light : dark
+        const grid = read(block, '--chart-grid')
+        const surface = read(block, '--color-surface')
+
+        // The grid is a LINE colour and is meant to sit just off the background.
+        // Asserting that it is unusable as text is the point: it is precisely why
+        // it must never reach `tick.fill`, and this documents the trap for anyone
+        // tempted to "just use the chart colour" for a label.
+        expect(
+          contrast(grid, surface),
+          `--chart-grid (${grid}) is legible as text on ${key} surface ${surface}, so the ` +
+            'grid/token mix-up would no longer be caught by contrast alone',
+        ).toBeLessThan(3)
+      }
+    })
   })
 
   it('labels both charts so they are identifiable without colour', async () => {

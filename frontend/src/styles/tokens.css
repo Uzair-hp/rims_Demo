@@ -99,6 +99,20 @@
   /* --- Overlays --- */
   --color-scrim: rgb(22 19 15 / 0.45);
 
+  /* --- Scrollbars (§18.12) ---
+     Two tokens plus a size, because `scrollbar-color` needs a thumb and a track and
+     nothing else. The track is transparent so the surface shows through, which keeps
+     a scrollbar from reading as a second panel edge on a card.
+
+     Light values are the border ramp: `--color-border-strong` for the thumb so it is
+     visible at rest against `#f7f6f3`, and the border tone for the hover state. Dark
+     uses the same two roles inverted in lightness — the thumb has to be *lighter*
+     than the dark surface, not darker, or it disappears the same way the chart tick
+     labels did. */
+  --scrollbar-thumb: #cfc9ba;
+  --scrollbar-thumb-hover: #a8a091;
+  --scrollbar-size: 10px;
+
   /* --- Chart tokens: dashboard only (§18.8) --- */
   --chart-1: #1d1b16;
   --chart-2: #c9a24b;
@@ -284,6 +298,12 @@
   --color-info-soft: #16243a;
 
   --color-scrim: rgb(0 0 0 / 0.6);
+
+  /* Dark scrollbars: a lighter thumb on the dark surface, and a hover that goes
+     lighter again. Both sit well past 3:1 against `#14120e`, so the scrollbar is
+     visible without being the brightest thing on the page. */
+  --scrollbar-thumb: #4a443a;
+  --scrollbar-thumb-hover: #6b6455;
 
   --chart-1: #f0eee8;
   --chart-2: #d9b45c;

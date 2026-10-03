@@ -12,7 +12,16 @@ import {
   YAxis,
 } from 'recharts'
 import { formatPaise } from '../../lib/money.js'
-import { CHART_GRID, QUOTATION_CHART_COLOURS, chartSeries } from './chartTheme.js'
+import {
+  CHART_GRID,
+  CHART_TICK,
+  CHART_TIP_ITEM,
+  CHART_TIP_LABEL,
+  QUOTATION_CHART_COLOURS,
+  chartSeries,
+  chartTooltipStyle,
+  useChartTheme,
+} from './chartTheme.js'
 import styles from './charts.module.css'
 
 /**
@@ -38,11 +47,23 @@ import styles from './charts.module.css'
 
 const HEIGHT = '100%'
 
-/** Shared axis/tooltip chrome. `money` axes are labelled in short rupees (§18.8). */
-function chrome(money = false) {
+/**
+ * Shared axis/tooltip chrome. `money` axes are labelled in short rupees (§18.8).
+ *
+ * `stroke` and `tick.fill` are separate tokens on purpose. The stroke is the grid
+ * line and wants to sit just off the background; the tick is text and has to be
+ * readable. Sharing `--chart-grid` between them is what made every axis label
+ * illegible in dark mode — see `CHART_TICK`.
+ *
+ * Exported so the tick/stroke separation can be asserted directly. It cannot be
+ * tested through the DOM: Recharts emits its tick labels as *empty* `<g>` elements
+ * under jsdom (no `<text>` child at all), so a rendered chart shows nothing to
+ * check. Asserting on this prop is what actually pins the bug.
+ */
+export function chrome(money = false) {
   return {
     stroke: CHART_GRID(),
-    tick: { fill: CHART_GRID(), fontSize: 11 },
+    tick: { fill: CHART_TICK(), fontSize: 11 },
     tickLine: false,
     axisLine: false,
     tickFormatter: money ? (value) => shortRupees(value * 100) : undefined,
@@ -152,7 +173,9 @@ function RangeFilter({ value, onChange }) {
  * remain the authority.
  */
 export function TrendChart({ monthly, daily, range = null, onRangeChange, width, height }) {
-  // Tokens are read per render so a theme switch repaints the charts (§18.8).
+  // Re-render on a theme switch, then read the tokens — Recharts needs them as
+  // props, so it cannot follow `data-theme` on its own (§18.8).
+  useChartTheme()
   const series = chartSeries()
   const grid = CHART_GRID()
 
@@ -182,7 +205,9 @@ export function TrendChart({ monthly, daily, range = null, onRangeChange, width,
               <YAxis {...chrome(true)} width={44} />
               <Tooltip
                 formatter={(value, name) => [formatPaise(Math.round(value * 100)), name]}
-                contentStyle={{ borderRadius: 8, border: `1px solid ${grid}` }}
+                contentStyle={chartTooltipStyle()}
+                labelStyle={{ fill: CHART_TIP_LABEL() }}
+                itemStyle={{ color: CHART_TIP_ITEM() }}
               />
               <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
               <Line
@@ -223,6 +248,7 @@ export function TrendChart({ monthly, daily, range = null, onRangeChange, width,
  * worse lie than a flat one.
  */
 export function StatusBreakdownChart({ counts, width, height }) {
+  useChartTheme()
   const grid = CHART_GRID()
   const colours = QUOTATION_CHART_COLOURS()
   const data = Object.entries(counts || {}).map(([status, count]) => ({ status, count: count || 0 }))
@@ -246,7 +272,9 @@ export function StatusBreakdownChart({ counts, width, height }) {
               <YAxis {...chrome(false)} width={28} allowDecimals={false} />
               <Tooltip
                 formatter={(value) => [value, 'Quotations']}
-                contentStyle={{ borderRadius: 8, border: `1px solid ${grid}` }}
+                contentStyle={chartTooltipStyle()}
+                labelStyle={{ fill: CHART_TIP_LABEL() }}
+                itemStyle={{ color: CHART_TIP_ITEM() }}
               />
               <Bar dataKey="count" name="Quotations" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                 {data.map((row) => (

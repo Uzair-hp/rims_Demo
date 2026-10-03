@@ -175,6 +175,57 @@ table {
   letter-spacing: var(--tracking-tight);
 }
 
+/* ------------------------------------------------------------------
+ * Scrollbars (§18.12)
+
+ * Two mechanisms, because neither covers everything:
+
+ * - `scrollbar-color` / `scrollbar-width` is the standard. Firefox honours it and
+ *   it needs no vendor prefix, so it is declared first and unprefixed.
+ * - The `::-webkit-scrollbar` block is for Chromium and Safari, which ignore the
+ *   standard properties entirely. Without it the page scrollbar stays the OS
+ *   default: near-black on the light theme and near-white on the dark one, which
+ *   is the one place either theme's chrome is not ours.
+
+ * The page scrollbar colours from `body` and inherits into the document, so the
+ * rules are on `*` rather than on `html` alone — a nested scroller (a table body,
+ * a sheet, the print preview) is styled by the same declaration with no per-component
+ * work, which is what stops this drifting back to the OS default in one place and
+ * ours in another.
+ * ------------------------------------------------------------------ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--radius-pill);
+  /* Transparent border in the track colour: keeps the rounded corners from being
+     clipped by the square scrollbar box, without painting a visible ring. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
